@@ -54,7 +54,6 @@ export function ItemsTab() {
     stock_quantity: 0,
     base_price: 0,
     allows_customization: false,
-    additional_id: "",
   });
 
   const [isCustomizationFormOpen, setIsCustomizationFormOpen] = useState(false);
@@ -119,7 +118,6 @@ export function ItemsTab() {
         stock_quantity: item.stock_quantity,
         base_price: item.base_price,
         allows_customization: item.allows_customization,
-        additional_id: "",
       });
       setImagePreview(item.image_url || "");
       fetchItemCustomizations(item.id);
@@ -131,7 +129,6 @@ export function ItemsTab() {
         stock_quantity: 0,
         base_price: 0,
         allows_customization: false,
-        additional_id: "",
       });
       setImagePreview("");
       setItemCustomizations([]);
@@ -388,6 +385,7 @@ export function ItemsTab() {
                     : "Novo Item / Componente"}
                 </h3>
                 <Button
+                  type="button"
                   onClick={() => setIsModalOpen(false)}
                   className="text-neutral-400 hover:text-neutral-600 transition-colors"
                 >
@@ -504,30 +502,6 @@ export function ItemsTab() {
                           }}
                         />
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] mb-2 px-1">
-                        Vincular Adicional
-                      </label>
-                      <select
-                        title="Selecione um adicional"
-                        value={formData.additional_id}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            additional_id: e.target.value,
-                          })
-                        }
-                        className="w-full px-4 py-3 bg-neutral-50/50 border border-neutral-100 rounded-2xl text-neutral-950 font-semibold focus:outline-none focus:ring-2 focus:ring-neutral-500/20 appearance-none cursor-pointer"
-                      >
-                        <option value="">Nenhum Adicional</option>
-                        {additionals.map((add) => (
-                          <option key={add.id} value={add.id}>
-                            {add.name} ({formatCurrency(add.price)})
-                          </option>
-                        ))}
-                      </select>
                     </div>
 
                     <div className="pt-2">

@@ -21,6 +21,7 @@ export {
 export interface User {
   id: string;
   name: string;
+  image_url?: string | null;
   email: string;
   phone?: string | null;
   document?: string | null;

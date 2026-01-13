@@ -602,6 +602,7 @@ export function ProductsTab() {
                                 <Box size={12} /> Componentes
                               </label>
                               <Button
+                                type="button"
                                 onClick={() =>
                                   setComponents([
                                     ...components,
@@ -680,6 +681,7 @@ export function ProductsTab() {
                                         />
                                       </div>
                                       <Button
+                                        type="button"
                                         onClick={() =>
                                           setComponents(
                                             components.filter(
@@ -705,6 +707,7 @@ export function ProductsTab() {
                               <Plus size={12} /> Adicionais sugeridos
                             </label>
                             <Button
+                              type="button"
                               onClick={() =>
                                 setAdditionals([
                                   ...additionals,
@@ -777,6 +780,7 @@ export function ProductsTab() {
                                       />
                                     </div>
                                     <Button
+                                      type="button"
                                       onClick={() =>
                                         setAdditionals(
                                           additionals.filter(
@@ -799,6 +803,7 @@ export function ProductsTab() {
 
                     <div className="flex gap-6 pt-10 border-t border-neutral-50 mt-12">
                       <Button
+                        type="button"
                         onClick={() => setIsModalOpen(false)}
                         className="px-10 py-5 border-2 border-neutral-100 text-neutral-900 font-black rounded-3xl hover:bg-neutral-50 transition-all"
                       >

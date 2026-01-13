@@ -53,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = (userData: User, token: string) => {
+    console.log("🔐 Login called with user data:", userData);
     setAppToken(token);
     setUser(userData);
     localStorage.setItem("appToken", token);
@@ -64,7 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       id: userData.id,
       name: userData.name,
       email: userData.email,
+      image_url: userData.image_url,
     };
+    console.log("💾 Saving safe user data to localStorage:", safeUserData);
     localStorage.setItem("user", JSON.stringify(safeUserData));
 
     if (typeof document !== "undefined") {

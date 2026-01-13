@@ -233,11 +233,11 @@ export function Dashboard() {
             </div>
 
             {aiSummary ? (
-              <div className="text-sm text-neutral-600 leading-relaxed whitespace-pre-wrap max-h-[300px] overflow-y-auto pr-2 scrollbar-hide">
+              <div className="text-sm text-neutral-600 leading-relaxed whitespace-pre-wrap max-h-96 overflow-y-auto pr-2 scrollbar-hide">
                 {aiSummary}
               </div>
             ) : (
-              <div className="h-[200px] flex flex-col items-center justify-center text-center space-y-4">
+              <div className="h-56 flex flex-col items-center justify-center text-center space-y-4">
                 <p className="text-sm text-neutral-400">
                   Gere um resumo estratégico baseado nos dados reais da sua loja.
                 </p>

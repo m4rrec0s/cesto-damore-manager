@@ -24,6 +24,7 @@ export interface User {
   state?: string | null;
   zip_code?: string | null;
   role?: "admin" | "ADMIN" | "client" | "customer";
+  image_url?: string | null;
 }
 
 export interface Category {

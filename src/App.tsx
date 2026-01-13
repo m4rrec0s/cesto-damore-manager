@@ -1,19 +1,17 @@
 import { Routes, Route, Navigate } from "react-router-dom";
-import { useAuth } from "./contexts/useAuth";
 import { AdminRoute } from "./contexts/AdminRoute";
-import { Layout } from "./components/Layout";
 import { LoginForm } from "./components/LoginForm";
 import { Dashboard } from "./pages/Dashboard";
 import { Toaster } from "sonner";
 import { Orders } from "./pages/Orders";
 import { Catalog } from "./pages/Catalog";
-import { Customizations } from "./pages/Customizations";
 import { Items } from "./pages/Items";
 import { Categories } from "./pages/Categories";
 import { Types } from "./pages/Types";
 import { Feed } from "./pages/Feed";
 import { Service } from "./pages/Service";
 import { LayoutEditor } from "./pages/LayoutEditor";
+import { DesignEditor } from "./components/editor/DesignEditor";
 
 export default function App() {
   return (
@@ -89,6 +87,22 @@ export default function App() {
           element={
             <AdminRoute>
               <LayoutEditor />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/layouts/editor/:layoutId"
+          element={
+            <AdminRoute>
+              <DesignEditor />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/layouts/editor"
+          element={
+            <AdminRoute>
+              <DesignEditor />
             </AdminRoute>
           }
         />
