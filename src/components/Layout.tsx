@@ -13,10 +13,13 @@ import {
   Layers,
   Menu,
   X,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "../contexts/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "./ui/button";
+import logo from "../assets/logocestodamore.png";
 
 const navItems = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -35,6 +38,7 @@ const navItems = [
   { name: "Feed", href: "/feed", icon: PackageCheck },
   { name: "Atendimento", href: "/service", icon: BotMessageSquare },
   { name: "Layouts Base", href: "/layouts", icon: Layers },
+  { name: "Design Editor", href: "/layouts/editor", icon: Palette },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -42,6 +46,7 @@ export function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const path = location.pathname;
 
   const handleLogout = () => {
     logout();
@@ -50,7 +55,6 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row overflow-hidden">
-      {/* Mobile Sidebar Overlay */}
       <AnimatePresence>
         {isSidebarOpen && (
           <motion.div
@@ -63,27 +67,17 @@ export function Layout({ children }: { children: ReactNode }) {
         )}
       </AnimatePresence>
 
-      {/* Sidebar */}
       <aside
         className={`
-        fixed md:static top-0 left-0 z-50 w-72 h-dvh md:h-full overflow-hidden border-r border-neutral-200 transform transition-transform duration-300 ease-in-out bg-white
-        md:translate-x-0 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }
+        fixed md:static top-0 left-0 z-50 h-dvh w-fit md:h-full overflow-hidden border-r border-neutral-200 transform transition-all duration-300 ease-in-out bg-white
+        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full "} 
+        md:translate-x-0 md: 
       `}
       >
-        <div className="h-full flex flex-col p-6">
-          <div className="flex items-center gap-3 mb-10 px-2">
-            <div>
-              <h1 className="font-bold text-neutral-950 text-lg leading-tight">
-                Cesto D'Amore
-              </h1>
-              <p className="text-neutral-600 text-xs font-medium uppercase tracking-wider">
-                Manager Panel
-              </p>
-            </div>
+        <div className="h-full flex flex-col p-3">
+          <div className="flex justify-center mb-8">
+            <img src={logo} alt="Cesto D'Amore Logo" className="w-12 h-auto" />
           </div>
-
           <nav className="flex-1 space-y-1.5">
             {navItems.map((item) => {
               const isActive = location.pathname === item.href;
@@ -93,59 +87,60 @@ export function Layout({ children }: { children: ReactNode }) {
                   to={item.href}
                   onClick={() => setIsSidebarOpen(false)}
                   className={`
-                    flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 font-medium
+                    flex flex-col items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium text-xs  justify-start
                     ${
                       isActive
                         ? "bg-neutral-600 text-white shadow-lg shadow-neutral-200"
                         : "text-neutral-900/70 hover:bg-neutral-100 hover:text-neutral-900"
                     }
+                    gap-3
                   `}
+                  title={item.name || undefined}
                 >
-                  <item.icon size={20} />
-                  {item.name}
+                  <item.icon size={20} className="shrink-0" />
+                  <span className="transition-all duration-300 overflow-hidden">
+                    {item.name}
+                  </span>
                 </Link>
               );
             })}
           </nav>
 
-          <div className="mt-auto pt-6 border-t border-neutral-100 space-y-4">
-            <div className="flex items-center gap-3 px-2">
+          <div
+            className={`mt-auto mx-auto pt-6 border-t border-neutral-300 space-y-4`}
+          >
+            <div className="flex items-center border border-neutral-400 rounded-full">
               {user?.image_url ? (
                 <img
                   src={user.image_url}
                   alt={user.name || "User"}
-                  className="w-10 h-10 rounded-full object-cover"
+                  className="p-4 rounded-full object-cover shrink-0"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-400">
+                <div className="p-4 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-400 shrink-0">
                   <UserIcon size={20} />
                 </div>
               )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-neutral-950 truncate">
-                  {user?.name || "Administrador"}
-                </p>
-                <p className="text-xs text-neutral-600/70 truncate">
-                  {user?.email}
-                </p>
-              </div>
             </div>
             <Button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-neutral-600 hover:bg-neutral-100 transition-colors font-medium"
+              className="w-full flex items-center px-4 py-3 rounded-xl text-neutral-100 hover:bg-neutral-500 transition-colors font-medium"
             >
               <LogOut size={20} />
-              Sair
             </Button>
           </div>
         </div>
       </aside>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 h-full bg-neutral-200">
+      <div
+        className={`flex-1 flex flex-col min-w-0 h-full ${
+          path.startsWith("/layouts/editor") ? "bg-[#0d1216]" : "bg-neutral-100"
+        }`}
+      >
         <div className="md:hidden flex items-center gap-4 px-6 py-4 bg-white border-b border-neutral-200">
           <button
+            type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
             aria-label="Toggle sidebar"
@@ -159,7 +154,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <h1 className="font-bold text-neutral-950">Cesto D'Amore</h1>
         </div>
 
-        <main className="flex-1 p-6 md:p-10 overflow-auto">
+        <main className="flex-1 overflow-auto">
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0, y: 10 }}

@@ -12,6 +12,7 @@ import { Feed } from "./pages/Feed";
 import { Service } from "./pages/Service";
 import { LayoutEditor } from "./pages/LayoutEditor";
 import { DesignEditor } from "./components/editor/DesignEditor";
+import DesignEditorPage from "./pages/DesignEditorPage";
 
 export default function App() {
   return (
@@ -94,7 +95,7 @@ export default function App() {
           path="/layouts/editor/:layoutId"
           element={
             <AdminRoute>
-              <DesignEditor />
+              <DesignEditorPage params={{ id: ":layoutId" }} />
             </AdminRoute>
           }
         />
@@ -102,7 +103,9 @@ export default function App() {
           path="/layouts/editor"
           element={
             <AdminRoute>
-              <DesignEditor />
+              <h1 className="text-white">
+                página não implementada ainda (lista de layouts)
+              </h1>
             </AdminRoute>
           }
         />

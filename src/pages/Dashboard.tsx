@@ -104,7 +104,7 @@ export function Dashboard() {
       label: "Faturamento (30d)",
       value: stats?.totals?.total_sales || 0,
       prefix: "R$ ",
-      isCurrency: true
+      isCurrency: true,
     },
     {
       label: "Pedidos Aprovados",
@@ -114,12 +114,12 @@ export function Dashboard() {
       label: "Ticket Médio",
       value: stats?.metrics?.averageTicket || 0,
       prefix: "R$ ",
-      isCurrency: true
+      isCurrency: true,
     },
     {
       label: "Conversão",
       value: stats?.metrics?.conversionRate || 0,
-      suffix: "%"
+      suffix: "%",
     },
   ];
 
@@ -133,22 +133,31 @@ export function Dashboard() {
         {statsItems.map((item, idx) => (
           <div
             key={item.label}
-            className={`p-6 flex flex-col justify-between min-h-36 rounded-[2rem] shadow-sm relative overflow-hidden ${idx === 0 ? "bg-linear-to-br from-neutral-900 to-neutral-600 text-white" : "bg-white"
-              }`}
+            className={`p-6 flex flex-col justify-between min-h-36 rounded-[2rem] shadow-sm relative overflow-hidden ${
+              idx === 0
+                ? "bg-linear-to-br from-neutral-900 to-neutral-600 text-white"
+                : "bg-white"
+            }`}
           >
-            <h3 className={`text-sm font-bold uppercase tracking-wider ${idx === 0 ? "text-neutral-400" : "text-neutral-500"}`}>
+            <h3
+              className={`text-sm font-bold uppercase tracking-wider ${
+                idx === 0 ? "text-neutral-400" : "text-neutral-500"
+              }`}
+            >
               {item.label}
             </h3>
             <div className="mt-4">
-              <p className={`text-3xl font-black ${idx === 0 ? "text-white" : "text-neutral-950"}`}>
-                {item.isCurrency ? (
-                  item.value.toLocaleString("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  })
-                ) : (
-                  `${item.value}${item.suffix || ""}`
-                )}
+              <p
+                className={`text-3xl font-black ${
+                  idx === 0 ? "text-white" : "text-neutral-950"
+                }`}
+              >
+                {item.isCurrency
+                  ? item.value.toLocaleString("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    })
+                  : `${item.value}${item.suffix || ""}`}
               </p>
             </div>
             {idx === 0 && (
@@ -168,17 +177,25 @@ export function Dashboard() {
               Desempenho de Vendas (Diário)
             </h3>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">Últimos {stats?.period?.days || 30} dias</span>
+              <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest">
+                Últimos {stats?.period?.days || 30} dias
+              </span>
             </div>
           </div>
 
-          {(stats?.daily_data?.length > 0 && stats?.daily_data?.some((d: any) => d.total_sales > 0)) ? (
+          {stats?.daily_data?.length > 0 &&
+          stats?.daily_data?.some((d: any) => d.total_sales > 0) ? (
             <ChartContainer config={revenueConfig} className="h-80 w-full">
               <AreaChart
-                data={stats?.daily_data?.map((d: any) => ({
-                  date: new Date(d.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
-                  revenue: d.total_sales
-                })) || []}
+                data={
+                  stats?.daily_data?.map((d: any) => ({
+                    date: new Date(d.date).toLocaleDateString("pt-BR", {
+                      day: "2-digit",
+                      month: "short",
+                    }),
+                    revenue: d.total_sales,
+                  })) || []
+                }
                 margin={{ top: 20, right: 10, left: -20, bottom: 0 }}
               >
                 <defs>
@@ -187,7 +204,11 @@ export function Dashboard() {
                     <stop offset="95%" stopColor="#262626" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} strokeDasharray="3 3" stroke="#f0f0f0" />
+                <CartesianGrid
+                  vertical={false}
+                  strokeDasharray="3 3"
+                  stroke="#f0f0f0"
+                />
                 <XAxis
                   dataKey="date"
                   axisLine={false}
@@ -209,7 +230,12 @@ export function Dashboard() {
                   strokeWidth={3}
                   fillOpacity={1}
                   fill="url(#colorRevenue)"
-                  dot={{ r: 4, fill: "#262626", strokeWidth: 2, stroke: "#fff" }}
+                  dot={{
+                    r: 4,
+                    fill: "#262626",
+                    strokeWidth: 2,
+                    stroke: "#fff",
+                  }}
                   activeDot={{ r: 6, strokeWidth: 0 }}
                 />
               </AreaChart>
@@ -217,8 +243,12 @@ export function Dashboard() {
           ) : (
             <div className="h-80 w-full flex flex-col items-center justify-center bg-neutral-50 rounded-[1.5rem] border border-dashed border-neutral-200">
               <TrendingUp className="w-10 h-10 text-neutral-300 mb-3" />
-              <p className="text-neutral-500 font-medium text-sm">Nenhum dado de faturamento encontrado para este período.</p>
-              <p className="text-neutral-400 text-xs mt-1">As vendas aprovadas aparecerão aqui automaticamente.</p>
+              <p className="text-neutral-500 font-medium text-sm">
+                Nenhum dado de faturamento encontrado para este período.
+              </p>
+              <p className="text-neutral-400 text-xs mt-1">
+                As vendas aprovadas aparecerão aqui automaticamente.
+              </p>
             </div>
           )}
         </div>
@@ -239,14 +269,19 @@ export function Dashboard() {
             ) : (
               <div className="h-56 flex flex-col items-center justify-center text-center space-y-4">
                 <p className="text-sm text-neutral-400">
-                  Gere um resumo estratégico baseado nos dados reais da sua loja.
+                  Gere um resumo estratégico baseado nos dados reais da sua
+                  loja.
                 </p>
                 <button
                   onClick={generateAI}
                   disabled={loadingAI}
                   className="px-6 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold hover:bg-neutral-800 transition-all flex items-center gap-2 disabled:opacity-50"
                 >
-                  {loadingAI ? <RotateCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                  {loadingAI ? (
+                    <RotateCw className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
                   Gerar Resumo
                 </button>
               </div>
@@ -278,10 +313,7 @@ export function Dashboard() {
               disabled={loading}
               className="p-2 bg-neutral-100 text-neutral-600 rounded-full hover:bg-neutral-200 transition-colors disabled:opacity-50"
             >
-              <RotateCw
-                size={20}
-                className={loading ? "animate-spin" : ""}
-              />
+              <RotateCw size={20} className={loading ? "animate-spin" : ""} />
             </Button>
           </div>
 
@@ -295,7 +327,9 @@ export function Dashboard() {
                 <TableRow className="hover:bg-transparent border-neutral-100">
                   <TableHead className="pl-8">Produto</TableHead>
                   <TableHead>Vendas</TableHead>
-                  <TableHead className="text-right pr-8">Faturamento (Est.)</TableHead>
+                  <TableHead className="text-right pr-8">
+                    Faturamento (Est.)
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -319,7 +353,9 @@ export function Dashboard() {
                             </div>
                           )}
                         </div>
-                        <div className="font-bold text-neutral-900">{item.name}</div>
+                        <div className="font-bold text-neutral-900">
+                          {item.name}
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell>
