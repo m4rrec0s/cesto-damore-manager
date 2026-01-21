@@ -3,6 +3,7 @@ import { useAuth } from "../contexts/useAuth";
 import { useNavigate } from "react-router-dom";
 import type { User } from "../types";
 import { useApi } from "../services/api";
+import { Button } from "./ui/button";
 
 export function LoginForm() {
   const { loginWithGoogle, login } = useAuth();
@@ -54,7 +55,9 @@ export function LoginForm() {
       }
     } catch (error: any) {
       console.error("Login error:", error);
-      setError(error.response?.data?.error || error.message || "Erro ao fazer login");
+      setError(
+        error.response?.data?.error || error.message || "Erro ao fazer login",
+      );
       setLoading(false);
     }
   };
@@ -79,7 +82,11 @@ export function LoginForm() {
       }
     } catch (error: any) {
       console.error("2FA error:", error);
-      setError(error.response?.data?.error || error.message || "Código inválido ou expirado");
+      setError(
+        error.response?.data?.error ||
+          error.message ||
+          "Código inválido ou expirado",
+      );
       setLoading(false);
     }
   };
@@ -111,7 +118,7 @@ export function LoginForm() {
               <p className="text-neutral-400 font-medium mb-6 text-center">
                 Faça login para acessar o painel
               </p>
-              <button
+              <Button
                 onClick={handleGoogleLogin}
                 disabled={loading}
                 className="w-full bg-neutral-600 hover:bg-neutral-700 disabled:bg-neutral-400 text-white font-bold py-3 rounded-2xl transition-colors duration-200 flex items-center justify-center gap-2 mb-4"
@@ -136,13 +143,13 @@ export function LoginForm() {
                     Login com Google
                   </>
                 )}
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setUseEmailLogin(true)}
                 className="w-full text-neutral-600 font-semibold py-2 hover:text-neutral-700"
               >
                 ou use email/senha
-              </button>
+              </Button>
             </>
           ) : show2FA ? (
             <>
@@ -161,20 +168,22 @@ export function LoginForm() {
                     type="text"
                     maxLength={6}
                     value={twoFactorCode}
-                    onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ""))}
+                    onChange={(e) =>
+                      setTwoFactorCode(e.target.value.replace(/\D/g, ""))
+                    }
                     className="w-full px-4 py-3 border border-neutral-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-neutral-600 text-center text-2xl tracking-[1em] font-bold"
                     placeholder="000000"
                   />
                 </div>
-                <button
+                <Button
                   type="submit"
                   disabled={loading || twoFactorCode.length !== 6}
                   className="w-full bg-neutral-600 hover:bg-neutral-700 disabled:bg-neutral-400 text-white font-bold py-3 rounded-2xl transition-colors duration-200"
                 >
                   {loading ? "Verificando..." : "Confirmar"}
-                </button>
+                </Button>
               </form>
-              <button
+              <Button
                 onClick={() => {
                   setShow2FA(false);
                   setTwoFactorCode("");
@@ -183,7 +192,7 @@ export function LoginForm() {
                 className="w-full text-neutral-600 font-semibold py-2 hover:text-neutral-700 mt-4"
               >
                 voltar ao login
-              </button>
+              </Button>
             </>
           ) : (
             <>
@@ -212,15 +221,15 @@ export function LoginForm() {
                     placeholder="••••••••"
                   />
                 </div>
-                <button
+                <Button
                   type="submit"
                   disabled={loading}
                   className="w-full bg-neutral-600 hover:bg-neutral-700 disabled:bg-neutral-400 text-white font-bold py-3 rounded-2xl transition-colors duration-200"
                 >
                   {loading ? "Entrando..." : "Entrar"}
-                </button>
+                </Button>
               </form>
-              <button
+              <Button
                 onClick={() => {
                   setUseEmailLogin(false);
                   setError("");
@@ -228,7 +237,7 @@ export function LoginForm() {
                 className="w-full text-neutral-600 font-semibold py-2 hover:text-neutral-700 mt-4"
               >
                 voltar
-              </button>
+              </Button>
             </>
           )}
         </div>

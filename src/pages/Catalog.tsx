@@ -6,6 +6,7 @@ import { CategoriesTab } from "../components/catalog/CategoriesTab";
 import { TypesTab } from "../components/catalog/TypesTab";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
+import { Button } from "@/components/ui/button";
 
 type TabType = "products" | "items" | "categories" | "types";
 
@@ -34,13 +35,14 @@ export function Catalog() {
       <div className="flex p-1.5 bg-neutral-100/50 backdrop-blur-sm rounded-2xl w-fit border border-neutral-100">
         {tabs.map((tab) => (
           <button
+            type="button"
             key={tab.id}
             onClick={() => setActiveTab(tab.id as TabType)}
             className={clsx(
               "flex items-center gap-2 px-6 py-2.5 rounded-xl transition-all duration-300 font-bold text-sm",
               activeTab === tab.id
                 ? "bg-white text-neutral-600 shadow-md"
-                : "text-neutral-900/60 hover:text-neutral-900"
+                : "text-neutral-900/60 hover:text-neutral-900",
             )}
           >
             <tab.icon size={18} />

@@ -9,7 +9,12 @@ interface LayerPanelProps {
   onLayersChanged?: () => void;
 }
 
-export function LayerPanel({ canvas, selectedObjectId, onSelect, onLayersChanged }: LayerPanelProps) {
+export function LayerPanel({
+  canvas,
+  selectedObjectId,
+  onSelect,
+  onLayersChanged,
+}: LayerPanelProps) {
   const [layers, setLayers] = useState<any[]>([]);
 
   // Atualizar camadas quando canvas muda
@@ -70,7 +75,7 @@ export function LayerPanel({ canvas, selectedObjectId, onSelect, onLayersChanged
   const handleToggleVisibility = (layer: any) => {
     if (!canvas) return;
     layer.object.set({
-      opacity: layer.visible ? 0 : (layer.object.lastOpacity || 1),
+      opacity: layer.visible ? 0 : layer.object.lastOpacity || 1,
       selectable: !layer.visible,
       evented: !layer.visible,
     });
@@ -103,46 +108,68 @@ export function LayerPanel({ canvas, selectedObjectId, onSelect, onLayersChanged
   return (
     <div className="flex flex-col h-full bg-neutral-900 text-white">
       <div className="p-4 border-b border-neutral-800">
-        <h3 className="font-bold text-xs uppercase tracking-wider text-neutral-500">Camadas</h3>
+        <h3 className="font-bold text-xs uppercase tracking-wider text-neutral-500">
+          Camadas
+        </h3>
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 scrollbar-hide">
-        <Reorder.Group axis="y" values={layers} onReorder={handleReorder} className="space-y-1">
+        <Reorder.Group
+          axis="y"
+          values={layers}
+          onReorder={handleReorder}
+          className="space-y-1"
+        >
           {layers.map((layer) => (
             <Reorder.Item
               key={layer.id}
               value={layer}
-              className={`p-2 rounded border transition-all cursor-pointer group flex items-center gap-2 ${selectedObjectId === layer.id
-                ? "border-rose-500 bg-rose-500/10"
-                : "border-neutral-800 bg-neutral-800/50 hover:border-neutral-700"
-                }`}
+              className={`p-2 rounded border transition-all cursor-pointer group flex items-center gap-2 ${
+                selectedObjectId === layer.id
+                  ? "border-rose-500 bg-rose-500/10"
+                  : "border-neutral-800 bg-neutral-800/50 hover:border-neutral-700"
+              }`}
               onClick={() => onSelect(layer.object)}
             >
               <GripVertical className="h-4 w-4 text-neutral-600 cursor-grab active:cursor-grabbing" />
 
               <div className="w-6 h-6 rounded bg-neutral-700 flex items-center justify-center text-[10px] font-bold text-neutral-400 shrink-0">
-                {layer.type === 'i-text' ? 'T' : layer.type === 'image' ? 'I' : 'S'}
+                {layer.type === "i-text"
+                  ? "T"
+                  : layer.type === "image"
+                    ? "I"
+                    : "S"}
               </div>
 
-              <span className="flex-1 text-xs truncate">
-                {layer.name}
-              </span>
+              <span className="flex-1 text-xs truncate">{layer.name}</span>
 
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleToggleVisibility(layer); }}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleVisibility(layer);
+                  }}
                   className="p-1 hover:bg-neutral-700 rounded text-neutral-400"
                 >
                   {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleToggleLock(layer); }}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleToggleLock(layer);
+                  }}
                   className="p-1 hover:bg-neutral-700 rounded text-neutral-400"
                 >
                   {layer.locked ? <Lock size={12} /> : <Unlock size={12} />}
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleDeleteLayer(layer); }}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteLayer(layer);
+                  }}
                   className="p-1 hover:bg-neutral-700 rounded text-rose-500"
                 >
                   <Trash2 size={12} />

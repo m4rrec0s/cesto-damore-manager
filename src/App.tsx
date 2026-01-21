@@ -10,8 +10,6 @@ import { Categories } from "./pages/Categories";
 // import { Types } from "./pages/Types";
 import { Feed } from "./pages/Feed";
 import { Service } from "./pages/Service";
-import { LayoutEditor } from "./pages/LayoutEditor";
-import { DesignEditor } from "./components/editor/DesignEditor";
 import DesignEditorPage from "./pages/DesignEditorPage";
 import { NewDesignPage } from "./pages/NewDesignPage";
 import DesignTestPage from "./pages/DesignTestPage";
@@ -79,14 +77,6 @@ export default function App() {
         />
         <Route
           path="/layouts"
-          element={
-            <AdminRoute>
-              <LayoutEditor />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/layouts/new"
           element={
             <AdminRoute>
               <NewDesignPage />

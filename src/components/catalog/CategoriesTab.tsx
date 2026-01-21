@@ -76,7 +76,7 @@ export function CategoriesTab() {
   };
 
   const filtered = categories.filter((c) =>
-    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -95,7 +95,7 @@ export function CategoriesTab() {
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-neutral-100 rounded-2xl text-neutral-950 font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-500/20"
           />
         </div>
-        <button
+        <Button
           onClick={() => {
             setEditingCategory(null);
             setName("");
@@ -105,7 +105,7 @@ export function CategoriesTab() {
         >
           <Plus size={20} />
           Nova Categoria
-        </button>
+        </Button>
       </div>
 
       {loading && categories.length === 0 ? (
@@ -211,20 +211,20 @@ export function CategoriesTab() {
                   />
                 </div>
                 <div className="flex gap-3 pt-2">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
                     className="flex-1 py-3 border border-neutral-100 text-neutral-900 font-bold rounded-2xl hover:bg-neutral-50 transition-colors"
                   >
                     Cancelar
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
                     disabled={loading || !name.trim()}
                     className="flex-1 py-3 bg-neutral-600 text-white font-bold rounded-2xl shadow-lg shadow-neutral-200 hover:bg-neutral-700 transition-all disabled:opacity-50"
                   >
                     {loading ? "Salvando..." : "Salvar"}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </motion.div>

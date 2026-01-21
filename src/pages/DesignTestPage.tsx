@@ -317,21 +317,47 @@ const DesignTestPage = () => {
       name: `uploaded-img-${frame.id || frame.name}`,
     });
 
-    // Criar uma máscara (Rect) baseada nas propriedades do frame original
-    // para garantir que o clipPath funcione mesmo que o frame seja movido no editor
-    const mask = new Rect({
-      width: frame.width,
-      height: frame.height,
-      rx: frame.rx,
-      ry: frame.ry,
-      scaleX: frame.scaleX,
-      scaleY: frame.scaleY,
-      originX: "center",
-      originY: "center",
-      left: center.x,
-      top: center.y,
-      absolutePositioned: true,
-    });
+    // Criar uma máscara baseada no tipo e propriedades do frame original
+    let mask: any;
+
+    if (frame.type === "circle") {
+      mask = new (await import("fabric")).Circle({
+        radius: frame.radius,
+        scaleX: frame.scaleX,
+        scaleY: frame.scaleY,
+        originX: "center",
+        originY: "center",
+        left: center.x,
+        top: center.y,
+        absolutePositioned: true,
+      });
+    } else if (frame.type === "triangle") {
+      mask = new (await import("fabric")).Triangle({
+        width: frame.width,
+        height: frame.height,
+        scaleX: frame.scaleX,
+        scaleY: frame.scaleY,
+        originX: "center",
+        originY: "center",
+        left: center.x,
+        top: center.y,
+        absolutePositioned: true,
+      });
+    } else {
+      mask = new Rect({
+        width: frame.width,
+        height: frame.height,
+        rx: frame.rx,
+        ry: frame.ry,
+        scaleX: frame.scaleX,
+        scaleY: frame.scaleY,
+        originX: "center",
+        originY: "center",
+        left: center.x,
+        top: center.y,
+        absolutePositioned: true,
+      });
+    }
 
     img.set("clipPath", mask);
 

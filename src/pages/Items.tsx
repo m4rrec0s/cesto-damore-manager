@@ -3,6 +3,7 @@ import { useApi } from "../services/api";
 import type { ItemsResponse, Item } from "../services/api";
 import { Plus, Edit, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 export function Items() {
   const api = useApi();
@@ -43,7 +44,7 @@ export function Items() {
   const filteredItems = items.filter(
     (item) =>
       item.name?.toLowerCase().includes(search.toLowerCase()) ||
-      item.description?.toLowerCase().includes(search.toLowerCase())
+      item.description?.toLowerCase().includes(search.toLowerCase()),
   );
 
   if (loading) {
@@ -58,10 +59,10 @@ export function Items() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-neutral-950">Itens</h1>
-        <button className="flex items-center gap-2 bg-neutral-600 text-white px-4 py-2 rounded-lg hover:bg-neutral-700 transition-colors">
+        <Button className="flex items-center gap-2 bg-neutral-600 text-white px-4 py-2 rounded-lg hover:bg-neutral-700 transition-colors">
           <Plus size={20} />
           Novo Item
-        </button>
+        </Button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
@@ -122,20 +123,20 @@ export function Items() {
                       {item.stock_quantity || 0}
                     </td>
                     <td className="py-4 px-4 text-right flex items-center justify-end gap-2">
-                      <button
+                      <Button
                         onClick={() => {}}
                         className="p-2 hover:bg-blue-100 rounded-lg transition-colors text-blue-600"
                         title="Editar"
                       >
                         <Edit size={18} />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => handleDelete(item.id)}
                         className="p-2 hover:bg-red-100 rounded-lg transition-colors text-red-600"
                         title="Deletar"
                       >
                         <Trash2 size={18} />
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))

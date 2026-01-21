@@ -1,4 +1,5 @@
 import React from "react";
+import { Button } from "./ui/button";
 
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -45,12 +46,12 @@ export class ErrorBoundary extends React.Component<
                 {this.state.error?.message}
               </pre>
             </details>
-            <button
+            <Button
               onClick={() => window.location.reload()}
               className="w-full bg-neutral-600 text-white py-2 rounded-lg hover:bg-neutral-700 transition-colors font-medium"
             >
               Recarregar Página
-            </button>
+            </Button>
           </div>
         </div>
       );

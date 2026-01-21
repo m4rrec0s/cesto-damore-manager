@@ -29,20 +29,28 @@ const CUSTOM_PROPS = [
   "stroke",
   "strokeWidth",
   "strokeDashArray",
+  "radius",
 ];
 
 const loadGoogleFont = (fontFamily: string) => {
   if (document.getElementById(`font-${fontFamily.replace(/\s+/g, "-")}`))
-    return;
+    return Promise.resolve();
 
-  const link = document.createElement("link");
-  link.id = `font-${fontFamily.replace(/\s+/g, "-")}`;
-  link.rel = "stylesheet";
-  link.href = `https://fonts.googleapis.com/css2?family=${fontFamily.replace(
-    /\s+/g,
-    "+",
-  )}:wght@400;700&display=swap`;
-  document.head.appendChild(link);
+  return new Promise((resolve, reject) => {
+    const link = document.createElement("link");
+    link.id = `font-${fontFamily.replace(/\s+/g, "-")}`;
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?family=${fontFamily.replace(
+      /\s+/g,
+      "+",
+    )}:wght@400;700&display=swap`;
+    link.onload = () => {
+      // @ts-ignore
+      document.fonts.load(`1em "${fontFamily}"`).then(resolve).catch(resolve);
+    };
+    link.onerror = reject;
+    document.head.appendChild(link);
+  });
 };
 
 const DesignEditorPage = () => {
@@ -137,23 +145,32 @@ const DesignEditorPage = () => {
     loadLayoutData();
   }, [layoutId]);
 
+  useEffect(() => {
+    if (activePanel === "Uploads") {
+      fetchUserUploads();
+    }
+  }, [activePanel]);
+
   // Load User Uploads
   const fetchUserUploads = async () => {
     try {
-      const { elements } = await elementBankService.listElements({
+      const data = await elementBankService.listElements({
         category: "Uploads",
+        limit: 100,
       });
+
+      const elements = data?.elements || [];
       setUserUploads(
-        elements.map((el: any) => ({ id: el.id, imageUrl: el.imageUrl })),
+        elements.map((el: any) => ({
+          id: el.id,
+          imageUrl: el.imageUrl,
+          name: el.name,
+        })),
       );
     } catch (error) {
       console.error("Error fetching uploads", error);
     }
   };
-
-  useEffect(() => {
-    fetchUserUploads();
-  }, []);
 
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -246,6 +263,23 @@ const DesignEditorPage = () => {
         if (initialState) {
           try {
             isInternalUpdate.current = true;
+
+            // Pre-carregar fontes do estado inicial
+            if (initialState.objects) {
+              const fontsToLoad = new Set<string>();
+              initialState.objects.forEach((obj: any) => {
+                if (obj.fontFamily && obj.fontFamily !== "Arial") {
+                  fontsToLoad.add(obj.fontFamily);
+                }
+              });
+
+              if (fontsToLoad.size > 0) {
+                await Promise.all(
+                  Array.from(fontsToLoad).map((f) => loadGoogleFont(f)),
+                );
+              }
+            }
+
             await activeCanvas.loadFromJSON(initialState);
             activeCanvas.renderAll();
             // Init history
@@ -295,14 +329,16 @@ const DesignEditorPage = () => {
       const fetchElements = async () => {
         try {
           // Primeiro tenta API interna
-          let elements = await elementBankService
+          let elementsData = await elementBankService
             .listElements({
               search: searchQuery,
             })
             .catch(() => null);
 
+          let elements = elementsData?.elements || [];
+
           // Se API interna estiver vazia ou falhar, usa API externa
-          if (!elements || (Array.isArray(elements) && elements.length === 0)) {
+          if (!elements || elements.length === 0) {
             try {
               const externalElements =
                 await externalElementsService.searchMultiple(
@@ -403,7 +439,7 @@ const DesignEditorPage = () => {
   };
 
   const handleAddShape = async (
-    type: "rect" | "circle" | "triangle" | "frame",
+    type: "rect" | "circle" | "triangle" | "frame" | "frame-circle",
   ) => {
     const currentCanvas = (canvas || fabricRef.current) as any;
     if (!currentCanvas) {
@@ -417,9 +453,9 @@ const DesignEditorPage = () => {
       const props = {
         left: dimensions.width / 2 - 50,
         top: dimensions.height / 2 - 50,
-        fill: type === "frame" ? "rgba(244, 63, 94, 0.2)" : "#3b82f6",
-        stroke: type === "frame" ? "#f43f5e" : "transparent",
-        strokeWidth: type === "frame" ? 2 : 0,
+        fill: type.startsWith("frame") ? "rgba(244, 63, 94, 0.2)" : "#3b82f6",
+        stroke: type.startsWith("frame") ? "#f43f5e" : "transparent",
+        strokeWidth: type.startsWith("frame") ? 2 : 0,
         width: 100,
         height: 100,
         cornerSmoothing: 0.5,
@@ -428,20 +464,33 @@ const DesignEditorPage = () => {
       if (type === "rect") shape = new Rect(props);
       else if (type === "circle") shape = new Circle({ ...props, radius: 50 });
       else if (type === "triangle") shape = new Triangle(props);
-      else if (type === "frame") {
+      else if (type === "frame" || type === "frame-circle") {
         const frameCount =
           currentCanvas.getObjects().filter((o: any) => o.isFrame).length + 1;
-        shape = new Rect({
-          ...props,
-          name: `Moldura ${frameCount}`,
-          rx: 15,
-          ry: 15,
+
+        if (type === "frame-circle") {
+          shape = new Circle({
+            ...props,
+            radius: 50,
+            name: `Foto ${frameCount}`,
+          });
+        } else {
+          shape = new Rect({
+            ...props,
+            name: `Foto ${frameCount}`,
+            rx: 15,
+            ry: 15,
+          });
+        }
+
+        shape.set({
           opacity: 1,
           fill: "rgba(229, 231, 235, 1)", // bg-gray-200
           stroke: "#9ca3af", // border-gray-400
           strokeWidth: 2,
           strokeDashArray: [5, 5], // Dotted border for "placeholder" look
         });
+
         // Marcar como placeholder para imagem
         (shape as any).isFrame = true;
         (shape as any).isCustomizable = true; // Frames are customizable by default

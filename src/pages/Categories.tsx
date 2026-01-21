@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useApi } from "../services/api";
 import { Plus, Edit, Trash2, Search } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 export function Categories() {
   const api = useApi();
@@ -41,7 +42,7 @@ export function Categories() {
   };
 
   const filteredCategories = categories.filter((cat) =>
-    cat.name?.toLowerCase().includes(search.toLowerCase())
+    cat.name?.toLowerCase().includes(search.toLowerCase()),
   );
 
   if (loading) {
@@ -56,10 +57,10 @@ export function Categories() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-neutral-950">Categorias</h1>
-        <button className="flex items-center gap-2 bg-neutral-600 text-white px-4 py-2 rounded-lg hover:bg-neutral-700 transition-colors">
+        <Button className="flex items-center gap-2 bg-neutral-600 text-white px-4 py-2 rounded-lg hover:bg-neutral-700 transition-colors">
           <Plus size={20} />
           Nova Categoria
-        </button>
+        </Button>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
@@ -94,19 +95,19 @@ export function Categories() {
                   {category.name}
                 </h3>
                 <div className="flex gap-2 justify-end">
-                  <button
+                  <Button
                     className="p-2 hover:bg-blue-100 rounded-lg transition-colors text-blue-600"
                     title="Editar"
                   >
                     <Edit size={18} />
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => handleDelete(category.id)}
                     className="p-2 hover:bg-red-100 rounded-lg transition-colors text-red-600"
                     title="Deletar"
                   >
                     <Trash2 size={18} />
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))

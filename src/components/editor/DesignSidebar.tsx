@@ -49,10 +49,11 @@ export const DesignSidebar = ({
             key={option.label}
             type="button"
             onClick={option.onClick}
-            className={`flex flex-col text-xs items-center gap-2 px-1 py-1 transition-colors ${activePanel === option.label
-              ? "text-white"
-              : "text-neutral-500 hover:text-neutral-300"
-              }`}
+            className={`flex flex-col text-xs items-center gap-2 px-1 py-1 transition-colors ${
+              activePanel === option.label
+                ? "text-white"
+                : "text-neutral-500 hover:text-neutral-300"
+            }`}
           >
             <option.icon className="h-5 w-5" />
             {option.label}

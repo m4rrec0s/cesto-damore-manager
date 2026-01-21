@@ -133,27 +133,30 @@ export function Dashboard() {
         {statsItems.map((item, idx) => (
           <div
             key={item.label}
-            className={`p-6 flex flex-col justify-between min-h-36 rounded-[2rem] shadow-sm relative overflow-hidden ${idx === 0
-              ? "bg-linear-to-br from-neutral-900 to-neutral-600 text-white"
-              : "bg-white"
-              }`}
+            className={`p-6 flex flex-col justify-between min-h-36 rounded-[2rem] shadow-sm relative overflow-hidden ${
+              idx === 0
+                ? "bg-linear-to-br from-neutral-900 to-neutral-600 text-white"
+                : "bg-white"
+            }`}
           >
             <h3
-              className={`text-sm font-bold uppercase tracking-wider ${idx === 0 ? "text-neutral-400" : "text-neutral-500"
-                }`}
+              className={`text-sm font-bold uppercase tracking-wider ${
+                idx === 0 ? "text-neutral-400" : "text-neutral-500"
+              }`}
             >
               {item.label}
             </h3>
             <div className="mt-4">
               <p
-                className={`text-3xl font-black ${idx === 0 ? "text-white" : "text-neutral-950"
-                  }`}
+                className={`text-3xl font-black ${
+                  idx === 0 ? "text-white" : "text-neutral-950"
+                }`}
               >
                 {item.isCurrency
                   ? item.value.toLocaleString("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  })
+                      style: "currency",
+                      currency: "BRL",
+                    })
                   : `${item.value}${item.suffix || ""}`}
               </p>
             </div>
@@ -181,7 +184,7 @@ export function Dashboard() {
           </div>
 
           {stats?.daily_data?.length > 0 &&
-            stats?.daily_data?.some((d: any) => d.total_sales > 0) ? (
+          stats?.daily_data?.some((d: any) => d.total_sales > 0) ? (
             <ChartContainer config={revenueConfig} className="h-80 w-full">
               <AreaChart
                 data={
@@ -269,7 +272,7 @@ export function Dashboard() {
                   Gere um resumo estratégico baseado nos dados reais da sua
                   loja.
                 </p>
-                <button
+                <Button
                   onClick={generateAI}
                   disabled={loadingAI}
                   className="px-6 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold hover:bg-neutral-800 transition-all flex items-center gap-2 disabled:opacity-50"
@@ -280,19 +283,19 @@ export function Dashboard() {
                     <Sparkles className="w-4 h-4" />
                   )}
                   Gerar Resumo
-                </button>
+                </Button>
               </div>
             )}
           </div>
 
           {aiSummary && (
-            <button
+            <Button
               onClick={generateAI}
               disabled={loadingAI}
               className="mt-6 text-xs font-bold text-neutral-400 hover:text-neutral-900 transition-colors flex items-center gap-2"
             >
               {loadingAI ? "Atualizando..." : "Recalcular com novos dados"}
-            </button>
+            </Button>
           )}
 
           <div className="absolute bottom-0 right-0 w-32 h-32 bg-neutral-50 rounded-full blur-3xl z-0 opacity-50 group-hover:opacity-100 transition-opacity" />

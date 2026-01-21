@@ -165,7 +165,7 @@ export function Orders() {
                         ? "bg-emerald-50 text-emerald-600"
                         : order.status === "PENDING"
                           ? "bg-amber-50 text-amber-600"
-                          : "bg-neutral-50 text-neutral-600"
+                          : "bg-neutral-50 text-neutral-600",
                     )}
                   >
                     {order.status === "DELIVERED" ? (
@@ -192,7 +192,7 @@ export function Orders() {
                     <span
                       className={clsx(
                         "inline-block px-3 py-1 mt-1 rounded-full text-[10px] font-bold border",
-                        STATUS_COLORS[order.status]
+                        STATUS_COLORS[order.status],
                       )}
                     >
                       {STATUS_LABELS[order.status]}
@@ -213,7 +213,7 @@ export function Orders() {
                     size={24}
                     className={clsx(
                       "text-neutral-300 transition-transform duration-300 hidden md:block",
-                      expandedId === order.id && "rotate-180"
+                      expandedId === order.id && "rotate-180",
                     )}
                   />
                 </div>
@@ -248,7 +248,7 @@ export function Orders() {
                                 <Phone size={16} className="text-neutral-400" />
                                 <a
                                   href={`https://wa.me/55${onlyDigits(
-                                    order.user.phone
+                                    order.user.phone,
                                   )}`}
                                   target="_blank"
                                   className="hover:text-neutral-600 transition-colors underline decoration-neutral-200 underline-offset-4"
@@ -296,7 +296,7 @@ export function Orders() {
                           </h5>
                           <div className="flex flex-wrap gap-3 pl-3.5">
                             {STATUS_FLOW.map((status) => (
-                              <button
+                              <Button
                                 key={status}
                                 disabled={
                                   updatingId === order.id ||
@@ -309,24 +309,24 @@ export function Orders() {
                                   "px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm",
                                   order.status === status
                                     ? "bg-neutral-100 text-neutral-600 cursor-default"
-                                    : "bg-white border border-neutral-100 text-neutral-900 hover:bg-neutral-50"
+                                    : "bg-white border border-neutral-100 text-neutral-900 hover:bg-neutral-50",
                                 )}
                               >
                                 {updatingId === order.id &&
-                                  order.status !== status
+                                order.status !== status
                                   ? "..."
                                   : STATUS_LABELS[status]}
-                              </button>
+                              </Button>
                             ))}
                             {order.status !== "CANCELED" && (
-                              <button
+                              <Button
                                 onClick={() =>
                                   handleUpdateStatus(order.id, "CANCELED")
                                 }
                                 className="px-4 py-2 rounded-xl text-xs font-bold bg-white border border-neutral-100 text-neutral-400 hover:bg-neutral-50"
                               >
                                 Cancelar
-                              </button>
+                              </Button>
                             )}
                           </div>
                         </div>

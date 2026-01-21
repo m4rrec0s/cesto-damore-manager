@@ -1,4 +1,14 @@
-import { X, Search, Square, Circle, Triangle, Image as ImageIcon, Type, Sparkles, Layers, Palette, Trash2 } from "lucide-react";
+import {
+  X,
+  Search,
+  Square,
+  Circle,
+  Triangle,
+  Image as ImageIcon,
+  Type,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LayerPanel } from "./LayerPanel";
@@ -8,7 +18,9 @@ interface DesignPanelsProps {
   onClose: () => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
-  handleAddShape: (type: "rect" | "circle" | "triangle" | "frame") => void;
+  handleAddShape: (
+    type: "rect" | "circle" | "triangle" | "frame" | "frame-circle",
+  ) => void;
   handleAddText?: (type: "title" | "subtitle" | "body", font?: string) => void;
   bankElements: any[];
   userUploads: any[];
@@ -92,14 +104,25 @@ export const DesignPanels = ({
               <button
                 onClick={() => handleAddShape("frame")}
                 className="p-3 bg-rose-900/40 border border-rose-500/30 rounded flex flex-col items-center gap-1 hover:bg-rose-900/60 transition-colors"
+                title="Moldura Retangular (Padrão)"
               >
-                <Sparkles className="h-5 w-5 text-rose-400" />
-                <span className="text-[10px]">Moldura Foto</span>
+                <Square className="h-5 w-5 text-rose-400" />
+                <span className="text-[10px]">Moldura Rec</span>
+              </button>
+              <button
+                onClick={() => handleAddShape("frame-circle")}
+                className="p-3 bg-rose-900/40 border border-rose-500/30 rounded flex flex-col items-center gap-1 hover:bg-rose-900/60 transition-colors"
+                title="Moldura Circular"
+              >
+                <Circle className="h-5 w-5 text-rose-400" />
+                <span className="text-[10px]">Moldura Circ</span>
               </button>
             </div>
 
             <div className="mt-4">
-              <h3 className="text-[10px] font-bold text-neutral-500 uppercase mb-2">Banco de Elementos</h3>
+              <h3 className="text-[10px] font-bold text-neutral-500 uppercase mb-2">
+                Banco de Elementos
+              </h3>
               <div className="grid grid-cols-3 gap-2">
                 {bankElements.map((el) => (
                   <div
@@ -130,7 +153,7 @@ export const DesignPanels = ({
               <ImageIcon className="h-4 w-4" />
               Fazer Upload
             </Button>
-            <input
+            <Input
               id="img-upload-inner"
               type="file"
               className="hidden"
@@ -140,7 +163,9 @@ export const DesignPanels = ({
 
             {userUploads.length > 0 && (
               <div className="mt-2">
-                <h3 className="text-[10px] font-bold text-neutral-500 uppercase mb-2">Seus Uploads</h3>
+                <h3 className="text-[10px] font-bold text-neutral-500 uppercase mb-2">
+                  Seus Uploads
+                </h3>
                 <div className="grid grid-cols-3 gap-2">
                   {userUploads.map((up) => (
                     <div
@@ -154,6 +179,7 @@ export const DesignPanels = ({
                         onClick={() => onAddBankElement(up.imageUrl)}
                       />
                       <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           if (onDeleteUpload) onDeleteUpload(up.id);
@@ -171,7 +197,8 @@ export const DesignPanels = ({
 
             <div className="bg-neutral-800/50 p-3 rounded-lg border border-neutral-700">
               <p className="text-[10px] text-neutral-400 text-center leading-relaxed">
-                Suporta JPG, PNG e WebP até 5MB.<br />
+                Suporta JPG, PNG e WebP até 5MB.
+                <br />
                 Suas imagens ficam salvas na VPS.
               </p>
             </div>
@@ -181,32 +208,42 @@ export const DesignPanels = ({
         {activePanel === "Texto" && (
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
-              <h3 className="text-[10px] font-bold text-neutral-500 uppercase">Estilos Rápidos</h3>
-              <button
+              <h3 className="text-[10px] font-bold text-neutral-500 uppercase">
+                Estilos Rápidos
+              </h3>
+              <Button
                 onClick={() => handleAddText?.("title")}
                 className="p-3 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-left transition-colors"
               >
                 <h2 className="text-xl font-bold">Título</h2>
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => handleAddText?.("subtitle")}
                 className="p-3 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-left transition-colors"
               >
                 <h3 className="text-lg font-bold">Subtítulo</h3>
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => handleAddText?.("body")}
                 className="p-3 bg-neutral-800 hover:bg-neutral-700 rounded-lg text-left transition-colors"
               >
                 <p className="text-sm">Um pouquinho de texto</p>
-              </button>
+              </Button>
             </div>
 
             <div className="pt-4 border-t border-neutral-800">
-              <h3 className="text-[10px] font-bold text-neutral-500 uppercase mb-3">Fontes Populares</h3>
+              <h3 className="text-[10px] font-bold text-neutral-500 uppercase mb-3">
+                Fontes Populares
+              </h3>
               <div className="flex flex-col gap-1">
-                {['Inter', 'Roboto', 'Playfair Display', 'Lobster', 'Pacifico'].map(font => (
-                  <button
+                {[
+                  "Inter",
+                  "Roboto",
+                  "Playfair Display",
+                  "Lobster",
+                  "Pacifico",
+                ].map((font) => (
+                  <Button
                     key={font}
                     className="flex items-center justify-between p-2 hover:bg-neutral-800 rounded text-xs transition-colors"
                     onClick={() => handleAddText?.("body", font)}
@@ -214,7 +251,7 @@ export const DesignPanels = ({
                   >
                     {font}
                     <Type className="h-3 w-3 text-neutral-600" />
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -231,12 +268,14 @@ export const DesignPanels = ({
 
         {activePanel === "Design" && (
           <div className="flex flex-col gap-4">
-            <h3 className="text-[10px] font-bold text-neutral-500 uppercase">Configurações de Fundo</h3>
+            <h3 className="text-[10px] font-bold text-neutral-500 uppercase">
+              Configurações de Fundo
+            </h3>
 
             <div className="bg-neutral-800 p-4 rounded-lg flex flex-col gap-4 border border-neutral-700">
               <div className="flex items-center justify-between">
                 <span className="text-xs">Fundo Transparente</span>
-                <input
+                <Input
                   type="checkbox"
                   checked={isTransparent}
                   onChange={(e) => onToggleTransparency?.(e.target.checked)}
@@ -249,12 +288,14 @@ export const DesignPanels = ({
                   <span className="text-xs">Cor de Fundo</span>
                   <div className="flex gap-2 items-center">
                     <input
+                      title="colors"
                       type="color"
                       value={canvasBg}
                       onChange={(e) => onCanvasBgChange?.(e.target.value)}
                       className="w-10 h-10 rounded bg-transparent border-0 cursor-pointer"
                     />
-                    <Input
+                    <input
+                      title="colors"
                       value={canvasBg}
                       onChange={(e) => onCanvasBgChange?.(e.target.value)}
                       className="h-9 text-xs font-mono flex-1 bg-neutral-900 border-neutral-700"
@@ -267,7 +308,8 @@ export const DesignPanels = ({
             <div className="bg-rose-900/20 p-3 rounded-lg border border-rose-500/20">
               <p className="text-[10px] text-rose-300 leading-relaxed">
                 <Sparkles className="h-3 w-3 inline mr-1 mb-0.5" />
-                Dica: Layouts com fundo transparente funcionam melhor para adesivos e recortes personalizados.
+                Dica: Layouts com fundo transparente funcionam melhor para
+                adesivos e recortes personalizados.
               </p>
             </div>
           </div>

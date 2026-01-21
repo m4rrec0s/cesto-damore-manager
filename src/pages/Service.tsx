@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useApi } from "../services/api";
 import { MessageCircle, Loader } from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 export function Service() {
   const api = useApi();
@@ -58,9 +59,9 @@ export function Service() {
           <p className="text-3xl font-bold text-neutral-600 mb-4">
             {stats.pendingMessages}
           </p>
-          <button className="w-full px-4 py-2 bg-neutral-600 text-white rounded-lg hover:bg-neutral-700 transition-colors">
+          <Button className="w-full px-4 py-2 bg-neutral-600 text-white rounded-lg hover:bg-neutral-700 transition-colors">
             Ver Mensagens
-          </button>
+          </Button>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
@@ -70,9 +71,9 @@ export function Service() {
           <p className="text-3xl font-bold text-neutral-600 mb-4">
             {stats.customers}
           </p>
-          <button className="w-full px-4 py-2 bg-neutral-600 text-white rounded-lg hover:bg-neutral-700 transition-colors">
+          <Button className="w-full px-4 py-2 bg-neutral-600 text-white rounded-lg hover:bg-neutral-700 transition-colors">
             Gerenciar Clientes
-          </button>
+          </Button>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-neutral-100 p-6">
@@ -82,9 +83,9 @@ export function Service() {
           <p className="text-3xl font-bold text-neutral-600 mb-4">
             {stats.followUps}
           </p>
-          <button className="w-full px-4 py-2 bg-neutral-600 text-white rounded-lg hover:bg-neutral-700 transition-colors">
+          <Button className="w-full px-4 py-2 bg-neutral-600 text-white rounded-lg hover:bg-neutral-700 transition-colors">
             Agendar Follow-ups
-          </button>
+          </Button>
         </div>
       </div>
 

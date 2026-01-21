@@ -44,7 +44,7 @@ export function ItemsTab() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const [itemCustomizations, setItemCustomizations] = useState<Customization[]>(
-    []
+    [],
   );
   const [loadingCustomizations, setLoadingCustomizations] = useState(false);
 
@@ -82,7 +82,7 @@ export function ItemsTab() {
         setLoadingCustomizations(false);
       }
     },
-    [api]
+    [api],
   );
 
   const fetchData = useCallback(async () => {
@@ -94,7 +94,7 @@ export function ItemsTab() {
       ]);
       setItems(itemsResponse.items || []);
       setAdditionals(
-        additionalsResponse.additionals || additionalsResponse || []
+        additionalsResponse.additionals || additionalsResponse || [],
       );
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao carregar dados"));
@@ -192,7 +192,7 @@ export function ItemsTab() {
         await api.updateItem(
           editingItem.id,
           formData as any,
-          imageFile || undefined
+          imageFile || undefined,
         );
         toast.success("Item atualizado!");
       } else {
@@ -222,7 +222,7 @@ export function ItemsTab() {
   const filtered = items.filter(
     (i) =>
       i.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      i.description?.toLowerCase().includes(searchTerm.toLowerCase())
+      i.description?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -241,13 +241,13 @@ export function ItemsTab() {
             className="w-full pl-10 pr-4 py-2.5 bg-white border border-neutral-100 rounded-2xl text-neutral-950 font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-neutral-500/20 transition-all"
           />
         </div>
-        <button
+        <Button
           onClick={() => handleOpenModal()}
           className="flex items-center justify-center gap-2 px-6 py-2.5 bg-neutral-600 text-white rounded-2xl font-bold shadow-lg shadow-neutral-200 hover:bg-neutral-700 transition-all active:scale-95"
         >
           <Plus size={20} />
           Novo Item
-        </button>
+        </Button>
       </div>
 
       {loading && items.length === 0 ? (
@@ -319,7 +319,7 @@ export function ItemsTab() {
                         "font-bold text-xs",
                         item.stock_quantity > 0
                           ? "text-emerald-600"
-                          : "text-neutral-500"
+                          : "text-neutral-500",
                       )}
                     >
                       {item.stock_quantity} un
@@ -511,7 +511,7 @@ export function ItemsTab() {
                             "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all",
                             formData.allows_customization
                               ? "bg-neutral-500 border-neutral-500 text-white"
-                              : "border-neutral-200 group-hover:border-neutral-400"
+                              : "border-neutral-200 group-hover:border-neutral-400",
                           )}
                         >
                           {formData.allows_customization && <Check size={16} />}
@@ -659,24 +659,24 @@ export function ItemsTab() {
                                       e.stopPropagation();
                                       if (
                                         window.confirm(
-                                          "Excluir esta customização?"
+                                          "Excluir esta customização?",
                                         )
                                       ) {
                                         try {
                                           await api.deleteCustomization(
-                                            custom.id
+                                            custom.id,
                                           );
                                           setItemCustomizations(
                                             itemCustomizations.filter(
-                                              (c) => c.id !== custom.id
-                                            )
+                                              (c) => c.id !== custom.id,
+                                            ),
                                           );
                                           toast.success(
-                                            "Customização removida"
+                                            "Customização removida",
                                           );
                                         } catch (err) {
                                           toast.error(
-                                            "Erro ao remover customização"
+                                            "Erro ao remover customização",
                                           );
                                         }
                                       }
@@ -711,20 +711,20 @@ export function ItemsTab() {
                 </div>
 
                 <div className="flex gap-4 pt-10 border-t border-neutral-50 mt-10">
-                  <button
+                  <Button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
                     className="flex-1 py-4 border border-neutral-100 text-neutral-900 font-bold rounded-2xl hover:bg-neutral-50 transition-colors"
                   >
                     Cancelar
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="submit"
                     disabled={loading}
                     className="flex-1 py-4 bg-neutral-600 text-white font-bold rounded-2xl shadow-xl shadow-neutral-200 hover:bg-neutral-700 transition-all active:scale-95 disabled:opacity-50"
                   >
                     {loading ? "Salvando..." : "Salvar Alterações"}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </motion.div>
@@ -759,13 +759,13 @@ export function ItemsTab() {
                     Configure como o cliente irá personalizar este item
                   </p>
                 </div>
-                <button
+                <Button
                   title="Fechar modal"
                   onClick={() => setIsCustomizationFormOpen(false)}
                   className="w-10 h-10 rounded-full bg-neutral-50 flex items-center justify-center text-neutral-400 hover:text-neutral-600 transition-colors"
                 >
                   <X size={20} />
-                </button>
+                </Button>
               </div>
 
               <form onSubmit={handleSaveCustomization}>
@@ -912,7 +912,7 @@ export function ItemsTab() {
                                       .options,
                                   ];
                                   options[idx].price_modifier = Number(
-                                    e.target.value
+                                    e.target.value,
                                   );
                                   setCustomizationFormData({
                                     ...customizationFormData,
@@ -932,7 +932,7 @@ export function ItemsTab() {
                               onClick={() => {
                                 const options =
                                   customizationFormData.customization_data.options.filter(
-                                    (_: any, i: number) => i !== idx
+                                    (_: any, i: number) => i !== idx,
                                   );
                                 setCustomizationFormData({
                                   ...customizationFormData,
@@ -952,10 +952,10 @@ export function ItemsTab() {
                           customizationFormData.customization_data?.options ||
                           []
                         ).length === 0 && (
-                            <p className="text-[10px] text-center py-4 text-neutral-300 font-bold italic">
-                              Nenhuma opção adicionada
-                            </p>
-                          )}
+                          <p className="text-[10px] text-center py-4 text-neutral-300 font-bold italic">
+                            Nenhuma opção adicionada
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
@@ -966,7 +966,7 @@ export function ItemsTab() {
                         "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer",
                         customizationFormData.isRequired
                           ? "bg-neutral-600 border-neutral-600 text-white"
-                          : "bg-white border-neutral-200"
+                          : "bg-white border-neutral-200",
                       )}
                       onClick={() =>
                         setCustomizationFormData({

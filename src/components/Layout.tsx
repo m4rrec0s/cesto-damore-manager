@@ -10,11 +10,8 @@ import {
   LogOut,
   User as UserIcon,
   Palette,
-  Layers,
   Menu,
   X,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { useAuth } from "../contexts/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
@@ -37,8 +34,7 @@ const navItems = [
   },
   { name: "Feed", href: "/feed", icon: PackageCheck },
   { name: "Atendimento", href: "/service", icon: BotMessageSquare },
-  { name: "Layouts Base", href: "/layouts", icon: Layers },
-  { name: "Design Editor", href: "/layouts/new", icon: Palette },
+  { name: "Design Editor", href: "/layouts", icon: Palette },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -88,9 +84,10 @@ export function Layout({ children }: { children: ReactNode }) {
                   onClick={() => setIsSidebarOpen(false)}
                   className={`
                     flex flex-col items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium text-xs  justify-start
-                    ${isActive
-                      ? "bg-neutral-600 text-white shadow-lg shadow-neutral-200"
-                      : "text-neutral-900/70 hover:bg-neutral-100 hover:text-neutral-900"
+                    ${
+                      isActive
+                        ? "bg-neutral-600 text-white shadow-lg shadow-neutral-200"
+                        : "text-neutral-900/70 hover:bg-neutral-100 hover:text-neutral-900"
                     }
                     gap-3
                   `}
@@ -133,11 +130,12 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div
-        className={`flex-1 flex flex-col min-w-0 h-full ${path.startsWith("/layouts/editor") ? "bg-[#0d1216]" : "bg-neutral-100"
-          }`}
+        className={`flex-1 flex flex-col min-w-0 h-full ${
+          path.startsWith("/layouts/editor") ? "bg-[#0d1216]" : "bg-neutral-100"
+        }`}
       >
         <div className="md:hidden flex items-center gap-4 px-6 py-4 bg-white border-b border-neutral-200">
-          <button
+          <Button
             type="button"
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 hover:bg-neutral-100 rounded-lg transition-colors"
@@ -148,7 +146,7 @@ export function Layout({ children }: { children: ReactNode }) {
             ) : (
               <Menu size={24} className="text-neutral-700" />
             )}
-          </button>
+          </Button>
           <h1 className="font-bold text-neutral-950">Cesto D'Amore</h1>
         </div>
 

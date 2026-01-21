@@ -87,20 +87,22 @@ export function NewDesignPage() {
   };
 
   useEffect(() => {
-    const token =
-      localStorage.getItem("token") || localStorage.getItem("appToken") || "";
+    const fetchDesigns = async () => {
+      const token =
+        localStorage.getItem("token") || localStorage.getItem("appToken") || "";
 
-    try {
-      setIsLoading(true);
-      layoutApiService.listLayouts({ token }).then((response) => {
+      try {
+        setIsLoading(true);
+        const response = await layoutApiService.listLayouts({ token });
         setDesigns(Array.isArray(response) ? response : response.data || []);
-      });
-      setIsLoading(false);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsLoading(false);
-    }
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDesigns();
   }, []);
 
   const handleSelectDesign = (designId: string) => {
@@ -370,6 +372,7 @@ export function NewDesignPage() {
                 const Icon = template.icon;
                 return (
                   <button
+                    type="button"
                     key={template.id}
                     onClick={() => handleCreateDesign(template.id)}
                     className="p-6 min-w-50 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 hover:border-blue-500 rounded-lg transition-all duration-200 flex flex-col items-center gap-3 text-center hover:shadow-lg hover:shadow-blue-500/20"
@@ -526,7 +529,7 @@ export function NewDesignPage() {
           )}
           {!isLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-              {designs && !isLoading && designs.length > 0 ? (
+              {designs && designs.length > 0 ? (
                 designs.map((design: Design) => (
                   <Link
                     to={"/layouts/editor/" + design.id}
@@ -574,7 +577,7 @@ export function NewDesignPage() {
             </div>
           ) : (
             <div className="w-full flex justify-center items-center text-purple-500">
-              <Loader2Icon className="animate-spin" />
+              <Loader2Icon className="animate-spin w-8 h-8" />
             </div>
           )}
         </section>

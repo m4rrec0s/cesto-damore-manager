@@ -40,13 +40,13 @@ class ExternalElementsService {
           headers: this.unsplashAccessKey
             ? { Authorization: `Client-ID ${this.unsplashAccessKey}` }
             : {},
-        }
+        },
       );
 
       if (!response.ok) {
         // Retornar elementos padrão se a API falhar
         return this.getDefaultElements().filter((el) =>
-          el.name.toLowerCase().includes(searchQuery.toLowerCase())
+          el.name.toLowerCase().includes(searchQuery.toLowerCase()),
         );
       }
 
@@ -81,7 +81,7 @@ class ExternalElementsService {
       // Se não tiver chave, retornar elementos padrão
       if (!this.pexelsApiKey) {
         return this.getDefaultElements().filter((el) =>
-          el.name.toLowerCase().includes(searchQuery.toLowerCase())
+          el.name.toLowerCase().includes(searchQuery.toLowerCase()),
         );
       }
 
@@ -89,7 +89,7 @@ class ExternalElementsService {
         `https://api.pexels.com/v1/search?query=${searchQuery}&page=${page}&per_page=10`,
         {
           headers: { Authorization: this.pexelsApiKey },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -127,13 +127,13 @@ class ExternalElementsService {
       // Se não tiver chave, retornar elementos padrão
       if (!this.pixabayApiKey) {
         return this.getDefaultElements().filter((el) =>
-          el.name.toLowerCase().includes(searchQuery.toLowerCase())
+          el.name.toLowerCase().includes(searchQuery.toLowerCase()),
         );
       }
 
       const response = await fetch(
         `https://pixabay.com/api/?key=${this.pixabayApiKey}&q=${searchQuery}&page=${page}&per_page=10&image_type=photo`,
-        { mode: "cors" }
+        { mode: "cors" },
       );
 
       if (!response.ok) {
@@ -195,7 +195,7 @@ class ExternalElementsService {
           </text>
         </svg>
       `;
-      const dataUrl = `data:image/svg+xml;base64,${btoa(svgContent)}`;
+      const dataUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgContent)))}`;
 
       return {
         id: `default-${index + 1}`,

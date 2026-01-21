@@ -64,7 +64,7 @@ export function DesignEditor() {
         if (state.canvas && data.fabricJsonState) {
           await fabricService.restoreCanvasState(
             state.canvas as unknown as never,
-            data.fabricJsonState
+            data.fabricJsonState,
           );
         }
       } catch (error: unknown) {
@@ -91,12 +91,12 @@ export function DesignEditor() {
 
       // Gerar preview
       const previewImageUrl = fabricService.exportAsImage(
-        state.canvas as unknown as never
+        state.canvas as unknown as never,
       );
 
       // Preparar dados
       const fabricJsonState = fabricService.getCanvasState(
-        state.canvas as unknown as never
+        state.canvas as unknown as never,
       );
 
       if (layoutId) {
@@ -252,7 +252,17 @@ export function DesignEditor() {
 
           {/* Layer Panel */}
           <div className="flex-1 rounded-lg overflow-hidden shadow-lg">
-            <LayerPanel onLayersChanged={() => setDirty(true)} />
+            <LayerPanel
+              canvas={state.canvas}
+              selectedObjectId={state.selectedObjectId}
+              onSelect={(obj) => {
+                if (state.canvas) {
+                  (state.canvas as any).setActiveObject(obj);
+                  (state.canvas as any).renderAll();
+                }
+              }}
+              onLayersChanged={() => setDirty(true)}
+            />
           </div>
         </div>
       </div>
@@ -324,7 +334,7 @@ export function DesignEditor() {
                       prev && {
                         ...prev,
                         type: e.target.value,
-                      }
+                      },
                   )
                 }
               >
@@ -345,7 +355,7 @@ export function DesignEditor() {
                       prev && {
                         ...prev,
                         baseImageUrl: e.target.value,
-                      }
+                      },
                   )
                 }
               />
