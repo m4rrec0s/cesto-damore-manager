@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:3000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -114,6 +114,8 @@ export const layoutApiService = {
       previewImageUrl?: string;
       tags?: string[];
       isPublished?: boolean;
+      width?: number;
+      height?: number;
       token: string;
     }
   ) {
@@ -126,6 +128,8 @@ export const layoutApiService = {
           previewImageUrl: data.previewImageUrl,
           tags: data.tags,
           isPublished: data.isPublished,
+          width: data.width,
+          height: data.height,
         },
         {
           headers: {
@@ -139,6 +143,30 @@ export const layoutApiService = {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
         axiosError.response?.data?.error || "Erro ao atualizar layout"
+      );
+    }
+  },
+
+  /**
+   * Fazer upload de imagem para o banco de elementos do usuário
+   */
+  async uploadElementImage(file: File, token: string) {
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const response = await api.post("/api/upload/image", formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      return response.data;
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { error?: string } } };
+      throw new Error(
+        axiosError.response?.data?.error || "Erro ao fazer upload da imagem"
       );
     }
   },
@@ -338,6 +366,26 @@ export const elementBankService = {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
         axiosError.response?.data?.error || "Erro ao fazer upload"
+      );
+    }
+  },
+
+  /**
+   * Deletar item do banco de elementos
+   */
+  async deleteElementBankItem(elementId: string, token: string) {
+    try {
+      const response = await api.delete(`/api/elements/bank/${elementId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      return response.data;
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { error?: string } } };
+      throw new Error(
+        axiosError.response?.data?.error || "Erro ao deletar elemento do banco"
       );
     }
   },

@@ -184,7 +184,7 @@ export function CategoriesTab() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-neutral-950/20 backdrop-blur-sm"
+              className="absolute inset-0 bg-[#0d1216]/20 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}

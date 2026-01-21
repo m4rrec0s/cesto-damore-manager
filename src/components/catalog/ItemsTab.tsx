@@ -370,7 +370,7 @@ export function ItemsTab() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsModalOpen(false)}
-              className="absolute inset-0 bg-neutral-950/20 backdrop-blur-sm"
+              className="absolute inset-0 bg-[#0d1216]/20 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -622,10 +622,10 @@ export function ItemsTab() {
                                         {custom.type === "TEXT"
                                           ? "Texto"
                                           : custom.type === "IMAGES"
-                                          ? "Imagens/Fotos"
-                                          : custom.type === "MULTIPLE_CHOICE"
-                                          ? "Múltipla Escolha"
-                                          : "Layout Base"}
+                                            ? "Imagens/Fotos"
+                                            : custom.type === "MULTIPLE_CHOICE"
+                                              ? "Múltipla Escolha"
+                                              : "Layout Base"}
                                       </p>
                                       {custom.price > 0 && (
                                         <>
@@ -952,10 +952,10 @@ export function ItemsTab() {
                           customizationFormData.customization_data?.options ||
                           []
                         ).length === 0 && (
-                          <p className="text-[10px] text-center py-4 text-neutral-300 font-bold italic">
-                            Nenhuma opção adicionada
-                          </p>
-                        )}
+                            <p className="text-[10px] text-center py-4 text-neutral-300 font-bold italic">
+                              Nenhuma opção adicionada
+                            </p>
+                          )}
                       </div>
                     </div>
                   )}

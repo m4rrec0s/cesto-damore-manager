@@ -1,0 +1,8 @@
+.designCanvas {
+    background-color: white;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    position: relative;
+    flex-shrink: 0;
+    width: var(--design-width, 756px);
+    height: var(--design-height, 355.4px);
+}

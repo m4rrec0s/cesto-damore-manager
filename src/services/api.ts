@@ -83,6 +83,7 @@ export interface Product {
   categories: Category[];
   type_id: string;
   production_time?: number;
+  is_active?: boolean;
   components?: ProductComponent[];
   related_products?: Omit<Product, "components" | "related_products">[];
   created_at: string;
@@ -98,6 +99,7 @@ export interface ProductInput {
   categories: string[];
   type_id: string;
   production_time?: number;
+  is_active?: boolean;
   components?: { item_id: string; quantity: number }[];
   additionals?: { item_id: string; custom_price?: number }[];
 }
@@ -322,17 +324,17 @@ class ApiService {
         // Isto significa que o usuário tentou acessar algo sem permissão
         if (error.response?.status === 403) {
           console.error(
-            "🚫 ACESSO NEGADO: Você não tem permissão para esta ação"
+            "🚫 ACESSO NEGADO: Você não tem permissão para esta ação",
           );
           // Limpar dados de usuário em caso de inconsistência
           localStorage.removeItem("user");
           throw new Error(
-            "Acesso negado: você não tem permissão para esta ação"
+            "Acesso negado: você não tem permissão para esta ação",
           );
         }
 
         return Promise.reject(error);
-      }
+      },
     );
   }
 
@@ -433,7 +435,7 @@ class ApiService {
       email: string | null;
       name: string | null;
       imageUrl: string | null;
-    }
+    },
   ) => {
     const response = await this.post("/auth/google", {
       idToken,
@@ -537,7 +539,7 @@ class ApiService {
 
   createItem = async (
     payload: Partial<Item>,
-    imageFile?: File
+    imageFile?: File,
   ): Promise<Item> => {
     if (!imageFile) {
       return (await this.post("/items", payload)).data;
@@ -567,7 +569,7 @@ class ApiService {
   updateItem = async (
     id: string,
     payload: Partial<Item>,
-    imageFile?: File
+    imageFile?: File,
   ): Promise<Item> => {
     if (!imageFile) {
       return (await this.put(`/items/${id}`, payload)).data;
@@ -613,7 +615,7 @@ class ApiService {
     payload: Partial<Additional> & {
       colors?: Array<{ color_id: string; stock_quantity: number }>;
     },
-    imageFile?: File
+    imageFile?: File,
   ): Promise<Additional> => {
     if (!imageFile) {
       return (await this.post("/additional", payload)).data;
@@ -641,7 +643,7 @@ class ApiService {
   updateAdditional = async (
     id: string,
     payload: Partial<Additional>,
-    imageFile?: File
+    imageFile?: File,
   ): Promise<Additional> => {
     if (!imageFile) {
       return (await this.put(`/additional/${id}`, payload)).data;
@@ -684,7 +686,7 @@ class ApiService {
 
   createProduct = async (
     payload: Partial<ProductInput>,
-    imageFile?: File
+    imageFile?: File,
   ): Promise<Product> => {
     if (!imageFile) {
       return (await this.post("/products", payload)).data;
@@ -712,7 +714,7 @@ class ApiService {
   updateProduct = async (
     id: string,
     payload: Partial<ProductInput>,
-    imageFile?: File
+    imageFile?: File,
   ): Promise<Product> => {
     if (!imageFile) {
       return (await this.put(`/products/${id}`, payload)).data;
@@ -754,7 +756,7 @@ class ApiService {
 
   updateCustomization = async (
     id: string,
-    payload: Record<string, unknown>
+    payload: Record<string, unknown>,
   ) => {
     return (await this.put(`/customizations/${id}`, payload)).data;
   };
@@ -809,7 +811,7 @@ class ApiService {
   updateLayout = async (
     id: string,
     payload: Record<string, unknown>,
-    imageFile?: File
+    imageFile?: File,
   ) => {
     this.validateAdminRole();
     if (!imageFile) {
@@ -882,7 +884,7 @@ class ApiService {
     if (!imageFile) return (await this.post("/admin/feed/banners", data)).data;
     const formData = new FormData();
     Object.entries(data).forEach(([key, value]) =>
-      formData.append(key, String(value))
+      formData.append(key, String(value)),
     );
     formData.append("image", imageFile);
     return (
@@ -897,7 +899,7 @@ class ApiService {
       return (await this.put(`/admin/feed/banners/${id}`, data)).data;
     const formData = new FormData();
     Object.entries(data).forEach(([key, value]) =>
-      formData.append(key, String(value))
+      formData.append(key, String(value)),
     );
     formData.append("image", imageFile);
     return (
@@ -937,13 +939,13 @@ class ApiService {
       delivery_date?: string | Date | null;
       shipping_price?: number;
       delivery_method?: "delivery" | "pickup";
-    }
+    },
   ) => (await this.put(`/orders/${id}/metadata`, metadata)).data;
 
   updateOrderStatus = async (
     id: string,
     status: OrderStatus,
-    options?: { notifyCustomer?: boolean }
+    options?: { notifyCustomer?: boolean },
   ) =>
     (
       await this.client.put(
@@ -951,7 +953,7 @@ class ApiService {
         { status },
         {
           params: options,
-        }
+        },
       )
     ).data;
 
@@ -999,7 +1001,7 @@ export function useApi(): ApiService & {
 
   const clearSpecificCache = useCallback(
     (key: string) => api.clearCache(key),
-    [api]
+    [api],
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1009,7 +1011,7 @@ export function useApi(): ApiService & {
       invalidateCache,
       clearSpecificCache,
     }),
-    [api, invalidateCache, clearSpecificCache]
+    [api, invalidateCache, clearSpecificCache],
   );
 
   return value;

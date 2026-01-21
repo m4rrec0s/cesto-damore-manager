@@ -38,7 +38,7 @@ const navItems = [
   { name: "Feed", href: "/feed", icon: PackageCheck },
   { name: "Atendimento", href: "/service", icon: BotMessageSquare },
   { name: "Layouts Base", href: "/layouts", icon: Layers },
-  { name: "Design Editor", href: "/layouts/editor", icon: Palette },
+  { name: "Design Editor", href: "/layouts/new", icon: Palette },
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
@@ -88,10 +88,9 @@ export function Layout({ children }: { children: ReactNode }) {
                   onClick={() => setIsSidebarOpen(false)}
                   className={`
                     flex flex-col items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium text-xs  justify-start
-                    ${
-                      isActive
-                        ? "bg-neutral-600 text-white shadow-lg shadow-neutral-200"
-                        : "text-neutral-900/70 hover:bg-neutral-100 hover:text-neutral-900"
+                    ${isActive
+                      ? "bg-neutral-600 text-white shadow-lg shadow-neutral-200"
+                      : "text-neutral-900/70 hover:bg-neutral-100 hover:text-neutral-900"
                     }
                     gap-3
                   `}
@@ -109,16 +108,16 @@ export function Layout({ children }: { children: ReactNode }) {
           <div
             className={`mt-auto mx-auto pt-6 border-t border-neutral-300 space-y-4`}
           >
-            <div className="flex items-center border border-neutral-400 rounded-full">
+            <div className="flex items-center border-2 border-blue-400 rounded-full">
               {user?.image_url ? (
                 <img
                   src={user.image_url}
                   alt={user.name || "User"}
-                  className="p-4 rounded-full object-cover shrink-0"
+                  className="rounded-full max-w-12 object-cover shrink-0"
                   referrerPolicy="no-referrer"
                 />
               ) : (
-                <div className="p-4 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-400 shrink-0">
+                <div className="rounded-full max-w-12 bg-neutral-100 flex items-center justify-center text-neutral-400 shrink-0">
                   <UserIcon size={20} />
                 </div>
               )}
@@ -134,9 +133,8 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div
-        className={`flex-1 flex flex-col min-w-0 h-full ${
-          path.startsWith("/layouts/editor") ? "bg-[#0d1216]" : "bg-neutral-100"
-        }`}
+        className={`flex-1 flex flex-col min-w-0 h-full ${path.startsWith("/layouts/editor") ? "bg-[#0d1216]" : "bg-neutral-100"
+          }`}
       >
         <div className="md:hidden flex items-center gap-4 px-6 py-4 bg-white border-b border-neutral-200">
           <button

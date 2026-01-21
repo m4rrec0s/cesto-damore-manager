@@ -124,7 +124,7 @@ export function Dashboard() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 p-6">
       <div>
         <h2 className="text-3xl font-semibold text-neutral-950 ">Dashboard</h2>
       </div>
@@ -133,30 +133,27 @@ export function Dashboard() {
         {statsItems.map((item, idx) => (
           <div
             key={item.label}
-            className={`p-6 flex flex-col justify-between min-h-36 rounded-[2rem] shadow-sm relative overflow-hidden ${
-              idx === 0
-                ? "bg-linear-to-br from-neutral-900 to-neutral-600 text-white"
-                : "bg-white"
-            }`}
+            className={`p-6 flex flex-col justify-between min-h-36 rounded-[2rem] shadow-sm relative overflow-hidden ${idx === 0
+              ? "bg-linear-to-br from-neutral-900 to-neutral-600 text-white"
+              : "bg-white"
+              }`}
           >
             <h3
-              className={`text-sm font-bold uppercase tracking-wider ${
-                idx === 0 ? "text-neutral-400" : "text-neutral-500"
-              }`}
+              className={`text-sm font-bold uppercase tracking-wider ${idx === 0 ? "text-neutral-400" : "text-neutral-500"
+                }`}
             >
               {item.label}
             </h3>
             <div className="mt-4">
               <p
-                className={`text-3xl font-black ${
-                  idx === 0 ? "text-white" : "text-neutral-950"
-                }`}
+                className={`text-3xl font-black ${idx === 0 ? "text-white" : "text-neutral-950"
+                  }`}
               >
                 {item.isCurrency
                   ? item.value.toLocaleString("pt-BR", {
-                      style: "currency",
-                      currency: "BRL",
-                    })
+                    style: "currency",
+                    currency: "BRL",
+                  })
                   : `${item.value}${item.suffix || ""}`}
               </p>
             </div>
@@ -184,7 +181,7 @@ export function Dashboard() {
           </div>
 
           {stats?.daily_data?.length > 0 &&
-          stats?.daily_data?.some((d: any) => d.total_sales > 0) ? (
+            stats?.daily_data?.some((d: any) => d.total_sales > 0) ? (
             <ChartContainer config={revenueConfig} className="h-80 w-full">
               <AreaChart
                 data={

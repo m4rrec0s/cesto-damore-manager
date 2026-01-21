@@ -23,6 +23,7 @@ export default defineConfig([
       '@typescript-eslint/no-unused-vars': ['off', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'warn',
       'react-hooks/exhaustive-deps': 'warn',
+      'no-inline-styles': 'off',
     },
   },
 ])

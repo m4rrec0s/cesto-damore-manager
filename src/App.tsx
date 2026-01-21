@@ -7,12 +7,14 @@ import { Orders } from "./pages/Orders";
 import { Catalog } from "./pages/Catalog";
 import { Items } from "./pages/Items";
 import { Categories } from "./pages/Categories";
-import { Types } from "./pages/Types";
+// import { Types } from "./pages/Types";
 import { Feed } from "./pages/Feed";
 import { Service } from "./pages/Service";
 import { LayoutEditor } from "./pages/LayoutEditor";
 import { DesignEditor } from "./components/editor/DesignEditor";
 import DesignEditorPage from "./pages/DesignEditorPage";
+import { NewDesignPage } from "./pages/NewDesignPage";
+import DesignTestPage from "./pages/DesignTestPage";
 
 export default function App() {
   return (
@@ -76,14 +78,6 @@ export default function App() {
           }
         />
         <Route
-          path="/types"
-          element={
-            <AdminRoute>
-              <Types />
-            </AdminRoute>
-          }
-        />
-        <Route
           path="/layouts"
           element={
             <AdminRoute>
@@ -92,20 +86,26 @@ export default function App() {
           }
         />
         <Route
-          path="/layouts/editor/:layoutId"
+          path="/layouts/new"
           element={
             <AdminRoute>
-              <DesignEditorPage params={{ id: ":layoutId" }} />
+              <NewDesignPage />
             </AdminRoute>
           }
         />
         <Route
-          path="/layouts/editor"
+          path="/layouts/editor/:layoutId"
           element={
             <AdminRoute>
-              <h1 className="text-white">
-                página não implementada ainda (lista de layouts)
-              </h1>
+              <DesignEditorPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/design-test/:layoutId"
+          element={
+            <AdminRoute>
+              <DesignTestPage />
             </AdminRoute>
           }
         />

@@ -19,7 +19,7 @@ export interface EditorState {
   error: string | null;
 }
 
-interface EditorContextType {
+export interface EditorContextType {
   state: EditorState;
   setCanvas: (canvas: FabricCanvas | null) => void;
   setSelectedObject: (id: string | null) => void;
@@ -121,12 +121,10 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-function useEditorContext() {
+export function useEditorContext() {
   const context = useContext(EditorContext);
   if (!context) {
     throw new Error("useEditorContext deve ser usado dentro de EditorProvider");
   }
   return context;
 }
-
-export default useEditorContext;
