@@ -1034,7 +1034,13 @@ class ApiService {
     (await this.post(`/admin/ai/agent/sessions/${sessionId}/block`, {})).data;
 
   getSessionHistory = async (sessionId: string) =>
-    (await this.get(`/ai/agent/history/${sessionId}`)).data;
+    (
+      await this.client.get(`/ai/agent/history/${sessionId}`, {
+        headers: {
+          "x-ai-api-key": import.meta.env.VITE_AI_API_KEY || "",
+        },
+      })
+    ).data;
 
   // ===== Holidays =====
   getHolidays = async () => (await this.get("/admin/holidays")).data;
