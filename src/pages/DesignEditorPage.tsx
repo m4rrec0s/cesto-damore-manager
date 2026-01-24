@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/useAuth";
@@ -14,6 +14,7 @@ import { DesignPanels } from "@/components/editor/DesignPanels";
 import styles from "./DesignEditorPage.module.css";
 
 const CM_TO_PX = 37.795;
+const INTERNAL_DPI_MULTIPLIER = 2; // Supersampling para nitidez tipo Canva
 
 const CUSTOM_PROPS = [
   "name",
@@ -30,7 +31,77 @@ const CUSTOM_PROPS = [
   "strokeWidth",
   "strokeDashArray",
   "radius",
+  "width",
+  "height",
+  "splitByGrapheme",
+  "objectCaching",
 ];
+
+// Tipagem simplificada para evitar erros de linting "any"
+interface FabricCanvas {
+  setZoom: (v: number) => void;
+  setDimensions: (
+    dim: { width: string | number; height: string | number },
+    opt?: any,
+  ) => void;
+  renderAll: () => void;
+  requestRenderAll: () => void;
+  discardActiveObject: () => void;
+  setActiveObject: (obj: any) => void;
+  add: (obj: any) => void;
+  remove: (obj: any) => void;
+  getObjects: () => any[];
+  toObject: (props?: string[]) => any;
+  toDataURL: (opt?: any) => string;
+  loadFromJSON: (json: any) => Promise<void>;
+  bringObjectToFront: (obj: any) => void;
+  sendObjectToBack: (obj: any) => void;
+  bringObjectForward: (obj: any) => void;
+  sendObjectBackwards: (obj: any) => void;
+  set: (keyOrObj: string | any, value?: any) => void;
+  backgroundColor: string | any;
+  on: (event: string, handler: (opt: any) => void) => void;
+  off: (event: string, handler?: any) => void;
+  get: (prop: string) => any;
+  calcOffset: () => void;
+  dispose: () => void;
+  viewportTransform: number[];
+  setViewportTransform: (v: number[]) => void;
+}
+
+interface FabricObject {
+  id?: string;
+  name?: string;
+  type?: string;
+  left: number;
+  top: number;
+  width?: number;
+  height?: number;
+  fill?: string;
+  opacity?: number;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  fontStyle?: any;
+  isFrame?: boolean;
+  isCustomizable?: boolean;
+  clone: (extraProps?: string[]) => Promise<any>;
+  set: (keyOrObj: string | any, value?: any) => void;
+  setCoords: () => void;
+  getBoundingRect: () => {
+    width: number;
+    height: number;
+    left: number;
+    top: number;
+  };
+  scaleToWidth: (w: number) => void;
+  scaleToHeight: (h: number) => void;
+  [key: string]: any;
+}
+
+interface CustomWindow extends Window {
+  __initialCanvasState?: any;
+}
 
 const loadGoogleFont = (fontFamily: string) => {
   if (document.getElementById(`font-${fontFamily.replace(/\s+/g, "-")}`))
@@ -45,7 +116,6 @@ const loadGoogleFont = (fontFamily: string) => {
       "+",
     )}:wght@400;700&display=swap`;
     link.onload = () => {
-      // @ts-ignore
       document.fonts.load(`1em "${fontFamily}"`).then(resolve).catch(resolve);
     };
     link.onerror = reject;
@@ -60,8 +130,10 @@ const DesignEditorPage = () => {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [canvas, setCanvas] = useState<unknown>(null);
-  const [selectedObject, setSelectedObject] = useState<unknown>(null);
+  const [canvas, setCanvas] = useState<FabricCanvas | null>(null);
+  const [selectedObject, setSelectedObject] = useState<FabricObject | null>(
+    null,
+  );
   const [designName, setDesignName] = useState("Novo Design");
   const [canvasBg, setCanvasBg] = useState("#ffffff");
   const [isTransparent, setIsTransparent] = useState(false);
@@ -81,11 +153,58 @@ const DesignEditorPage = () => {
   const [workspaceZoom, setWorkspaceZoom] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Refs para gerenciar o estado sem disparar re-renders desnecessários
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fabricRef = useRef<unknown>(null);
+  const fabricRef = useRef<FabricCanvas | null>(null);
   const autoSaveTimeout = useRef<NodeJS.Timeout | null>(null);
   const namesSaveTimeout = useRef<NodeJS.Timeout | null>(null);
-  const isInternalUpdate = useRef(false); // To avoid triggering auto-save on initial load or internal updates
+  const isInternalUpdate = useRef(false);
+
+  // Apply zoom and dimensions to fabric canvas
+  useEffect(() => {
+    if (canvas && fabricRef.current) {
+      const c = fabricRef.current;
+
+      const visualWidth = dimensions.width * workspaceZoom;
+      const visualHeight = dimensions.height * workspaceZoom;
+      const internalWidth = dimensions.width * INTERNAL_DPI_MULTIPLIER;
+      const internalHeight = dimensions.height * INTERNAL_DPI_MULTIPLIER;
+
+      // 1. Definir o tamanho INTERNO (backstore) - Atributos 'width' e 'height' das tags <canvas>
+      c.setDimensions(
+        {
+          width: internalWidth,
+          height: internalHeight,
+        },
+        { backstoreOnly: true },
+      );
+
+      // 2. Definir o tamanho VISUAL (CSS) - Isso sincroniza o lower-canvas, upper-canvas e o wrapper
+      c.setDimensions(
+        {
+          width: `${visualWidth}px`,
+          height: `${visualHeight}px`,
+        },
+        { cssOnly: true },
+      );
+
+      // O zoom interno deve ser sempre o multiplicador de DPI base para manter a nitidez
+      c.setZoom(INTERNAL_DPI_MULTIPLIER);
+
+      // Recalcular offsets e posições de controle para evitar bugs de seleção
+      // Pequeno delay garante que o DOM atualizou os tamanhos das divs
+      setTimeout(() => {
+        c.calcOffset();
+        const objects = c.getObjects();
+        objects.forEach((obj: any) => {
+          if (obj && typeof obj.setCoords === "function") {
+            obj.setCoords();
+          }
+        });
+        c.requestRenderAll();
+      }, 50);
+    }
+  }, [canvas, dimensions, workspaceZoom]);
 
   // Initial data loading
   useEffect(() => {
@@ -121,12 +240,28 @@ const DesignEditorPage = () => {
                 ? JSON.parse(layout.fabricJsonState)
                 : layout.fabricJsonState;
 
-            (window as any).__initialCanvasState = parsedState;
+            // Converter i-text para textbox para suporte a quebra de linha
+            // e garantir que objectCaching esteja desativado para qualidade no zoom
+            if (parsedState.objects) {
+              parsedState.objects = parsedState.objects.map(
+                (obj: FabricObject) => {
+                  const updatedObj = { ...obj, objectCaching: false };
+                  if (updatedObj.type === "i-text") {
+                    updatedObj.type = "textbox";
+                    if (!updatedObj.width) updatedObj.width = 200;
+                  }
+                  return updatedObj;
+                },
+              );
+            }
+
+            (window as unknown as CustomWindow).__initialCanvasState =
+              parsedState;
 
             // Pre-load fonts used in the layout
             if (parsedState.objects) {
               const fonts = new Set<string>();
-              parsedState.objects.forEach((obj: any) => {
+              parsedState.objects.forEach((obj: FabricObject) => {
                 if (obj.fontFamily && obj.fontFamily !== "Arial") {
                   fonts.add(obj.fontFamily);
                 }
@@ -161,7 +296,7 @@ const DesignEditorPage = () => {
 
       const elements = data?.elements || [];
       setUserUploads(
-        elements.map((el: any) => ({
+        elements.map((el: FabricObject) => ({
           id: el.id,
           imageUrl: el.imageUrl,
           name: el.name,
@@ -184,25 +319,55 @@ const DesignEditorPage = () => {
     if (loading || !canvasRef.current) return;
     if (fabricRef.current) return;
 
-    let activeCanvas: any = null;
+    let activeCanvas: FabricCanvas | null = null;
 
     const initCanvas = async () => {
       try {
-        const { Canvas } = await import("fabric");
+        const { Canvas, FabricObject: BaseFabricObject } =
+          await import("fabric");
+
+        // Global settings for quality
+        (BaseFabricObject as any).ownDefaults.objectCaching = false;
+        (BaseFabricObject as any).ownDefaults.minScaleLimit = 0.05;
 
         activeCanvas = new Canvas(canvasRef.current!, {
-          width: dimensions.width,
-          height: dimensions.height,
           backgroundColor: isTransparent ? "transparent" : canvasBg,
           preserveObjectStacking: true,
-          renderOnAddRemove: true,
-        });
+        } as any) as unknown as FabricCanvas;
+
+        // Configurar dimensões iniciais usando o padrão backstore/css
+        activeCanvas.setDimensions(
+          {
+            width: dimensions.width * INTERNAL_DPI_MULTIPLIER,
+            height: dimensions.height * INTERNAL_DPI_MULTIPLIER,
+          },
+          { backstoreOnly: true },
+        );
+
+        activeCanvas.setDimensions(
+          {
+            width: `${dimensions.width}px`,
+            height: `${dimensions.height}px`,
+          },
+          { cssOnly: true },
+        );
+
+        // Set initial zoom
+        activeCanvas.setZoom(INTERNAL_DPI_MULTIPLIER);
 
         fabricRef.current = activeCanvas;
         setCanvas(activeCanvas);
 
+        // Forçar cálculo inicial de posição
+        activeCanvas.calcOffset();
+
         const updateHistory = () => {
-          if (isHistoryUpdate.current || isInternalUpdate.current) return;
+          if (
+            !activeCanvas ||
+            isHistoryUpdate.current ||
+            isInternalUpdate.current
+          )
+            return;
           const obj = activeCanvas.toObject(CUSTOM_PROPS);
           if (!obj) return;
           const json = JSON.stringify(obj);
@@ -259,7 +424,8 @@ const DesignEditorPage = () => {
         });
 
         // Load initial state if exists
-        const initialState = (window as any).__initialCanvasState;
+        const initialState = (window as unknown as CustomWindow)
+          .__initialCanvasState;
         if (initialState) {
           try {
             isInternalUpdate.current = true;
@@ -267,7 +433,7 @@ const DesignEditorPage = () => {
             // Pre-carregar fontes do estado inicial
             if (initialState.objects) {
               const fontsToLoad = new Set<string>();
-              initialState.objects.forEach((obj: any) => {
+              initialState.objects.forEach((obj: FabricObject) => {
                 if (obj.fontFamily && obj.fontFamily !== "Arial") {
                   fontsToLoad.add(obj.fontFamily);
                 }
@@ -280,7 +446,26 @@ const DesignEditorPage = () => {
               }
             }
 
-            await activeCanvas.loadFromJSON(initialState);
+            try {
+              // crossOrigin: 'anonymous' é importante para evitar erros de tainted canvas
+              // ao exportar imagens que vêm de outro domínio (api)
+              await activeCanvas.loadFromJSON(initialState);
+            } catch (jsonErr) {
+              console.error(
+                "Erro ao carregar JSON do estado inicial:",
+                jsonErr,
+              );
+              toast.error(
+                "Alguns elementos do design podem não ter sido carregados",
+              );
+            }
+
+            // Garantir que todos os objetos tenham coordenadas e cache corretos após carregar
+            activeCanvas.getObjects().forEach((obj: FabricObject) => {
+              obj.set("objectCaching", false);
+              obj.setCoords();
+            });
+
             activeCanvas.renderAll();
             // Init history
             const obj = activeCanvas.toObject(CUSTOM_PROPS);
@@ -291,7 +476,7 @@ const DesignEditorPage = () => {
               historyIndexRef.current = 0;
             }
 
-            delete (window as any).__initialCanvasState;
+            delete (window as unknown as CustomWindow).__initialCanvasState;
             isInternalUpdate.current = false;
           } catch (e) {
             isInternalUpdate.current = false;
@@ -329,7 +514,7 @@ const DesignEditorPage = () => {
       const fetchElements = async () => {
         try {
           // Primeiro tenta API interna
-          let elementsData = await elementBankService
+          const elementsData = await elementBankService
             .listElements({
               search: searchQuery,
             })
@@ -370,22 +555,10 @@ const DesignEditorPage = () => {
     setDimensions({ width: w, height: h });
 
     if (canvas) {
-      (
-        canvas as {
-          setDimensions: (d: { width: number; height: number }) => void;
-          renderAll: () => void;
-          setZoom: (z: number) => void;
-          setViewportTransform: (v: number[]) => void;
-        }
-      ).setDimensions({ width: w, height: h });
-
-      // Reset zoom/viewport to ensure visibility
-      const c = canvas as any;
-      c.setViewportTransform([1, 0, 0, 1, 0, 0]);
-
-      (canvas as { renderAll: () => void }).renderAll();
+      // O useEffect principal cuidará de sincronizar as dimensões físicas e visuais
+      // baseado no novo estado de 'dimensions'
       setIsDirty(true);
-      triggerAutoSave(); // Save new dimensions
+      triggerAutoSave(); // Salva as novas dimensões no banco
     }
   };
 
@@ -393,7 +566,7 @@ const DesignEditorPage = () => {
     type: "title" | "subtitle" | "body" = "body",
     fontFamily = "Arial",
   ) => {
-    const currentCanvas = (canvas || fabricRef.current) as any;
+    const currentCanvas = (canvas || fabricRef.current) as FabricCanvas;
     if (!currentCanvas) {
       return;
     }
@@ -402,7 +575,7 @@ const DesignEditorPage = () => {
       loadGoogleFont(fontFamily);
     }
 
-    const { IText } = await import("fabric");
+    const { Textbox } = await import("fabric");
 
     let fontSize = 16;
     let fontWeight: string | number = "normal";
@@ -418,17 +591,23 @@ const DesignEditorPage = () => {
       textStr = "Subtítulo";
     }
 
-    const text = new IText(textStr, {
-      left: dimensions.width / 2 - 50,
+    const text = new Textbox(textStr, {
+      left: dimensions.width / 2 - 100,
       top: dimensions.height / 2 - 10,
+      width: 200,
       fontSize,
       fontWeight: fontWeight as any,
       fill: "#000000",
       fontFamily,
-    });
+      objectCaching: false,
+      isCustomizable: true,
+      splitByGrapheme: true, // Melhor para quebra de linha em idiomas diferentes
+      lockScalingY: true,
+    } as any) as unknown as FabricObject;
 
     try {
       currentCanvas.add(text);
+      text.setCoords();
       currentCanvas.setActiveObject(text);
       currentCanvas.renderAll();
       setIsDirty(true);
@@ -441,14 +620,14 @@ const DesignEditorPage = () => {
   const handleAddShape = async (
     type: "rect" | "circle" | "triangle" | "frame" | "frame-circle",
   ) => {
-    const currentCanvas = (canvas || fabricRef.current) as any;
+    const currentCanvas = (canvas || fabricRef.current) as FabricCanvas;
     if (!currentCanvas) {
       return;
     }
 
     try {
       const { Rect, Circle, Triangle } = await import("fabric");
-      let shape: any;
+      let shape: FabricObject;
 
       const props = {
         left: dimensions.width / 2 - 50,
@@ -461,26 +640,32 @@ const DesignEditorPage = () => {
         cornerSmoothing: 0.5,
       };
 
-      if (type === "rect") shape = new Rect(props);
-      else if (type === "circle") shape = new Circle({ ...props, radius: 50 });
-      else if (type === "triangle") shape = new Triangle(props);
+      if (type === "rect")
+        shape = new Rect(props as any) as unknown as FabricObject;
+      else if (type === "circle")
+        shape = new Circle({
+          ...props,
+          radius: 50,
+        } as any) as unknown as FabricObject;
+      else if (type === "triangle")
+        shape = new Triangle(props as any) as unknown as FabricObject;
       else if (type === "frame" || type === "frame-circle") {
         const frameCount =
-          currentCanvas.getObjects().filter((o: any) => o.isFrame).length + 1;
+          currentCanvas.getObjects().filter((o) => o.isFrame).length + 1;
 
         if (type === "frame-circle") {
           shape = new Circle({
             ...props,
             radius: 50,
             name: `Foto ${frameCount}`,
-          });
+          }) as unknown as FabricObject;
         } else {
           shape = new Rect({
             ...props,
             name: `Foto ${frameCount}`,
             rx: 15,
             ry: 15,
-          });
+          }) as unknown as FabricObject;
         }
 
         shape.set({
@@ -492,12 +677,13 @@ const DesignEditorPage = () => {
         });
 
         // Marcar como placeholder para imagem
-        (shape as any).isFrame = true;
-        (shape as any).isCustomizable = true; // Frames are customizable by default
+        shape.isFrame = true;
+        shape.isCustomizable = true; // Frames are customizable by default
       }
 
-      currentCanvas.add(shape);
-      currentCanvas.setActiveObject(shape);
+      currentCanvas.add(shape!);
+      shape!.setCoords();
+      currentCanvas.setActiveObject(shape!);
       currentCanvas.renderAll();
       setIsDirty(true);
       triggerAutoSave();
@@ -507,7 +693,7 @@ const DesignEditorPage = () => {
   };
 
   const handleAddBankElement = async (imageUrl: string) => {
-    const currentCanvas = (canvas || fabricRef.current) as any;
+    const currentCanvas = (canvas || fabricRef.current) as FabricCanvas;
     if (!currentCanvas) {
       return;
     }
@@ -515,17 +701,27 @@ const DesignEditorPage = () => {
     try {
       const { FabricImage } = await import("fabric");
 
-      const img = await FabricImage.fromURL(imageUrl, {
-        crossOrigin: "anonymous",
-      });
+      let finalUrl = imageUrl;
+      if (finalUrl.startsWith("/")) {
+        finalUrl = `${import.meta.env.VITE_API_URL}${finalUrl}`;
+      }
 
-      img.scaleToWidth(150);
+      const img = (await (FabricImage as any).fromURL(finalUrl, {
+        crossOrigin: "anonymous",
+      })) as unknown as FabricObject;
+
+      const targetWidth = Math.min(dimensions.width * 0.7, 400);
+      img.scaleToWidth(targetWidth);
+
       img.set({
-        left: dimensions.width / 2 - 75,
-        top: dimensions.height / 2 - 75,
+        left: (dimensions.width - img.getBoundingRect().width) / 2,
+        top: (dimensions.height - img.getBoundingRect().height) / 2,
+        objectCaching: false,
+        imageSmoothing: true,
       });
 
       currentCanvas.add(img);
+      img.setCoords();
       currentCanvas.setActiveObject(img);
       currentCanvas.renderAll();
       setIsDirty(true);
@@ -539,7 +735,7 @@ const DesignEditorPage = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const currentCanvas = (canvas || fabricRef.current) as any;
+    const currentCanvas = (canvas || fabricRef.current) as FabricCanvas;
     if (!currentCanvas) {
       return;
     }
@@ -558,19 +754,30 @@ const DesignEditorPage = () => {
         uploadResult.imageUrl || uploadResult.image_url || uploadResult.url;
       if (!imageUrl) throw new Error("URL da imagem não recebida do servidor");
 
+      // Garantir URL absoluta para o Fabric.js
+      let absoluteUrl = imageUrl;
+      if (absoluteUrl.startsWith("/")) {
+        absoluteUrl = `${import.meta.env.VITE_API_URL}${absoluteUrl}`;
+      }
+
       const { FabricImage } = await import("fabric");
 
-      const img = await FabricImage.fromURL(imageUrl, {
+      const img = (await (FabricImage as any).fromURL(absoluteUrl, {
         crossOrigin: "anonymous",
-      });
+      })) as unknown as FabricObject;
 
-      img.scaleToWidth(200);
+      const targetWidth = Math.min(dimensions.width * 0.7, 400);
+      img.scaleToWidth(targetWidth);
+
       img.set({
-        left: dimensions.width / 2 - 100,
-        top: dimensions.height / 2 - 100,
+        left: (dimensions.width - img.getBoundingRect().width) / 2,
+        top: (dimensions.height - img.getBoundingRect().height) / 2,
+        objectCaching: false,
+        imageSmoothing: true,
       });
 
       currentCanvas.add(img);
+      img.setCoords();
       currentCanvas.setActiveObject(img);
       currentCanvas.renderAll();
 
@@ -600,17 +807,162 @@ const DesignEditorPage = () => {
     }
   };
 
-  const triggerAutoSave = () => {
+  const handleSave = useCallback(
+    async (isManual = true) => {
+      const currentCanvas = (canvas || fabricRef.current) as FabricCanvas;
+      if (!currentCanvas || !layoutId) return;
+
+      setSaving(true);
+      try {
+        // Gerar preview apenas em salvamentos manuais para evitar "fadiga" e lentidão no auto-save
+        let previewImageUrl: string | undefined;
+        if (isManual) {
+          try {
+            // No Fabric 7, setViewportTransform([]) reseta a visualização para o topo
+            // garantindo que o toDataURL capture tudo e não apenas o que está visível.
+            const originalTransform = [
+              ...(currentCanvas as any).viewportTransform,
+            ];
+            (currentCanvas as any).setViewportTransform([
+              INTERNAL_DPI_MULTIPLIER,
+              0,
+              0,
+              INTERNAL_DPI_MULTIPLIER,
+              0,
+              0,
+            ]);
+
+            previewImageUrl = currentCanvas.toDataURL({
+              format: "png",
+              quality: 1,
+              // Multiplier 1 aqui capturará a resolução interna (que já é 2x a base)
+              // Se quisermos 30% da base, usamos 0.3 / 2 = 0.15
+              // Aumentando para 0.4 para melhor qualidade no preview
+              multiplier: 0.4 / INTERNAL_DPI_MULTIPLIER,
+              enableRetinaScaling: false, // Desativar para evitar duplicar o multiplicador
+            });
+
+            (currentCanvas as any).setViewportTransform(originalTransform);
+          } catch (err) {
+            console.warn("Falha ao gerar preview:", err);
+          }
+        }
+
+        const token =
+          localStorage.getItem("token") ||
+          localStorage.getItem("appToken") ||
+          "";
+
+        await layoutApiService.updateLayout(layoutId, {
+          name: designName,
+          fabricJsonState: currentCanvas.toObject(CUSTOM_PROPS),
+          width: Math.round(dimensions.width),
+          height: Math.round(dimensions.height),
+          previewImageUrl, // Se for auto-save, envia undefined e mantém o atual no banco
+          token,
+          isPublished: isManual ? true : undefined,
+        });
+
+        setIsDirty(false);
+        if (isManual) toast.success("Design publicado e salvo!");
+      } catch (error) {
+        if (isManual) toast.error("Erro ao salvar design");
+      } finally {
+        setSaving(false);
+      }
+    },
+    [canvas, layoutId, designName, dimensions.width, dimensions.height],
+  );
+
+  const triggerAutoSave = useCallback(() => {
     if (autoSaveTimeout.current) {
       clearTimeout(autoSaveTimeout.current);
     }
     autoSaveTimeout.current = setTimeout(() => {
-      const currentCanvas = canvas || fabricRef.current;
+      const currentCanvas = (canvas || fabricRef.current) as FabricCanvas;
       if (currentCanvas) {
         handleSave(false);
       }
     }, 3000); // 3 seconds of inactivity
-  };
+  }, [canvas, handleSave]);
+
+  const handleUndo = useCallback(async () => {
+    if (historyIndex <= 0 || !canvas) return;
+    const prevIndex = historyIndex - 1;
+    const json = history[prevIndex];
+    if (!json || json === "undefined") return;
+
+    try {
+      isInternalUpdate.current = true;
+      isHistoryUpdate.current = true;
+      const c = canvas as FabricCanvas;
+      await c.loadFromJSON(JSON.parse(json));
+      c.renderAll();
+
+      setHistoryIndex(prevIndex);
+      historyIndexRef.current = prevIndex; // Sync Ref
+
+      isInternalUpdate.current = false;
+      isHistoryUpdate.current = false;
+      triggerAutoSave();
+    } catch (e) {
+      console.error("Undo error", e);
+      isInternalUpdate.current = false;
+      isHistoryUpdate.current = false;
+    }
+  }, [canvas, history, historyIndex, triggerAutoSave]);
+
+  const handleRedo = useCallback(async () => {
+    if (historyIndex >= history.length - 1 || !canvas) return;
+    const nextIndex = historyIndex + 1;
+    const json = history[nextIndex];
+    if (!json || json === "undefined") return;
+
+    try {
+      isInternalUpdate.current = true;
+      isHistoryUpdate.current = true;
+      const c = canvas as FabricCanvas;
+      await c.loadFromJSON(JSON.parse(json));
+      c.renderAll();
+
+      setHistoryIndex(nextIndex);
+      historyIndexRef.current = nextIndex; // Sync Ref
+
+      isInternalUpdate.current = false;
+      isHistoryUpdate.current = false;
+      triggerAutoSave();
+    } catch (e) {
+      isHistoryUpdate.current = false;
+      isInternalUpdate.current = false;
+    }
+  }, [canvas, history, historyIndex, triggerAutoSave]);
+
+  const handleClone = useCallback(async () => {
+    if (!selectedObject || !canvas) return;
+
+    try {
+      const cloned = await (selectedObject as FabricObject).clone(CUSTOM_PROPS);
+      cloned.set("left", (selectedObject as FabricObject).left + 15);
+      cloned.set("top", (selectedObject as FabricObject).top + 15);
+
+      // Ensure custom props are preserved
+      CUSTOM_PROPS.forEach((prop) => {
+        if ((selectedObject as FabricObject)[prop] !== undefined) {
+          cloned[prop] = (selectedObject as FabricObject)[prop];
+        }
+      });
+
+      const c = canvas as FabricCanvas;
+      c.add(cloned);
+      c.setActiveObject(cloned);
+      c.renderAll();
+      setIsDirty(true);
+      triggerAutoSave();
+    } catch (error) {
+      console.error("Error cloning object:", error);
+      toast.error("Erro ao duplicar objeto");
+    }
+  }, [canvas, selectedObject, triggerAutoSave]);
 
   const handleSaveDesignName = async (name: string) => {
     if (!layoutId || !name.trim()) return;
@@ -637,48 +989,8 @@ const DesignEditorPage = () => {
     }, 1000); // 1 second after user stops typing
   };
 
-  const handleSave = async (isManual = true) => {
-    const currentCanvas = canvas || fabricRef.current;
-    if (!currentCanvas || !layoutId) return;
-
-    setSaving(true);
-    try {
-      // Gerar preview da imagem do canvas
-      let previewImageUrl: string | undefined;
-      try {
-        previewImageUrl = (currentCanvas as any).toDataURL({
-          format: "png",
-          quality: 0.8,
-          multiplier: 0.3, // Reduzir tamanho para thumbnail
-        });
-      } catch (err) {
-        // Continuar sem preview se falhar
-      }
-
-      const token =
-        localStorage.getItem("token") || localStorage.getItem("appToken") || "";
-
-      await layoutApiService.updateLayout(layoutId, {
-        name: designName,
-        fabricJsonState: (currentCanvas as any).toObject(CUSTOM_PROPS),
-        width: Math.round(dimensions.width),
-        height: Math.round(dimensions.height),
-        previewImageUrl,
-        token,
-        isPublished: isManual ? true : undefined,
-      });
-
-      setIsDirty(false);
-      if (isManual) toast.success("Design publicado e salvo!");
-    } catch (error) {
-      if (isManual) toast.error("Erro ao salvar design");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleExportHighQuality = async () => {
-    const currentCanvas = (canvas || fabricRef.current) as any;
+    const currentCanvas = (canvas || fabricRef.current) as FabricCanvas;
     if (!currentCanvas || !layoutId) return;
 
     const toastId = toast.loading("Gerando imagem em alta qualidade...");
@@ -688,12 +1000,26 @@ const DesignEditorPage = () => {
       currentCanvas.set("backgroundColor", "#ffffff");
       currentCanvas.renderAll();
 
-      // Exportar com máxima qualidade (5x o tamanho original para melhor resolução)
+      // Exportar com máxima qualidade
+      const originalTransform = [...(currentCanvas as any).viewportTransform];
+      (currentCanvas as any).setViewportTransform([
+        INTERNAL_DPI_MULTIPLIER,
+        0,
+        0,
+        INTERNAL_DPI_MULTIPLIER,
+        0,
+        0,
+      ]);
+
+      // Multiplier 5 relativo à escala base.
+      // Como o canvas já está em 2x, multiplier deve ser 5 / 2 = 2.5
       const highQualityImage = currentCanvas.toDataURL({
         format: "png",
-        multiplier: 5,
-        enableRetinaScaling: true,
+        multiplier: 5 / INTERNAL_DPI_MULTIPLIER,
+        enableRetinaScaling: false,
       });
+
+      (currentCanvas as any).setViewportTransform(originalTransform);
 
       // Restaurar fundo original
       currentCanvas.set("backgroundColor", originalBg);
@@ -723,8 +1049,9 @@ const DesignEditorPage = () => {
       loadGoogleFont(value);
     }
 
-    (selectedObject as any).set(key, value);
-    (canvas as { renderAll: () => void }).renderAll();
+    (selectedObject as FabricObject).set(key, value);
+    (selectedObject as FabricObject).setCoords();
+    (canvas as FabricCanvas).renderAll();
     setIsDirty(true);
     triggerAutoSave();
 
@@ -765,7 +1092,38 @@ const DesignEditorPage = () => {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canvas, historyIndex, history, selectedObject]);
+  }, [
+    canvas,
+    historyIndex,
+    history,
+    selectedObject,
+    handleClone,
+    handleRedo,
+    handleUndo,
+  ]);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (canvas) {
+        (canvas as FabricCanvas).calcOffset();
+      }
+    };
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener("scroll", handleScroll);
+    }
+    window.addEventListener("resize", handleScroll);
+
+    return () => {
+      if (container) {
+        container.removeEventListener("scroll", handleScroll);
+      }
+      window.removeEventListener("resize", handleScroll);
+    };
+  }, [canvas]);
 
   const handleWorkspaceWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey || e.metaKey) {
@@ -790,79 +1148,6 @@ const DesignEditorPage = () => {
       </div>
     );
   }
-
-  const handleUndo = async () => {
-    if (historyIndex <= 0 || !canvas) return;
-    const prevIndex = historyIndex - 1;
-    const json = history[prevIndex];
-    if (!json || json === "undefined") return;
-
-    try {
-      isInternalUpdate.current = true;
-      isHistoryUpdate.current = true;
-      await (canvas as any).loadFromJSON(JSON.parse(json));
-      (canvas as any).renderAll();
-
-      setHistoryIndex(prevIndex);
-      historyIndexRef.current = prevIndex; // Sync Ref
-
-      isInternalUpdate.current = false;
-      isHistoryUpdate.current = false;
-      triggerAutoSave();
-    } catch (e) {
-      console.error("Undo error", e);
-      isInternalUpdate.current = false;
-      isHistoryUpdate.current = false;
-    }
-  };
-
-  const handleRedo = async () => {
-    if (historyIndex >= history.length - 1 || !canvas) return;
-    const nextIndex = historyIndex + 1;
-    const json = history[nextIndex];
-    if (!json || json === "undefined") return;
-
-    try {
-      isInternalUpdate.current = true;
-      isHistoryUpdate.current = true;
-      await (canvas as any).loadFromJSON(JSON.parse(json));
-      (canvas as any).renderAll();
-
-      setHistoryIndex(nextIndex);
-      historyIndexRef.current = nextIndex; // Sync Ref
-
-      isInternalUpdate.current = false;
-      isHistoryUpdate.current = false;
-      triggerAutoSave();
-    } catch (e) {
-      isHistoryUpdate.current = false;
-      isInternalUpdate.current = false;
-    }
-  };
-
-  const handleClone = () => {
-    if (!selectedObject || !canvas) return;
-
-    (selectedObject as any).clone((cloned: any) => {
-      cloned.set({
-        left: (selectedObject as any).left + 15,
-        top: (selectedObject as any).top + 15,
-      });
-
-      // Ensure custom props are preserved
-      CUSTOM_PROPS.forEach((prop) => {
-        if ((selectedObject as any)[prop] !== undefined) {
-          cloned[prop] = (selectedObject as any)[prop];
-        }
-      });
-
-      (canvas as any).add(cloned);
-      (canvas as any).setActiveObject(cloned);
-      (canvas as any).renderAll();
-      setIsDirty(true);
-      triggerAutoSave();
-    }, CUSTOM_PROPS);
-  };
 
   return (
     <section className="relative text-white h-screen flex flex-col bg-[#0d1216] overflow-hidden">
@@ -889,8 +1174,8 @@ const DesignEditorPage = () => {
           selectedObject={selectedObject}
           onDelete={() => {
             if (canvas && selectedObject) {
-              (canvas as any).remove(selectedObject);
-              (canvas as any).renderAll();
+              (canvas as FabricCanvas).remove(selectedObject);
+              (canvas as FabricCanvas).renderAll();
               setIsDirty(true);
               triggerAutoSave();
             }
@@ -900,16 +1185,16 @@ const DesignEditorPage = () => {
           updateNonce={updateNonce}
           onBringToFront={() => {
             if (selectedObject && canvas) {
-              (canvas as any).bringObjectToFront(selectedObject);
-              (canvas as { renderAll: () => void }).renderAll();
+              (canvas as FabricCanvas).bringObjectToFront(selectedObject);
+              (canvas as FabricCanvas).renderAll();
               setIsDirty(true);
               triggerAutoSave();
             }
           }}
           onSendToBack={() => {
             if (selectedObject && canvas) {
-              (canvas as any).sendObjectToBack(selectedObject);
-              (canvas as { renderAll: () => void }).renderAll();
+              (canvas as FabricCanvas).sendObjectToBack(selectedObject);
+              (canvas as FabricCanvas).renderAll();
               setIsDirty(true);
               triggerAutoSave();
             }
@@ -939,11 +1224,11 @@ const DesignEditorPage = () => {
           onDeleteUpload={handleDeleteUpload}
           // Novos props para Phase 7
           canvas={canvas}
-          selectedObjectId={(selectedObject as any)?.id || null}
+          selectedObjectId={selectedObject?.id || null}
           onSelectObject={(obj) => {
             if (canvas) {
-              (canvas as any).setActiveObject(obj);
-              (canvas as any).renderAll();
+              (canvas as FabricCanvas).setActiveObject(obj as FabricObject);
+              (canvas as FabricCanvas).renderAll();
             }
           }}
           canvasBg={canvasBg}
@@ -951,8 +1236,8 @@ const DesignEditorPage = () => {
             setCanvasBg(color);
             setIsTransparent(false);
             if (canvas) {
-              (canvas as any).set("backgroundColor", color);
-              (canvas as any).renderAll();
+              (canvas as FabricCanvas).set("backgroundColor", color);
+              (canvas as FabricCanvas).renderAll();
               setIsDirty(true);
               triggerAutoSave();
             }
@@ -961,11 +1246,11 @@ const DesignEditorPage = () => {
           onToggleTransparency={(val) => {
             setIsTransparent(val);
             if (canvas) {
-              (canvas as any).set(
+              (canvas as FabricCanvas).set(
                 "backgroundColor",
                 val ? "transparent" : canvasBg,
               );
-              (canvas as any).renderAll();
+              (canvas as FabricCanvas).renderAll();
               setIsDirty(true);
               triggerAutoSave();
             }
@@ -973,11 +1258,12 @@ const DesignEditorPage = () => {
         />
 
         <div
+          ref={containerRef}
           className="flex-1 flex items-center justify-center bg-[#0d1216] relative p-8 overflow-auto custom-scrollbar"
           onClick={(e) => {
             if (e.target === e.currentTarget && canvas) {
-              (canvas as any).discardActiveObject();
-              (canvas as any).renderAll();
+              (canvas as FabricCanvas).discardActiveObject();
+              (canvas as FabricCanvas).renderAll();
             }
           }}
           onWheel={handleWorkspaceWheel}
@@ -986,17 +1272,16 @@ const DesignEditorPage = () => {
             className={styles.designCanvas}
             style={
               {
-                "--design-width": `${dimensions.width}px`,
-                "--design-height": `${dimensions.height}px`,
-                transform: `scale(${workspaceZoom})`,
+                "--design-width": `${dimensions.width * workspaceZoom}px`,
+                "--design-height": `${dimensions.height * workspaceZoom}px`,
+                transform: "none",
                 transformOrigin: "center center",
-                transition: "transform 0.1s ease-out",
+                transition: "none",
               } as unknown as React.CSSProperties
             }
           >
             <canvas ref={canvasRef} />
           </div>
-
           <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-neutral-900/80 px-3 py-1.5 rounded-full backdrop-blur-sm border border-neutral-700 text-[10px] text-neutral-300">
             <span>
               {Math.round((dimensions.width / CM_TO_PX) * 10) / 10} x{" "}

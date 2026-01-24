@@ -59,13 +59,23 @@ export function ItemsTab() {
   const [isCustomizationFormOpen, setIsCustomizationFormOpen] = useState(false);
   const [editingCustomization, setEditingCustomization] =
     useState<Customization | null>(null);
-  const [customizationFormData, setCustomizationFormData] = useState({
+  const [customizationFormData, setCustomizationFormData] = useState<{
+    name: string;
+    type: CustomizationTypeValue;
+    price: number;
+    isRequired: boolean;
+    customization_data: Record<string, unknown>;
+  }>({
     name: "",
     type: "TEXT" as CustomizationTypeValue,
     price: 0,
     isRequired: false,
-    customization_data: {} as any,
+    customization_data: {},
   });
+  const [availableLayouts, setAvailableLayouts] = useState<
+    Record<string, unknown>[]
+  >([]);
+  const [loadingLayouts, setLoadingLayouts] = useState(false);
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>("");
@@ -84,6 +94,24 @@ export function ItemsTab() {
     },
     [api],
   );
+
+  const fetchAvailableLayouts = useCallback(async () => {
+    try {
+      setLoadingLayouts(true);
+      const data = await api.getDynamicLayouts();
+      const layouts = Array.isArray(data)
+        ? data
+        : data?.layouts || data?.data || [];
+      console.log("✅ Layouts carregados:", layouts.length, layouts);
+      setAvailableLayouts(layouts);
+    } catch (error) {
+      console.error("❌ Erro ao carregar layouts:", error);
+      toast.error("Erro ao carregar designs");
+      setAvailableLayouts([]);
+    } finally {
+      setLoadingLayouts(false);
+    }
+  }, [api]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -107,7 +135,8 @@ export function ItemsTab() {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    fetchAvailableLayouts();
+  }, [fetchData, fetchAvailableLayouts]);
 
   const handleOpenModal = (item?: Item) => {
     if (item) {
@@ -191,12 +220,15 @@ export function ItemsTab() {
       if (editingItem) {
         await api.updateItem(
           editingItem.id,
-          formData as any,
+          formData as unknown as Record<string, unknown>,
           imageFile || undefined,
         );
         toast.success("Item atualizado!");
       } else {
-        await api.createItem(formData as any, imageFile || undefined);
+        await api.createItem(
+          formData as unknown as Record<string, unknown>,
+          imageFile || undefined,
+        );
         toast.success("Item criado!");
       }
       setIsModalOpen(false);
@@ -602,7 +634,7 @@ export function ItemsTab() {
                                     {custom.type === "MULTIPLE_CHOICE" && (
                                       <Box size={20} />
                                     )}
-                                    {custom.type === "BASE_LAYOUT" && (
+                                    {custom.type === "DYNAMIC_LAYOUT" && (
                                       <Box size={20} />
                                     )}
                                   </div>
@@ -625,7 +657,7 @@ export function ItemsTab() {
                                             ? "Imagens/Fotos"
                                             : custom.type === "MULTIPLE_CHOICE"
                                               ? "Múltipla Escolha"
-                                              : "Layout Base"}
+                                              : "Designs"}
                                       </p>
                                       {custom.price > 0 && (
                                         <>
@@ -734,7 +766,7 @@ export function ItemsTab() {
 
       <AnimatePresence>
         {isCustomizationFormOpen && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-70 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -771,8 +803,8 @@ export function ItemsTab() {
               <form onSubmit={handleSaveCustomization}>
                 <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
                   <div className="space-y-2">
-                    <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest px-1">
-                      Nome da Customização
+                    <label className="text-xs font-black text-neutral-600 uppercase tracking-widest">
+                      📝 Nome da Customização
                     </label>
                     <Input
                       required
@@ -790,8 +822,8 @@ export function ItemsTab() {
 
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest px-1">
-                        Tipo de Campo
+                      <label className="text-xs font-black text-neutral-600 uppercase tracking-widest">
+                        🎨 Tipo
                       </label>
                       <select
                         title="Tipo de Campo"
@@ -799,23 +831,25 @@ export function ItemsTab() {
                         onChange={(e) =>
                           setCustomizationFormData({
                             ...customizationFormData,
-                            type: e.target.value as any,
+                            type: e.target.value as CustomizationTypeValue,
                           })
                         }
                         className="w-full h-12 px-4 rounded-2xl border border-neutral-100 bg-neutral-50/30 font-bold focus:ring-2 focus:ring-neutral-500/10"
                       >
-                        <option value="TEXT">Texto</option>
-                        <option value="IMAGES">Imagens/Fotos</option>
+                        <option value="TEXT">📄 Texto</option>
+                        <option value="IMAGES">🖼️ Imagens</option>
                         <option value="MULTIPLE_CHOICE">
-                          Múltipla Escolha
+                          ☑️ Múltipla Escolha
                         </option>
-                        <option value="BASE_LAYOUT">Layout Base</option>
+                        <option value="DYNAMIC_LAYOUT">
+                          🎭 Designs Dinâmicos
+                        </option>
                       </select>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest px-1">
-                        Preço Base Adicional
+                      <label className="text-xs font-black text-neutral-600 uppercase tracking-widest">
+                        💰 Preço Adicional
                       </label>
                       <Input
                         type="number"
@@ -833,86 +867,128 @@ export function ItemsTab() {
                     </div>
                   </div>
 
-                  {customizationFormData.type === "MULTIPLE_CHOICE" && (
-                    <div className="space-y-4 pt-4 border-t border-neutral-100">
-                      <div className="flex items-center justify-between">
-                        <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest px-1">
-                          Opções de Escolha
-                        </label>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            const currentData =
-                              customizationFormData.customization_data || {
-                                options: [],
-                              };
-                            const options = currentData.options || [];
-                            setCustomizationFormData({
-                              ...customizationFormData,
-                              customization_data: {
-                                ...currentData,
-                                options: [
-                                  ...options,
-                                  {
-                                    id: crypto.randomUUID(),
-                                    label: "",
-                                    price_modifier: 0,
-                                  },
-                                ],
-                              },
-                            });
-                          }}
-                          className="h-7 px-3 bg-neutral-600 text-white rounded-lg text-[10px] font-bold uppercase transition-all active:scale-95"
-                        >
-                          + Opção
-                        </Button>
-                      </div>
-
-                      <div className="space-y-2">
-                        {(
-                          customizationFormData.customization_data?.options ||
-                          []
-                        ).map((opt: any, idx: number) => (
-                          <div
-                            key={opt.id || idx}
-                            className="flex gap-2 items-center bg-white p-2 rounded-xl border border-neutral-100 shadow-sm transition-all animate-in fade-in slide-in-from-right-2"
+                  {/* Opções específicas por tipo */}
+                  <div className="border-t border-neutral-100 pt-4">
+                    {customizationFormData.type === "MULTIPLE_CHOICE" && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="text-xs font-black text-neutral-600 uppercase tracking-widest">
+                            ☑️ Opções de Escolha
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const currentData =
+                                customizationFormData.customization_data || {
+                                  options: [],
+                                };
+                              const options =
+                                ((currentData as Record<string, unknown>)
+                                  .options as Record<string, unknown>[]) || [];
+                              setCustomizationFormData({
+                                ...customizationFormData,
+                                customization_data: {
+                                  ...currentData,
+                                  options: [
+                                    ...options,
+                                    {
+                                      id: crypto.randomUUID(),
+                                      label: "",
+                                      price_modifier: 0,
+                                    },
+                                  ],
+                                },
+                              });
+                            }}
+                            className="h-8 px-2 bg-neutral-600 text-white rounded-lg text-[10px] font-bold"
                           >
-                            <Input
-                              placeholder="Rótulo (ex: Azul, Grande...)"
-                              value={opt.label}
-                              onChange={(e) => {
-                                const options = [
-                                  ...customizationFormData.customization_data
-                                    .options,
-                                ];
-                                options[idx].label = e.target.value;
-                                setCustomizationFormData({
-                                  ...customizationFormData,
-                                  customization_data: {
-                                    ...customizationFormData.customization_data,
-                                    options,
-                                  },
-                                });
-                              }}
-                              className="flex-1 h-10 text-xs rounded-xl border-neutral-50 bg-neutral-50/30 font-bold"
-                            />
-                            <div className="relative w-20">
-                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-black text-neutral-400">
-                                R$
-                              </span>
+                            + Adicionar
+                          </Button>
+                        </div>
+
+                        <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
+                          {(
+                            ((
+                              customizationFormData.customization_data as Record<
+                                string,
+                                unknown
+                              >
+                            )?.options as Record<string, unknown>[]) || []
+                          ).map((opt: Record<string, unknown>, idx: number) => (
+                            <div
+                              key={(opt.id as string) || idx}
+                              className="flex gap-2 items-center bg-white p-3 rounded-xl border border-neutral-100"
+                            >
                               <Input
-                                type="number"
-                                placeholder="0,00"
-                                value={opt.price_modifier}
+                                placeholder="Rótulo (ex: Azul...)"
+                                value={(opt.label as string) || ""}
                                 onChange={(e) => {
                                   const options = [
-                                    ...customizationFormData.customization_data
-                                      .options,
+                                    ...((customizationFormData
+                                      .customization_data?.options as Record<
+                                      string,
+                                      unknown
+                                    >[]) || []),
                                   ];
-                                  options[idx].price_modifier = Number(
-                                    e.target.value,
+                                  options[idx] = {
+                                    ...options[idx],
+                                    label: e.target.value,
+                                  };
+                                  setCustomizationFormData({
+                                    ...customizationFormData,
+                                    customization_data: {
+                                      ...customizationFormData.customization_data,
+                                      options,
+                                    },
+                                  });
+                                }}
+                                className="flex-1 h-9 text-xs rounded-xl border-neutral-50"
+                              />
+                              <div className="relative w-20">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-bold text-neutral-400">
+                                  R$
+                                </span>
+                                <Input
+                                  type="number"
+                                  step="0.01"
+                                  placeholder="0"
+                                  value={(opt.price_modifier as number) || 0}
+                                  onChange={(e) => {
+                                    const options = [
+                                      ...((customizationFormData
+                                        .customization_data?.options as Record<
+                                        string,
+                                        unknown
+                                      >[]) || []),
+                                    ];
+                                    options[idx] = {
+                                      ...options[idx],
+                                      price_modifier: Number(e.target.value),
+                                    };
+                                    setCustomizationFormData({
+                                      ...customizationFormData,
+                                      customization_data: {
+                                        ...customizationFormData.customization_data,
+                                        options,
+                                      },
+                                    });
+                                  }}
+                                  className="pl-6 w-full h-9 text-xs"
+                                />
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  const options = (
+                                    customizationFormData.customization_data
+                                      ?.options as Record<string, unknown>[]
+                                  ).filter(
+                                    (_: Record<string, unknown>, i: number) =>
+                                      i !== idx,
                                   );
                                   setCustomizationFormData({
                                     ...customizationFormData,
@@ -922,51 +998,100 @@ export function ItemsTab() {
                                     },
                                   });
                                 }}
-                                className="pl-6 w-full h-10 text-[10px] rounded-xl border-neutral-50 bg-neutral-50/30 font-black"
-                              />
+                                className="h-8 w-8 text-red-400 hover:text-red-600"
+                              >
+                                <X size={16} />
+                              </Button>
                             </div>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => {
-                                const options =
-                                  customizationFormData.customization_data.options.filter(
-                                    (_: any, i: number) => i !== idx,
-                                  );
-                                setCustomizationFormData({
-                                  ...customizationFormData,
-                                  customization_data: {
-                                    ...customizationFormData.customization_data,
-                                    options,
-                                  },
-                                });
-                              }}
-                              className="h-8 w-8 text-neutral-300 hover:text-red-500 rounded-lg hover:bg-neutral-50 transition-all"
-                            >
-                              <X size={14} />
-                            </Button>
-                          </div>
-                        ))}
-                        {(
-                          customizationFormData.customization_data?.options ||
-                          []
-                        ).length === 0 && (
-                          <p className="text-[10px] text-center py-4 text-neutral-300 font-bold italic">
-                            Nenhuma opção adicionada
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {customizationFormData.type === "DYNAMIC_LAYOUT" && (
+                      <div className="space-y-3">
+                        <label className="text-xs font-black text-neutral-600 uppercase tracking-widest block">
+                          🎭 Seleção de Designs Dinâmicos
+                        </label>
+
+                        {loadingLayouts ? (
+                          <p className="text-sm text-neutral-400 py-4">
+                            ⏳ Carregando designs...
                           </p>
+                        ) : availableLayouts.length === 0 ? (
+                          <p className="text-sm text-neutral-400 py-4">
+                            ⚠️ Nenhum design encontrado
+                          </p>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto custom-scrollbar p-1">
+                            {availableLayouts.map(
+                              (layout: Record<string, unknown>) => {
+                                const selectedLayouts =
+                                  (customizationFormData.customization_data
+                                    ?.layouts as Record<string, unknown>[]) ||
+                                  [];
+                                const isSelected = selectedLayouts.some(
+                                  (l: Record<string, unknown>) =>
+                                    l.id === layout.id,
+                                );
+
+                                return (
+                                  <div
+                                    key={layout.id as string}
+                                    onClick={() => {
+                                      const newLayouts = isSelected
+                                        ? selectedLayouts.filter(
+                                            (l: Record<string, unknown>) =>
+                                              l.id !== layout.id,
+                                          )
+                                        : [
+                                            ...selectedLayouts,
+                                            layout as Record<string, unknown>,
+                                          ];
+                                      setCustomizationFormData({
+                                        ...customizationFormData,
+                                        customization_data: {
+                                          ...customizationFormData.customization_data,
+                                          layouts: newLayouts,
+                                        },
+                                      });
+                                    }}
+                                    className={clsx(
+                                      "flex items-center gap-2 p-2 rounded-lg border-2 cursor-pointer transition-all",
+                                      isSelected
+                                        ? "bg-neutral-50 border-neutral-600"
+                                        : "bg-white border-neutral-100 hover:border-neutral-200",
+                                    )}
+                                  >
+                                    <div className="w-6 h-6 rounded border-2 flex items-center justify-center shrink-0 bg-white border-neutral-200">
+                                      {isSelected && (
+                                        <Check
+                                          size={14}
+                                          className="text-neutral-600"
+                                        />
+                                      )}
+                                    </div>
+                                    <span className="text-xs font-bold text-neutral-700 truncate">
+                                      {layout.name as string}
+                                    </span>
+                                  </div>
+                                );
+                              },
+                            )}
+                          </div>
                         )}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
-                  <div className="flex items-center gap-3 p-4 bg-neutral-50/50 rounded-2xl border border-neutral-100">
+                  {/* Configurações gerais */}
+                  <div className="border-t border-neutral-100 pt-4 space-y-3">
                     <div
                       className={clsx(
-                        "w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer",
+                        "flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all",
                         customizationFormData.isRequired
-                          ? "bg-neutral-600 border-neutral-600 text-white"
-                          : "bg-white border-neutral-200",
+                          ? "bg-neutral-50 border-neutral-600"
+                          : "bg-white border-neutral-100 hover:border-neutral-200",
                       )}
                       onClick={() =>
                         setCustomizationFormData({
@@ -975,15 +1100,21 @@ export function ItemsTab() {
                         })
                       }
                     >
-                      {customizationFormData.isRequired && <Check size={16} />}
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-neutral-900 leading-none">
-                        Campo Obrigatório
+                      <div
+                        className={clsx(
+                          "w-5 h-5 rounded border-2 flex items-center justify-center transition-all",
+                          customizationFormData.isRequired
+                            ? "bg-neutral-600 border-neutral-600 text-white"
+                            : "bg-white border-neutral-200",
+                        )}
+                      >
+                        {customizationFormData.isRequired && (
+                          <Check size={14} />
+                        )}
+                      </div>
+                      <span className="text-sm font-bold text-neutral-700">
+                        ✅ Campo obrigatório
                       </span>
-                      <p className="text-[10px] text-neutral-400 font-medium mt-1">
-                        O cliente não poderá finalizar o pedido sem preencher.
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -1001,7 +1132,7 @@ export function ItemsTab() {
                     type="submit"
                     className="flex-1 h-12 bg-neutral-900 hover:bg-neutral-800 text-white rounded-2xl font-bold transition-all active:scale-95"
                   >
-                    {editingCustomization ? "Salvar" : "Criar Customização"}
+                    {editingCustomization ? "✏️ Atualizar" : "✨ Criar"}
                   </Button>
                 </div>
               </form>
@@ -1012,3 +1143,5 @@ export function ItemsTab() {
     </div>
   );
 }
+
+export default ItemsTab;

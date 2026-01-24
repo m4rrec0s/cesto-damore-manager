@@ -149,6 +149,7 @@ export const ObjectToolbar = ({
       </Button>
 
       {(type === "i-text" ||
+        type === "textbox" ||
         type === "rect" ||
         type === "circle" ||
         type === "triangle") && (
@@ -218,7 +219,7 @@ export const ObjectToolbar = ({
             )}
           </div>
 
-          {type === "i-text" && (
+          {(type === "i-text" || type === "textbox") && (
             <>
               <SeparatorVertical />
               <Type className="h-4 w-4" />
@@ -439,23 +440,24 @@ export const ObjectToolbar = ({
               </div>
             )}
 
-            {type === "i-text" && selectedObject.isCustomizable && (
-              <div className="flex items-center gap-2 border-l border-neutral-600 pl-3">
-                <label className="text-[10px] uppercase font-bold text-neutral-400">
-                  Lim.
-                </label>
-                <Input
-                  type="number"
-                  value={selectedObject.maxChars || 50}
-                  onChange={(e) => {
-                    onUpdate("maxChars", parseInt(e.target.value) || 50);
-                  }}
-                  className="w-12 bg-neutral-800 text-[10px] rounded px-1 py-0.5 border border-neutral-600 outline-none"
-                  min="1"
-                  max="500"
-                />
-              </div>
-            )}
+            {(type === "i-text" || type === "textbox") &&
+              selectedObject.isCustomizable && (
+                <div className="flex items-center gap-2 border-l border-neutral-600 pl-3">
+                  <label className="text-[10px] uppercase font-bold text-neutral-400">
+                    Lim.
+                  </label>
+                  <Input
+                    type="number"
+                    value={selectedObject.maxChars || 50}
+                    onChange={(e) => {
+                      onUpdate("maxChars", parseInt(e.target.value) || 50);
+                    }}
+                    className="w-12 bg-neutral-800 text-[10px] rounded px-1 py-0.5 border border-neutral-600 outline-none"
+                    min="1"
+                    max="500"
+                  />
+                </div>
+              )}
 
             {(type === "rect" || selectedObject.isFrame) && (
               <div className="flex items-center gap-2 border-l border-neutral-600 pl-3">

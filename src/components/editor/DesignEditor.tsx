@@ -55,7 +55,7 @@ export function DesignEditor() {
       try {
         setLoading(true);
         // Usar API local para carregar layout
-        const response = await fetch(`/api/layouts/${layoutId}`);
+        const response = await fetch(`/layouts/dynamic/${layoutId}`);
         if (!response.ok) throw new Error("Layout não encontrado");
         const data = await response.json();
         setLayout(data);
@@ -101,7 +101,7 @@ export function DesignEditor() {
 
       if (layoutId) {
         // Atualizar layout existente
-        const response = await fetch(`/api/layouts/${layoutId}`, {
+        const response = await fetch(`/layouts/dynamic/${layoutId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -123,7 +123,7 @@ export function DesignEditor() {
           return;
         }
 
-        const response = await fetch("/api/layouts", {
+        const response = await fetch("/layouts/dynamic", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

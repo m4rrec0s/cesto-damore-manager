@@ -12,6 +12,8 @@ import {
   Palette,
   Menu,
   X,
+  Calendar,
+  RefreshCw,
 } from "lucide-react";
 import { useAuth } from "../contexts/useAuth";
 import { motion, AnimatePresence } from "framer-motion";
@@ -34,6 +36,8 @@ const navItems = [
   },
   { name: "Feed", href: "/feed", icon: PackageCheck },
   { name: "Atendimento", href: "/service", icon: BotMessageSquare },
+  { name: "Feriados", href: "/holidays", icon: Calendar },
+  { name: "Follow-up", href: "/follow-up", icon: RefreshCw },
   { name: "Design Editor", href: "/layouts", icon: Palette },
 ];
 
@@ -84,10 +88,9 @@ export function Layout({ children }: { children: ReactNode }) {
                   onClick={() => setIsSidebarOpen(false)}
                   className={`
                     flex flex-col items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium text-xs  justify-start
-                    ${
-                      isActive
-                        ? "bg-neutral-600 text-white shadow-lg shadow-neutral-200"
-                        : "text-neutral-900/70 hover:bg-neutral-100 hover:text-neutral-900"
+                    ${isActive
+                      ? "bg-neutral-600 text-white shadow-lg shadow-neutral-200"
+                      : "text-neutral-900/70 hover:bg-neutral-100 hover:text-neutral-900"
                     }
                     gap-3
                   `}
@@ -130,9 +133,8 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div
-        className={`flex-1 flex flex-col min-w-0 h-full ${
-          path.startsWith("/layouts/editor") ? "bg-[#0d1216]" : "bg-neutral-100"
-        }`}
+        className={`flex-1 flex flex-col min-w-0 h-full ${path.startsWith("/layouts/editor") ? "bg-[#0d1216]" : "bg-neutral-100"
+          }`}
       >
         <div className="md:hidden flex items-center gap-4 px-6 py-4 bg-white border-b border-neutral-200">
           <Button

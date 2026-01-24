@@ -14,6 +14,11 @@ import {
 import { useNavigate, useParams } from "react-router-dom";
 import { layoutApiService } from "@/services/layoutApiService";
 import { useAuth } from "@/contexts/useAuth";
+import { customizationStorage } from "@/utils/customizationStorage";
+import { Textarea } from "@/components/ui/textarea";
+
+const CM_TO_PX = 37.795;
+const INTERNAL_DPI_MULTIPLIER = 2;
 
 const DesignTestPage = () => {
   const navigate = useNavigate();
@@ -28,6 +33,7 @@ const DesignTestPage = () => {
   const [editableTexts, setEditableTexts] = useState<Record<string, string>>(
     {},
   );
+  const [workspaceZoom, setWorkspaceZoom] = useState(0.8);
   const [localImages, setLocalImages] = useState<Record<string, string>>(() => {
     try {
       if (!layoutId) return {};
@@ -38,16 +44,95 @@ const DesignTestPage = () => {
     }
   });
   const [updateNonce, setUpdateNonce] = useState(0);
+  const [storageQuota, setStorageQuota] = useState<{
+    percentage: number;
+    used: number;
+    limit: number;
+  }>({
+    percentage: 0,
+    used: 0,
+    limit: 0,
+  });
 
-  // Persistir imagens locais
+  // Aplicar zoom ao canvas do fabric
+  useEffect(() => {
+    // Verificar se o canvas está inicializado e tem os elementos DOM necessários
+    if (activeCanvas && activeCanvas.elements?.lower) {
+      const width = layout?.width || 378;
+      const height = layout?.height || 567;
+
+      // 1. Ajustar a resolução interna (Backstore)
+      activeCanvas.setDimensions(
+        {
+          width: width * INTERNAL_DPI_MULTIPLIER,
+          height: height * INTERNAL_DPI_MULTIPLIER,
+        },
+        { backstoreOnly: true },
+      );
+
+      // 2. Ajustar o tamanho visual (CSS) para alinhar upper e lower canvas
+      activeCanvas.setDimensions(
+        {
+          width: `${width * workspaceZoom}px`,
+          height: `${height * workspaceZoom}px`,
+        },
+        { cssOnly: true },
+      );
+
+      // 3. Aplicar zoom interno fixo para nitidez (DPI 2x)
+      // Resetamos o viewportTransform para garantir que o design não fique "fugindo" ou recortado
+      activeCanvas.setViewportTransform([
+        INTERNAL_DPI_MULTIPLIER,
+        0,
+        0,
+        INTERNAL_DPI_MULTIPLIER,
+        0,
+        0,
+      ]);
+
+      // Sincronizar coordenadas de interação
+      activeCanvas.calcOffset();
+      activeCanvas.getObjects().forEach((obj: any) => {
+        if (obj.setCoords) obj.setCoords();
+      });
+
+      activeCanvas.renderAll();
+    }
+  }, [workspaceZoom, activeCanvas, layout?.width, layout?.height]);
+
+  // Persistir imagens locais (apenas URLs, não base64)
   useEffect(() => {
     if (layoutId && Object.keys(localImages).length > 0) {
-      localStorage.setItem(
-        `design-local-imgs-${layoutId}`,
-        JSON.stringify(localImages),
-      );
+      // Garantir que não há base64 antes de salvar
+      const cleanedImages: Record<string, string> = {};
+      for (const [key, value] of Object.entries(localImages)) {
+        if (typeof value === "string" && !value.startsWith("data:")) {
+          cleanedImages[key] = value;
+        }
+      }
+      if (Object.keys(cleanedImages).length > 0) {
+        localStorage.setItem(
+          `design-local-imgs-${layoutId}`,
+          JSON.stringify(cleanedImages),
+        );
+      }
     }
   }, [localImages, layoutId]);
+
+  // Monitorar quota de armazenamento
+  useEffect(() => {
+    const quota = customizationStorage.getStorageQuota();
+    setStorageQuota(quota);
+
+    if (quota.percentage > 80) {
+      console.warn(
+        `⚠️ LocalStorage em ${quota.percentage.toFixed(1)}% de capacidade`,
+      );
+      toast.warning(
+        `Armazenamento em ${quota.percentage.toFixed(0)}% de capacidade`,
+      );
+    }
+  }, [localImages]);
 
   // Carregar layout salvo
   useEffect(() => {
@@ -87,9 +172,13 @@ const DesignTestPage = () => {
 
     const initCanvas = async () => {
       try {
-        const { Canvas } = await import("fabric");
+        const { Canvas, FabricObject } = await import("fabric");
 
         if (!mountedRef.current) return;
+
+        // Configurações globais de qualidade
+        FabricObject.ownDefaults.objectCaching = false;
+        FabricObject.ownDefaults.minScaleLimit = 0.05;
 
         // Limpar o container e criar novo elemento canvas
         const container = canvasContainerRef.current!;
@@ -102,21 +191,67 @@ const DesignTestPage = () => {
         const height = layout.height || 567;
 
         c = new Canvas(canvasElement, {
-          width,
-          height,
           backgroundColor: "#ffffff",
           selection: false,
           interactive: false,
+          enableRetinaScaling: false,
+          imageSmoothingEnabled: true,
+          imageSmoothingQuality: "high",
         });
 
+        // Configurar dimensões internas (High DPI)
+        c.setDimensions(
+          {
+            width: width * INTERNAL_DPI_MULTIPLIER,
+            height: height * INTERNAL_DPI_MULTIPLIER,
+          },
+          { backstoreOnly: true },
+        );
+
+        // Configurar dimensões visuais (O zoom da área de trabalho é via CSS)
+        c.setDimensions(
+          {
+            width: `${width * workspaceZoom}px`,
+            height: `${height * workspaceZoom}px`,
+          },
+          { cssOnly: true },
+        );
+
+        // Zoom interno fixo para nitidez
         // Carregar estado do layout
         if (layout.fabricJsonState) {
-          const state =
+          let state =
             typeof layout.fabricJsonState === "string"
               ? JSON.parse(layout.fabricJsonState)
               : layout.fabricJsonState;
 
-          await c.loadFromJSON(state);
+          // Converter i-text para textbox e desativar objectCaching para qualidade
+          if (state && state.objects) {
+            state.objects = state.objects.map((obj: any) => {
+              const updatedObj = { ...obj, objectCaching: false };
+              if (updatedObj.type === "i-text") {
+                updatedObj.type = "textbox";
+                if (!updatedObj.width) updatedObj.width = 200;
+              }
+              return updatedObj;
+            });
+          }
+
+          try {
+            await c.loadFromJSON(state);
+          } catch (jsonErr) {
+            console.error("Erro ao carregar estado do canvas:", jsonErr);
+          }
+
+          // Garantir o zoom interno fixo (DPI) APÓS o carregamento do JSON
+          c.setViewportTransform([
+            INTERNAL_DPI_MULTIPLIER,
+            0,
+            0,
+            INTERNAL_DPI_MULTIPLIER,
+            0,
+            0,
+          ]);
 
           if (!mountedRef.current) return;
 
@@ -173,7 +308,7 @@ const DesignTestPage = () => {
 
               if (!obj.id) obj.set("id", id);
 
-              if (obj.type === "i-text") {
+              if (obj.type === "i-text" || obj.type === "textbox") {
                 initialTexts[id] = obj.text || "";
               }
             }
@@ -214,7 +349,7 @@ const DesignTestPage = () => {
     const obj = currentCanvas
       .getObjects()
       .find((o: any) => o.id === id || (o as any).id === id);
-    if (obj && obj.type === "i-text") {
+    if (obj && (obj.type === "i-text" || obj.type === "textbox")) {
       const maxChars = (obj as any).maxChars || 50;
       const limitedValue = value.slice(0, maxChars);
 
@@ -288,7 +423,14 @@ const DesignTestPage = () => {
     dataUrl: string,
   ) => {
     const { FabricImage, Rect } = await import("fabric");
-    const img = await FabricImage.fromURL(dataUrl);
+
+    // Garantir URL absoluta para carregamento externo
+    let finalUrl = dataUrl;
+    if (finalUrl.startsWith("/")) {
+      finalUrl = `${import.meta.env.VITE_API_URL}${finalUrl}`;
+    }
+
+    const img = await FabricImage.fromURL(finalUrl);
 
     const frameWidth = frame.width * frame.scaleX;
     const frameHeight = frame.height * frame.scaleY;
@@ -315,6 +457,7 @@ const DesignTestPage = () => {
       evented: false,
       hoverCursor: "default",
       name: `uploaded-img-${frame.id || frame.name}`,
+      objectCaching: false,
     });
 
     // Criar uma máscara baseada no tipo e propriedades do frame original
@@ -401,41 +544,64 @@ const DesignTestPage = () => {
       return;
     }
 
-    const toastId = toast.loading("Processando imagem local...");
+    const toastId = toast.loading("Fazendo upload da imagem...");
 
     try {
-      // Ler arquivo como DataURL (Base64) para preview local
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const dataUrl = event.target?.result as string;
-        if (!dataUrl) {
-          toast.error("Erro ao ler imagem");
-          return;
-        }
+      // Fazer upload para /temp via API
+      const token =
+        localStorage.getItem("token") || localStorage.getItem("appToken") || "";
+      const formData = new FormData();
+      formData.append("file", file);
 
-        // Salvar no estado local
-        setLocalImages((prev) => ({
-          ...prev,
-          [frameId]: dataUrl,
-        }));
+      const uploadResponse = await fetch(
+        `${import.meta.env.VITE_API_URL}/uploads/temp`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        },
+      );
 
-        await loadLocalImageToFrame(currentCanvas, frame, dataUrl);
+      if (!uploadResponse.ok) {
+        throw new Error("Erro ao fazer upload da imagem");
+      }
 
-        // Remover placeholder
-        const icon = currentCanvas
-          .getObjects()
-          .find((o: any) => o.name === `placeholder-icon-${frameId}`);
-        const text = currentCanvas
-          .getObjects()
-          .find((o: any) => o.name === `placeholder-text-${frameId}`);
-        if (icon) currentCanvas.remove(icon);
-        if (text) currentCanvas.remove(text);
+      const uploadedData = await uploadResponse.json();
+      let imageUrl = uploadedData.url || uploadedData.path;
 
-        currentCanvas.renderAll();
-        setUpdateNonce((prev) => prev + 1);
-        toast.success("Imagem carregada localmente!", { id: toastId });
-      };
-      reader.readAsDataURL(file);
+      if (!imageUrl) {
+        throw new Error("URL da imagem não retornada");
+      }
+
+      // Garantir que a URL seja absoluta para o Fabric.js
+      if (imageUrl.startsWith("/")) {
+        imageUrl = `${import.meta.env.VITE_API_URL}${imageUrl}`;
+      }
+
+      // Salvar URL no estado local (não base64!)
+      setLocalImages((prev) => ({
+        ...prev,
+        [frameId]: imageUrl,
+      }));
+
+      // Carregar a imagem do URL
+      await loadLocalImageToFrame(currentCanvas, frame, imageUrl);
+
+      // Remover placeholder
+      const icon = currentCanvas
+        .getObjects()
+        .find((o: any) => o.name === `placeholder-icon-${frameId}`);
+      const text = currentCanvas
+        .getObjects()
+        .find((o: any) => o.name === `placeholder-text-${frameId}`);
+      if (icon) currentCanvas.remove(icon);
+      if (text) currentCanvas.remove(text);
+
+      currentCanvas.renderAll();
+      setUpdateNonce((prev) => prev + 1);
+      toast.success("Imagem enviada com sucesso!", { id: toastId });
     } catch (error) {
       console.error("Erro ao carregar imagem:", error);
       toast.error("Erro ao carregar imagem", { id: toastId });
@@ -453,22 +619,78 @@ const DesignTestPage = () => {
     try {
       currentCanvas.set("backgroundColor", "#ffffff");
       currentCanvas.renderAll();
-      const highQualityImage = currentCanvas.toDataURL({
-        format: "png",
-        multiplier: 5,
-        enableRetinaScaling: true,
-      });
+
+      // Tentar com alta qualidade primeiro
+      let dataUrl: string;
+      try {
+        dataUrl = currentCanvas.toDataURL({
+          format: "png",
+          multiplier: 5,
+          enableRetinaScaling: true,
+        });
+      } catch (e) {
+        console.warn("Erro ao gerar PNG de alta qualidade, usando fallback...");
+        // Fallback para qualidade padrão
+        dataUrl = currentCanvas.toDataURL({
+          format: "jpeg",
+          quality: 0.95,
+        });
+      }
+
       const link = document.createElement("a");
-      link.href = highQualityImage;
+      link.href = dataUrl;
       link.download = `${layout?.name.replace(/\s+/g, "_")}_personalizado_${new Date().toISOString().split("T")[0]}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+
+      // Fallback para IE11 e navegadores antigos
+      const win = window as unknown as {
+        navigator: { msSaveBlob?: (blob: Blob, filename: string) => void };
+      };
+      if (typeof win.navigator?.msSaveBlob === "function") {
+        const blob = new Blob([dataUrl], { type: "image/png" });
+        win.navigator.msSaveBlob(blob, link.download);
+      } else {
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
 
       toast.success("Imagem exportada com sucesso!", { id: toastId });
     } catch (error) {
       console.error("Erro ao exportar imagem:", error);
-      toast.error("Erro ao exportar imagem em alta qualidade", { id: toastId });
+      toast.error("Erro ao exportar imagem. Tente novamente.", { id: toastId });
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!layoutId) {
+      toast.error("ID do layout não encontrado");
+      return;
+    }
+
+    try {
+      const currentCanvas = activeCanvas || fabricRef.current;
+      if (!currentCanvas) {
+        toast.error("Canvas não inicializado");
+        return;
+      }
+
+      const customizationData = {
+        textos: editableTexts,
+        imagens: localImages,
+        canvasState: currentCanvas.toJSON(),
+        timestamp: Date.now(),
+      };
+
+      const result = customizationStorage.save(layoutId, customizationData);
+
+      if (result.success) {
+        toast.success(`Rascunho salvo! (${(result.size / 1024).toFixed(1)}KB)`);
+      } else if ("error" in result) {
+        toast.error(result.error);
+      }
+    } catch (error) {
+      console.error("Erro ao salvar rascunho:", error);
+      toast.error("Erro ao salvar rascunho");
     }
   };
 
@@ -489,12 +711,14 @@ const DesignTestPage = () => {
       : [];
 
   const textObjects = objects.filter(
-    (obj: any) => obj.isCustomizable && obj.type === "i-text",
+    (obj: any) =>
+      obj.isCustomizable && (obj.type === "i-text" || obj.type === "textbox"),
   );
   const shapeObjects = objects.filter(
     (obj: any) =>
       obj.isCustomizable &&
       obj.type !== "i-text" &&
+      obj.type !== "textbox" &&
       !obj.isFrame &&
       !obj.name?.startsWith("placeholder-"),
   );
@@ -517,15 +741,45 @@ const DesignTestPage = () => {
             <p className="text-neutral-400 text-sm italic">
               Visualize a customização do cliente
             </p>
+            {storageQuota.percentage > 0 && (
+              <div className="mt-2 flex items-center gap-2">
+                <div className="w-32 h-1.5 bg-neutral-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all ${
+                      storageQuota.percentage > 80
+                        ? "bg-red-500"
+                        : storageQuota.percentage > 50
+                          ? "bg-yellow-500"
+                          : "bg-green-500"
+                    }`}
+                    style={{
+                      width: `${Math.min(storageQuota.percentage, 100)}%`,
+                    }}
+                  />
+                </div>
+                <span className="text-xs text-neutral-400">
+                  {storageQuota.percentage.toFixed(0)}%
+                </span>
+              </div>
+            )}
           </div>
         </div>
-        <Button
-          onClick={handleExportFinalImage}
-          className="bg-green-600 hover:bg-green-700 text-white"
-        >
-          <Download className="h-4 w-4 mr-2" />
-          Salvar Imagem Final
-        </Button>
+        <div className="flex gap-3">
+          <Button
+            onClick={handleSaveDraft}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Salvar Rascunho
+          </Button>
+          <Button
+            onClick={handleExportFinalImage}
+            className="bg-green-600 hover:bg-green-700 text-white"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Salvar Imagem Final
+          </Button>
+        </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
@@ -533,10 +787,9 @@ const DesignTestPage = () => {
           <div
             className="bg-white rounded shadow-2xl relative"
             style={{
-              width: layout?.width,
-              height: layout?.height,
-              transform: "scale(0.8)",
-              transformOrigin: "center",
+              width: (layout?.width || 378) * workspaceZoom,
+              height: (layout?.height || 567) * workspaceZoom,
+              transform: "none",
             }}
           >
             <div
@@ -581,13 +834,25 @@ const DesignTestPage = () => {
                           {obj.name || "Campo de Texto"}
                         </label>
                       </div>
-                      <Input
-                        type="text"
-                        value={editableTexts[id] || ""}
-                        onChange={(e) => handleTextChange(id, e.target.value)}
-                        maxLength={obj.maxChars || 50}
-                        className="bg-neutral-800 border-neutral-600 text-sm h-9"
-                      />
+                      {obj.maxChars <= 20 ? (
+                        <Input
+                          type="text"
+                          value={editableTexts[id] || ""}
+                          onChange={(e) => handleTextChange(id, e.target.value)}
+                          maxLength={obj.maxChars || 50}
+                          className="bg-neutral-800 border-neutral-600 text-sm h-9"
+                        />
+                      ) : (
+                        <Textarea
+                          key={obj.id}
+                          title="texto"
+                          name="texto"
+                          value={editableTexts[id] || ""}
+                          onChange={(e) => handleTextChange(id, e.target.value)}
+                          maxLength={obj.maxChars || 50}
+                          className="bg-neutral-800 border-neutral-600 text-sm max-h-12 resize-none scrollbar-hide"
+                        />
+                      )}
                       <div className="flex justify-between text-[9px] text-neutral-500 font-mono">
                         <span>Limite: {obj.maxChars || 50}</span>
                         <span>

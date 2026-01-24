@@ -93,6 +93,7 @@ export function NewDesignPage() {
 
       try {
         setIsLoading(true);
+        // Não passar isPublished para ver todos na página de manager
         const response = await layoutApiService.listLayouts({ token });
         setDesigns(Array.isArray(response) ? response : response.data || []);
       } catch (error) {

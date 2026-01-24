@@ -127,7 +127,7 @@ export interface CustomizationDataMultipleChoice {
 }
 
 export type CustomizationTypeValue =
-  | "BASE_LAYOUT"
+  | "DYNAMIC_LAYOUT"
   | "IMAGES"
   | "TEXT"
   | "MULTIPLE_CHOICE";
@@ -280,7 +280,7 @@ interface CacheShape {
   [key: string]: unknown | null;
 }
 
-const API_URL = import.meta.env.VITE_API_URL || "";
+const API_URL = import.meta.env.VITE_API_URL as string;
 
 class ApiService {
   private static cache: CacheShape = {
@@ -788,6 +788,17 @@ class ApiService {
 
   getLayout = async (id: string) => (await this.get(`/layouts/${id}`)).data;
 
+  // ===== Dynamic Layouts (para customizações) =====
+  getDynamicLayouts = async () => {
+    try {
+      const response = await this.get("/layouts/dynamic");
+      return response.data;
+    } catch (error) {
+      console.error("Erro ao carregar layouts dinâmicos:", error);
+      return [];
+    }
+  };
+
   createLayout = async (payload: Record<string, unknown>, imageFile?: File) => {
     if (!imageFile) {
       return (await this.post("/admin/layouts", payload)).data;
@@ -836,6 +847,37 @@ class ApiService {
   deleteLayout = async (id: string) => {
     this.validateAdminRole();
     return (await this.delete(`/admin/layouts/${id}`)).data;
+  };
+
+  // ===== Temporary Uploads (Com TTL) =====
+  uploadTempFile = async (file: File, ttlHours?: number) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (ttlHours) {
+      formData.append("ttlHours", String(ttlHours));
+    }
+
+    return (
+      await this.client.post("/uploads/temp", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+    ).data;
+  };
+
+  makePermanentUpload = async (uploadId: string, orderId: string) => {
+    return await this.post("/uploads/temp/" + uploadId + "/make-permanent", {
+      orderId,
+    });
+  };
+
+  getUploadStats = async () => {
+    this.validateAdminRole();
+    return (await this.get("/uploads/stats")).data;
+  };
+
+  runUploadCleanup = async () => {
+    this.validateAdminRole();
+    return (await this.post("/uploads/cleanup", {})).data;
   };
 
   // ===== Orders =====
@@ -977,13 +1019,44 @@ class ApiService {
     return (await this.get("/admin/status", { params: { days } })).data;
   };
 
-  getAISummary = async (forceRefresh: boolean = false) => {
+  getAiSummary = async (forceRefresh: boolean = false) => {
     return (
       await this.get("/admin/ai/summary", {
         params: { force_refresh: forceRefresh },
       })
     ).data;
   };
+
+  // ===== AIAgent Sessions =====
+  getSessions = async () => (await this.get("/admin/ai/agent/sessions")).data;
+
+  blockSession = async (sessionId: string) =>
+    (await this.post(`/admin/ai/agent/sessions/${sessionId}/block`, {})).data;
+
+  getSessionHistory = async (sessionId: string) =>
+    (await this.get(`/ai/agent/history/${sessionId}`)).data;
+
+  // ===== Holidays =====
+  getHolidays = async () => (await this.get("/admin/holidays")).data;
+
+  createHoliday = async (payload: Record<string, unknown>) =>
+    (await this.post("/admin/holidays", payload)).data;
+
+  updateHoliday = async (id: string, payload: Record<string, unknown>) =>
+    (await this.put(`/admin/holidays/${id}`, payload)).data;
+
+  deleteHoliday = async (id: string) =>
+    (await this.delete(`/admin/holidays/${id}`)).data;
+
+  // ===== FollowUp =====
+  getFollowUpHistory = async () =>
+    (await this.get("/admin/followup/history")).data;
+
+  toggleFollowUp = async (phone: string, status: boolean) =>
+    (await this.post("/admin/followup/toggle", { phone, status })).data;
+
+  triggerFollowUp = async () =>
+    (await this.post("/admin/followup/trigger", {})).data;
 }
 
 export function useApi(): ApiService & {

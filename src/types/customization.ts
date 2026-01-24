@@ -21,7 +21,7 @@ export enum CustomizationType {
   IMAGES = "IMAGES",
   TEXT = "TEXT",
   MULTIPLE_CHOICE = "MULTIPLE_CHOICE",
-  BASE_LAYOUT = "BASE_LAYOUT",
+  DYNAMIC_LAYOUT = "DYNAMIC_LAYOUT",
 }
 
 /**
@@ -364,11 +364,11 @@ export interface CustomizationRule {
 
 export type CustomizationAvailableOptions =
   | Array<{
-    id?: string;
-    label: string;
-    value: string;
-    price_adjustment?: number;
-  }>
+      id?: string;
+      label: string;
+      value: string;
+      price_adjustment?: number;
+    }>
   | Record<string, unknown>;
 
 export interface CustomizationRuleInput {
@@ -387,7 +387,7 @@ export interface CustomizationRuleInput {
  * Helper para verificar se é um array de layouts prontos
  */
 export function isLayoutPresetArray(
-  options: RuleAvailableOptions
+  options: RuleAvailableOptions,
 ): options is LayoutPreset[] {
   return (
     Array.isArray(options) &&
@@ -401,7 +401,7 @@ export function isLayoutPresetArray(
  * Helper para verificar se é um array de layouts com fotos
  */
 export function isLayoutWithPhotosArray(
-  options: RuleAvailableOptions
+  options: RuleAvailableOptions,
 ): options is LayoutWithPhotos[] {
   return (
     Array.isArray(options) && options.length > 0 && "photo_slots" in options[0]
@@ -412,7 +412,7 @@ export function isLayoutWithPhotosArray(
  * Helper para verificar se é um array de opções de seleção
  */
 export function isSelectOptionArray(
-  options: RuleAvailableOptions
+  options: RuleAvailableOptions,
 ): options is SelectOption[] {
   return (
     Array.isArray(options) &&
@@ -427,7 +427,7 @@ export function isSelectOptionArray(
  * Helper para verificar se são opções de substituição
  */
 export function isSubstitutionOptions(
-  options: RuleAvailableOptions
+  options: RuleAvailableOptions,
 ): options is { items: SubstitutionItem[] } {
   return (
     options !== null &&

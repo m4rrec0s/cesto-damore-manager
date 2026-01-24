@@ -1,9 +1,9 @@
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_BASE = import.meta.env.VITE_API_URL as string;
 
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: import.meta.env.VITE_API_URL,
 });
 
 /**
@@ -25,7 +25,7 @@ export const layoutApiService = {
   }) {
     try {
       const response = await api.post(
-        "/api/layouts/dynamic",
+        "/layouts/dynamic",
         {
           name: data.name,
           type: data.type,
@@ -39,14 +39,14 @@ export const layoutApiService = {
           headers: {
             Authorization: `Bearer ${data.token}`,
           },
-        }
+        },
       );
 
       return response.data;
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao criar layout"
+        axiosError.response?.data?.error || "Erro ao criar layout",
       );
     }
   },
@@ -67,7 +67,7 @@ export const layoutApiService = {
         params.append("isPublished", String(filters.isPublished));
       if (filters?.search) params.append("search", filters.search);
 
-      const response = await api.get("/api/layouts/dynamic", {
+      const response = await api.get("/layouts/dynamic", {
         params,
         headers: {
           Authorization: `Bearer ${filters?.token}`,
@@ -78,7 +78,7 @@ export const layoutApiService = {
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao listar layouts"
+        axiosError.response?.data?.error || "Erro ao listar layouts",
       );
     }
   },
@@ -88,7 +88,7 @@ export const layoutApiService = {
    */
   async getLayout(layoutId: string, token: string) {
     try {
-      const response = await api.get(`/api/layouts/dynamic/${layoutId}`, {
+      const response = await api.get(`/layouts/dynamic/${layoutId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -98,7 +98,7 @@ export const layoutApiService = {
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Layout não encontrado"
+        axiosError.response?.data?.error || "Layout não encontrado",
       );
     }
   },
@@ -117,11 +117,11 @@ export const layoutApiService = {
       width?: number;
       height?: number;
       token: string;
-    }
+    },
   ) {
     try {
       const response = await api.put(
-        `/api/layouts/dynamic/${layoutId}`,
+        `/layouts/dynamic/${layoutId}`,
         {
           name: data.name,
           fabricJsonState: data.fabricJsonState,
@@ -135,14 +135,14 @@ export const layoutApiService = {
           headers: {
             Authorization: `Bearer ${data.token}`,
           },
-        }
+        },
       );
 
       return response.data;
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao atualizar layout"
+        axiosError.response?.data?.error || "Erro ao atualizar layout",
       );
     }
   },
@@ -155,7 +155,7 @@ export const layoutApiService = {
       const formData = new FormData();
       formData.append("image", file);
 
-      const response = await api.post("/api/upload/image", formData, {
+      const response = await api.post("/upload/image", formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -166,7 +166,7 @@ export const layoutApiService = {
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao fazer upload da imagem"
+        axiosError.response?.data?.error || "Erro ao fazer upload da imagem",
       );
     }
   },
@@ -176,7 +176,7 @@ export const layoutApiService = {
    */
   async deleteLayout(layoutId: string, token: string) {
     try {
-      const response = await api.delete(`/api/layouts/dynamic/${layoutId}`, {
+      const response = await api.delete(`/layouts/dynamic/${layoutId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -186,7 +186,7 @@ export const layoutApiService = {
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao deletar layout"
+        axiosError.response?.data?.error || "Erro ao deletar layout",
       );
     }
   },
@@ -197,24 +197,24 @@ export const layoutApiService = {
   async saveVersion(
     layoutId: string,
     changeDescription: string,
-    token: string
+    token: string,
   ) {
     try {
       const response = await api.post(
-        `/api/layouts/dynamic/${layoutId}/versions`,
+        `/layouts/dynamic/${layoutId}/versions`,
         { changeDescription },
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       return response.data;
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao salvar versão"
+        axiosError.response?.data?.error || "Erro ao salvar versão",
       );
     }
   },
@@ -224,21 +224,18 @@ export const layoutApiService = {
    */
   async getVersions(layoutId: string, token: string, limit = 10) {
     try {
-      const response = await api.get(
-        `/api/layouts/dynamic/${layoutId}/versions`,
-        {
-          params: { limit },
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const response = await api.get(`/layouts/dynamic/${layoutId}/versions`, {
+        params: { limit },
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
       return response.data;
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao listar versões"
+        axiosError.response?.data?.error || "Erro ao listar versões",
       );
     }
   },
@@ -249,20 +246,20 @@ export const layoutApiService = {
   async restoreVersion(layoutId: string, versionNumber: number, token: string) {
     try {
       const response = await api.post(
-        `/api/layouts/dynamic/${layoutId}/versions/${versionNumber}/restore`,
+        `/layouts/dynamic/${layoutId}/versions/${versionNumber}/restore`,
         {},
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
+        },
       );
 
       return response.data;
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao restaurar versão"
+        axiosError.response?.data?.error || "Erro ao restaurar versão",
       );
     }
   },
@@ -288,13 +285,13 @@ export const elementBankService = {
       if (filters?.limit) params.append("limit", String(filters.limit));
       if (filters?.offset) params.append("offset", String(filters.offset));
 
-      const response = await api.get("/api/elements/bank", { params });
+      const response = await api.get("/elements/bank", { params });
 
       return response.data;
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao listar elementos"
+        axiosError.response?.data?.error || "Erro ao listar elementos",
       );
     }
   },
@@ -304,12 +301,12 @@ export const elementBankService = {
    */
   async listCategories() {
     try {
-      const response = await api.get("/api/elements/bank/categories");
+      const response = await api.get("/elements/bank/categories");
       return response.data;
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao listar categorias"
+        axiosError.response?.data?.error || "Erro ao listar categorias",
       );
     }
   },
@@ -319,12 +316,12 @@ export const elementBankService = {
    */
   async getElementById(elementId: string) {
     try {
-      const response = await api.get(`/api/elements/bank/${elementId}`);
+      const response = await api.get(`/elements/bank/${elementId}`);
       return response.data;
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Elemento não encontrado"
+        axiosError.response?.data?.error || "Elemento não encontrado",
       );
     }
   },
@@ -341,7 +338,7 @@ export const elementBankService = {
       height?: number;
       image: File;
     },
-    token: string
+    token: string,
   ) {
     try {
       const formData = new FormData();
@@ -354,7 +351,7 @@ export const elementBankService = {
       if (data.height) formData.append("height", String(data.height));
       formData.append("image", data.image);
 
-      const response = await api.post("/api/elements/bank", formData, {
+      const response = await api.post("/elements/bank", formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data",
@@ -365,7 +362,7 @@ export const elementBankService = {
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao fazer upload"
+        axiosError.response?.data?.error || "Erro ao fazer upload",
       );
     }
   },
@@ -375,7 +372,7 @@ export const elementBankService = {
    */
   async deleteElementBankItem(elementId: string, token: string) {
     try {
-      const response = await api.delete(`/api/elements/bank/${elementId}`, {
+      const response = await api.delete(`/elements/bank/${elementId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -385,7 +382,7 @@ export const elementBankService = {
     } catch (error: unknown) {
       const axiosError = error as { response?: { data?: { error?: string } } };
       throw new Error(
-        axiosError.response?.data?.error || "Erro ao deletar elemento do banco"
+        axiosError.response?.data?.error || "Erro ao deletar elemento do banco",
       );
     }
   },

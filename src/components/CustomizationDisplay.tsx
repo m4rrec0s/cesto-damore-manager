@@ -90,7 +90,7 @@ export function CustomizationDisplay({
           </div>
         );
 
-      case "BASE_LAYOUT":
+      case "DYNAMIC_LAYOUT":
         return (
           <div className="space-y-3">
             {data.text &&

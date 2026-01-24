@@ -25,6 +25,8 @@ export const fabricService = {
       preserveObjectStacking: true,
       selection: true,
       hoverCursor: "pointer",
+      enableRetinaScaling: true,
+      devicePixelRatio: window.devicePixelRatio || 1,
     }) as unknown as FabricCanvas;
 
     // Carregar imagem base como background
@@ -64,22 +66,25 @@ export const fabricService = {
     const fabricModule = await import("fabric");
     const fabric = fabricModule.default;
 
-    const iText = new fabric.IText(text, {
+    const textbox = new fabric.Textbox(text, {
       left: 100,
       top: 100,
+      width: 200,
       fontSize: 32,
       fill: "#000000",
       fontFamily: "Arial",
       editable: true,
       objectId: uuidv4(),
+      splitByGrapheme: false,
+      breakWords: true,
       ...options,
     }) as unknown as FabricObject;
 
-    canvas.add(iText);
-    canvas.setActiveObject(iText);
+    canvas.add(textbox);
+    canvas.setActiveObject(textbox);
     canvas.renderAll();
 
-    return iText;
+    return textbox;
   },
 
   /**
@@ -285,7 +290,7 @@ export const fabricService = {
     return canvas.toDataURL({
       format,
       quality: 1,
-      multiplier: 2, // 2x para melhor qualidade
+      multiplier: 5, // Aumentado para 5x para qualidade de produção (conforme feedback do usuário)
     });
   },
 

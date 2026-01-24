@@ -10,6 +10,8 @@ import { Categories } from "./pages/Categories";
 // import { Types } from "./pages/Types";
 import { Feed } from "./pages/Feed";
 import { Service } from "./pages/Service";
+import { Holidays } from "./pages/Holidays";
+import { FollowUp } from "./pages/FollowUp";
 import DesignEditorPage from "./pages/DesignEditorPage";
 import { NewDesignPage } from "./pages/NewDesignPage";
 import DesignTestPage from "./pages/DesignTestPage";
@@ -112,6 +114,22 @@ export default function App() {
           element={
             <AdminRoute>
               <Service />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/holidays"
+          element={
+            <AdminRoute>
+              <Holidays />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/follow-up"
+          element={
+            <AdminRoute>
+              <FollowUp />
             </AdminRoute>
           }
         />
