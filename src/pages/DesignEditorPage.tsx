@@ -673,6 +673,26 @@ const DesignEditorPage = () => {
             });
 
             activeCanvas.renderAll();
+
+            // Re-run textbox init after a tick to ensure fonts/DPR have settled
+            setTimeout(() => {
+              if (!activeCanvas) return;
+              activeCanvas.getObjects().forEach((o: any) => {
+                if (o.type === "textbox") {
+                  if (typeof o.padding === "undefined") o.set("padding", 10);
+                  try {
+                    if (o.initDimensions) o.initDimensions();
+                  } catch (e) {
+                    /* ignore */
+                  }
+                  if (o.setCoords) o.setCoords();
+                }
+              });
+              // Ensure canvas offsets are recalculated after dimension updates
+              activeCanvas.calcOffset();
+              activeCanvas.renderAll();
+            }, 0);
+
             // Init history
             const obj = activeCanvas.toObject(CUSTOM_PROPS);
             if (obj) {

@@ -33,7 +33,7 @@ const DesignTestPage = () => {
   const [editableTexts, setEditableTexts] = useState<Record<string, string>>(
     {},
   );
-  const [workspaceZoom, setWorkspaceZoom] = useState(0.8);
+  const [workspaceZoom, setWorkspaceZoom] = useState(1);
   const [localImages, setLocalImages] = useState<Record<string, string>>(() => {
     try {
       if (!layoutId) return {};
@@ -314,6 +314,27 @@ const DesignTestPage = () => {
 
           setEditableTexts(initialTexts);
           c.renderAll();
+
+          // Re-initialize textboxes after render to ensure proper wrapping and padding
+          // Fixes issue where text overflows on first render due to fonts or DPI timing
+          setTimeout(() => {
+            c.getObjects().forEach((o: any) => {
+              if (o.type === "textbox") {
+                if (typeof o.padding === "undefined") o.set("padding", 15);
+                o.set("splitByGrapheme", false);
+                o.set("objectCaching", false);
+                try {
+                  o.initDimensions && o.initDimensions();
+                } catch (e) {
+                  // ignore
+                }
+                o.setCoords && o.setCoords();
+              }
+            });
+            // Recalculate offsets so canvas DOM mappings are correct after dimension updates
+            c.calcOffset();
+            c.renderAll();
+          }, 0);
         }
 
         fabricRef.current = c;
@@ -434,11 +455,12 @@ const DesignTestPage = () => {
     const frameHeight = frame.height * frame.scaleY;
     const center = frame.getCenterPoint();
 
-    // Tornar o frame transparente para não cobrir a imagem
+    // Tornar o frame transparente visualmente (remover cor/borda)
+    // NÃO alteramos a opacidade aqui porque isso faria com que a imagem
+    // herdasse opacidade 0 e ficasse invisível. Mantemos a opacidade atual.
     frame.set({
       fill: "transparent",
       stroke: "transparent",
-      opacity: 0, // Esconder completamente para evitar bordas residuais
     });
 
     // Escalar imagem para preencher o frame (crop fill)
@@ -502,6 +524,12 @@ const DesignTestPage = () => {
 
     img.set("clipPath", mask);
 
+    // Propagar opacidade da moldura para a imagem e vincular para atualizações futuras
+    img.set({
+      opacity: typeof frame.opacity === "number" ? frame.opacity : 1,
+      linkedFrameId: frame.id || frame.name,
+    });
+
     const uploadedId = `uploaded-img-${frame.id || frame.name}`;
 
     // Se houver imagem anterior para este frame, remover
@@ -513,6 +541,7 @@ const DesignTestPage = () => {
     // ou apenas garantimos que está no topo das imagens mas abaixo dos textos
     canvas.moveObjectTo(img, canvas.getObjects().indexOf(frame) + 1);
 
+    img.setCoords && img.setCoords();
     canvas.renderAll();
   };
 
@@ -780,8 +809,8 @@ const DesignTestPage = () => {
         </div>
       </header>
 
-      <div className="grid grid-cols-[1fr_20rem] max-h-fit">
-        <div className="flex max-h-fit items-center justify-center p-8 bg-neutral-950 overflow-hidden ">
+      <div className="grid grid-cols-[1fr_20rem] flex-1 min-h-0">
+        <div className="flex-1 min-h-0 items-center justify-center p-8 bg-neutral-950 overflow-hidden ">
           <div
             className="bg-white rounded shadow-2xl relative"
             style={{
@@ -797,7 +826,7 @@ const DesignTestPage = () => {
           </div>
         </div>
 
-        <div className="w-80 h-screen bg-neutral-800 border-l border-neutral-700 p-6 overflow-y-auto">
+        <div className="w-80 h-full bg-neutral-800 border-l border-neutral-700 p-6 overflow-y-auto">
           <h2 className="text-lg font-bold mb-6 flex items-center gap-2 text-rose-500">
             <Palette className="h-5 w-5" />
             Opções do Cliente
