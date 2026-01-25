@@ -13,7 +13,7 @@ export const fabricService = {
     canvasElement: HTMLCanvasElement,
     baseImageUrl: string,
     width: number,
-    height: number
+    height: number,
   ): Promise<FabricCanvas> {
     // Dinâmica import para evitar problemas de SSR
     const fabricModule = await import("fabric");
@@ -61,7 +61,7 @@ export const fabricService = {
   async addText(
     canvas: FabricCanvas,
     text: string = "Digite aqui",
-    options: Record<string, unknown> = {}
+    options: Record<string, unknown> = {},
   ) {
     const fabricModule = await import("fabric");
     const fabric = fabricModule.default;
@@ -75,7 +75,8 @@ export const fabricService = {
       fontFamily: "Arial",
       editable: true,
       objectId: uuidv4(),
-      splitByGrapheme: false,
+      splitByGrapheme: true,
+      padding: 10,
       breakWords: true,
       ...options,
     }) as unknown as FabricObject;
@@ -93,7 +94,7 @@ export const fabricService = {
   async addImage(
     canvas: FabricCanvas,
     imageUrl: string,
-    options: Record<string, unknown> = {}
+    options: Record<string, unknown> = {},
   ) {
     const fabricModule = await import("fabric");
     const fabric = fabricModule.default;
@@ -127,7 +128,7 @@ export const fabricService = {
   async addShape(
     canvas: FabricCanvas,
     shapeType: "rect" | "circle",
-    options: Record<string, unknown> = {}
+    options: Record<string, unknown> = {},
   ) {
     const fabricModule = await import("fabric");
     const fabric = fabricModule.default;
@@ -300,7 +301,7 @@ export const fabricService = {
   async exportAsPDF(canvas: FabricCanvas, filename: string = "design.pdf") {
     // Removido jsPDF por falta de dependência - usar html2canvas se necessário
     console.warn(
-      "PDF export não disponível. Use exportAsImage para salvar como PNG."
+      "PDF export não disponível. Use exportAsImage para salvar como PNG.",
     );
   },
 
@@ -344,7 +345,7 @@ export const fabricService = {
    */
   updateSelectedObject(
     canvas: FabricCanvas,
-    properties: Record<string, unknown>
+    properties: Record<string, unknown>,
   ) {
     const activeObject =
       canvas.getActiveObject() as unknown as FabricObject | null;
@@ -376,7 +377,7 @@ export const fabricService = {
   setBrushOptions(
     canvas: FabricCanvas,
     color: string = "#000000",
-    width: number = 2
+    width: number = 2,
   ) {
     const brush = (
       canvas as unknown as {
@@ -395,7 +396,7 @@ export const fabricService = {
   async applyFilter(
     canvas: FabricCanvas,
     filterType: string = "brightness",
-    value: number = 0
+    value: number = 0,
   ) {
     console.warn("Filters API não disponível na versão atual de Fabric.js");
   },

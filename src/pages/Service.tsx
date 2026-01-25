@@ -155,24 +155,24 @@ export function Service() {
           ) : (
             sessions.map((session) => (
               <button
+                type="button"
                 key={session.id}
                 onClick={() => setSelectedSession(session)}
                 className={`w-full p-4 text-left hover:bg-neutral-50 transition-colors border-b border-neutral-50 ${
-                  selectedSession?.id === session.id ? "bg-neutral-100/50" : ""
+                  selectedSession?.id === session.id ? "bg-neutral-200/80" : ""
                 }`}
               >
                 <div className="flex justify-between items-start mb-1">
                   <span className="font-bold text-neutral-900 flex items-center gap-2 truncate">
-                    <User size={14} className="text-neutral-400 shrink-0" />
+                    <div
+                      className={`p-2 rounded-full border ${session.is_blocked ? "border-amber-800 bg-amber-200" : "border-green-800 bg-green-200"} `}
+                    >
+                      <User size={14} className="text-black shrink-0" />
+                    </div>
                     {session.customer?.name ||
                       session.customer_phone ||
                       "Cliente"}
                   </span>
-                  {session.is_blocked && (
-                    <span className="bg-amber-100 text-amber-700 text-[10px] px-1.5 py-0.5 rounded-full font-bold uppercase shrink-0">
-                      HUMANO
-                    </span>
-                  )}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-neutral-500 mt-2">
                   <Clock size={12} />
@@ -191,7 +191,15 @@ export function Service() {
       </div>
 
       {/* Main Area - Chat */}
-      <div className="flex-1 flex flex-col bg-neutral-50/30">
+      <div
+        className={`flex-1 flex flex-col relative overflow-hidden ${selectedSession ? "bg-[#dce3faad]" : "bg-gray-100/90"} `}
+        style={{
+          backgroundImage: `url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")`,
+          backgroundBlendMode: "soft-light",
+          backgroundRepeat: "repeat",
+          backgroundSize: "400px",
+        }}
+      >
         {selectedSession ? (
           <>
             {/* Chat Header */}

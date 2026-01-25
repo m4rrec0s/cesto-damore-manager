@@ -160,39 +160,18 @@ const DesignEditorPage = () => {
   const namesSaveTimeout = useRef<NodeJS.Timeout | null>(null);
   const isInternalUpdate = useRef(false);
 
-  // Apply zoom and dimensions to fabric canvas
   useEffect(() => {
     if (canvas && fabricRef.current) {
       const c = fabricRef.current;
 
-      const visualWidth = dimensions.width * workspaceZoom;
-      const visualHeight = dimensions.height * workspaceZoom;
-      const internalWidth = dimensions.width * INTERNAL_DPI_MULTIPLIER;
-      const internalHeight = dimensions.height * INTERNAL_DPI_MULTIPLIER;
+      c.setDimensions({
+        width: dimensions.width * workspaceZoom,
+        height: dimensions.height * workspaceZoom,
+      });
 
-      // 1. Definir o tamanho INTERNO (backstore) - Atributos 'width' e 'height' das tags <canvas>
-      c.setDimensions(
-        {
-          width: internalWidth,
-          height: internalHeight,
-        },
-        { backstoreOnly: true },
-      );
+      c.setZoom(workspaceZoom);
 
-      // 2. Definir o tamanho VISUAL (CSS) - Isso sincroniza o lower-canvas, upper-canvas e o wrapper
-      c.setDimensions(
-        {
-          width: `${visualWidth}px`,
-          height: `${visualHeight}px`,
-        },
-        { cssOnly: true },
-      );
-
-      // O zoom interno deve ser sempre o multiplicador de DPI base para manter a nitidez
-      c.setZoom(INTERNAL_DPI_MULTIPLIER);
-
-      // Recalcular offsets e posições de controle para evitar bugs de seleção
-      // Pequeno delay garante que o DOM atualizou os tamanhos das divs
+      // Recalcular offsets e posições de controle
       setTimeout(() => {
         c.calcOffset();
         const objects = c.getObjects();
@@ -333,32 +312,14 @@ const DesignEditorPage = () => {
         activeCanvas = new Canvas(canvasRef.current!, {
           backgroundColor: isTransparent ? "transparent" : canvasBg,
           preserveObjectStacking: true,
+          enableRetinaScaling: true,
+          devicePixelRatio: 2,
         } as any) as unknown as FabricCanvas;
-
-        // Configurar dimensões iniciais usando o padrão backstore/css
-        activeCanvas.setDimensions(
-          {
-            width: dimensions.width * INTERNAL_DPI_MULTIPLIER,
-            height: dimensions.height * INTERNAL_DPI_MULTIPLIER,
-          },
-          { backstoreOnly: true },
-        );
-
-        activeCanvas.setDimensions(
-          {
-            width: `${dimensions.width}px`,
-            height: `${dimensions.height}px`,
-          },
-          { cssOnly: true },
-        );
-
-        // Set initial zoom
-        activeCanvas.setZoom(INTERNAL_DPI_MULTIPLIER);
 
         fabricRef.current = activeCanvas;
         setCanvas(activeCanvas);
 
-        // Forçar cálculo inicial de posição
+        // Forçar cálculo inicial de posição baseado na configuração do useEffect
         activeCanvas.calcOffset();
 
         const updateHistory = () => {
@@ -463,6 +424,11 @@ const DesignEditorPage = () => {
             // Garantir que todos os objetos tenham coordenadas e cache corretos após carregar
             activeCanvas.getObjects().forEach((obj: FabricObject) => {
               obj.set("objectCaching", false);
+              if (obj.type === "textbox") {
+                obj.set("splitByGrapheme", true);
+                obj.set("padding", 10);
+                (obj as any).initDimensions(); // Recalcular dimensões do texto
+              }
               obj.setCoords();
             });
 
@@ -601,8 +567,13 @@ const DesignEditorPage = () => {
       fontFamily,
       objectCaching: false,
       isCustomizable: true,
-      splitByGrapheme: true, // Melhor para quebra de linha em idiomas diferentes
+      splitByGrapheme: true,
+      padding: 10, // Torna a seleção muito mais fácil
       lockScalingY: true,
+      transparentCorners: false,
+      cornerColor: "#3b82f6",
+      cornerStrokeColor: "#ffffff",
+      cornerSize: 8,
     } as any) as unknown as FabricObject;
 
     try {
@@ -1050,6 +1021,9 @@ const DesignEditorPage = () => {
     }
 
     (selectedObject as FabricObject).set(key, value);
+    if ((selectedObject as any).type === "textbox") {
+      (selectedObject as any).initDimensions();
+    }
     (selectedObject as FabricObject).setCoords();
     (canvas as FabricCanvas).renderAll();
     setIsDirty(true);
