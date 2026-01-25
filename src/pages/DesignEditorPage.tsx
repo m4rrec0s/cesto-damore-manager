@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useRef, useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -14,16 +15,21 @@ import { DesignPanels } from "@/components/editor/DesignPanels";
 import styles from "./DesignEditorPage.module.css";
 
 const CM_TO_PX = 37.795;
-const INTERNAL_DPI_MULTIPLIER = 2; // Supersampling para nitidez tipo Canva
+const INTERNAL_DPI_MULTIPLIER = 2; // Qualidade padrão Retina (2x)
+// const VISUAL_BUFFER_DPI = 2; // REMOVIDO: Causa bugs de zoom
+
+const generateId = () => Math.random().toString(36).substring(2, 11);
 
 const CUSTOM_PROPS = [
   "name",
   "id",
   "selectable",
   "evented",
+  "editable", // Importante persistir se o objeto é editável ou não
   "isCustomizable",
   "maxChars",
   "isFrame",
+  "backgroundColor", // Garantir que salva background se estiver no objeto
   "customData",
   "rx",
   "ry",
@@ -35,6 +41,9 @@ const CUSTOM_PROPS = [
   "height",
   "splitByGrapheme",
   "objectCaching",
+  "linkedFrameId",
+  "imageSmoothing",
+  "noScaleCache",
 ];
 
 // Tipagem simplificada para evitar erros de linting "any"
@@ -107,18 +116,27 @@ const loadGoogleFont = (fontFamily: string) => {
   if (document.getElementById(`font-${fontFamily.replace(/\s+/g, "-")}`))
     return Promise.resolve();
 
-  return new Promise((resolve, reject) => {
+  return new Promise<void>((resolve, reject) => {
     const link = document.createElement("link");
     link.id = `font-${fontFamily.replace(/\s+/g, "-")}`;
     link.rel = "stylesheet";
+    // Adicionar display=swap e pesos para as novas fontes decorativas
     link.href = `https://fonts.googleapis.com/css2?family=${fontFamily.replace(
       /\s+/g,
       "+",
-    )}:wght@400;700&display=swap`;
+    )}:wght@400;700;900&display=swap`;
     link.onload = () => {
-      document.fonts.load(`1em "${fontFamily}"`).then(resolve).catch(resolve);
+      // Aguardar o carregamento da fonte com timeout
+      Promise.race([
+        document.fonts.load(`1em "${fontFamily}"`),
+        new Promise<void>((r) => setTimeout(r, 2000)),
+      ])
+        .then(() => resolve())
+        .catch(() => resolve()); // Sempre resolver mesmo se falhar
     };
-    link.onerror = reject;
+    link.onerror = () => {
+      resolve(); // Resolver mesmo se erro (fonte pode carregar em background)
+    };
     document.head.appendChild(link);
   });
 };
@@ -164,6 +182,10 @@ const DesignEditorPage = () => {
     if (canvas && fabricRef.current) {
       const c = fabricRef.current;
 
+      // REVERTIDO PARA ZOOM PADRÃO DO FABRIC
+      // O modo "CSS Zoom" estava causando bugs de proporção e espaçamento.
+      // Agora usamos controle nativo de zoom e dimensions com devicePixelRatio
+
       c.setDimensions({
         width: dimensions.width * workspaceZoom,
         height: dimensions.height * workspaceZoom,
@@ -171,14 +193,12 @@ const DesignEditorPage = () => {
 
       c.setZoom(workspaceZoom);
 
-      // Recalcular offsets e posições de controle
+      // Recalcular offsets para garantir cliques precisos
       setTimeout(() => {
         c.calcOffset();
         const objects = c.getObjects();
         objects.forEach((obj: any) => {
-          if (obj && typeof obj.setCoords === "function") {
-            obj.setCoords();
-          }
+          if (obj.setCoords) obj.setCoords();
         });
         c.requestRenderAll();
       }, 50);
@@ -208,16 +228,22 @@ const DesignEditorPage = () => {
               height: Math.round(layout.height),
             });
           }
-          if (layout.backgroundColor) {
-            setCanvasBg(layout.backgroundColor);
-            setIsTransparent(layout.backgroundColor === "transparent");
-          }
+
           // Store state to load after canvas init
           if (layout.fabricJsonState) {
             const parsedState =
               typeof layout.fabricJsonState === "string"
                 ? JSON.parse(layout.fabricJsonState)
                 : layout.fabricJsonState;
+
+            // Extrair background do JSON para o estado react (Persistência do Fundo)
+            if (parsedState.backgroundColor) {
+              setCanvasBg(parsedState.backgroundColor);
+              setIsTransparent(parsedState.backgroundColor === "transparent");
+            } else if (layout.backgroundColor) {
+              setCanvasBg(layout.backgroundColor);
+              setIsTransparent(layout.backgroundColor === "transparent");
+            }
 
             // Converter i-text para textbox para suporte a quebra de linha
             // e garantir que objectCaching esteja desativado para qualidade no zoom
@@ -310,10 +336,10 @@ const DesignEditorPage = () => {
         (BaseFabricObject as any).ownDefaults.minScaleLimit = 0.05;
 
         activeCanvas = new Canvas(canvasRef.current!, {
-          backgroundColor: isTransparent ? "transparent" : canvasBg,
           preserveObjectStacking: true,
-          enableRetinaScaling: true,
-          devicePixelRatio: 2,
+          enableRetinaScaling: true, // Mantém a nitidez em telas de alta densidade
+          imageSmoothingEnabled: true,
+          backgroundColor: isTransparent ? "transparent" : canvasBg,
         } as any) as unknown as FabricCanvas;
 
         fabricRef.current = activeCanvas;
@@ -360,6 +386,22 @@ const DesignEditorPage = () => {
           setSelectedObject(sel);
         };
 
+        // Duplo-clique para editar Textbox (Estilo Canva: selecione primeiro, depois edite)
+        const handleDoubleClick = (e: any) => {
+          const target = e.target;
+          if (target && target.type === "textbox") {
+            target.set({ editable: true });
+            target.enterEditing();
+            target.selectAll();
+
+            // Quando sair da edição, podemos desabilitar o 'editable' se quisermos o comportamento estrito
+            // mas manter true é geralmente mais seguro para evitar bugs de cursor
+            target.once("editing:exited", () => {
+              // target.set({ editable: false });
+            });
+          }
+        };
+
         activeCanvas.on("object:modified", handleCanvasModified);
         activeCanvas.on("object:added", handleCanvasModified);
         activeCanvas.on("object:removed", handleCanvasModified);
@@ -368,6 +410,8 @@ const DesignEditorPage = () => {
         activeCanvas.on("selection:created", handleSelection);
         activeCanvas.on("selection:updated", handleSelection);
         activeCanvas.on("selection:cleared", () => setSelectedObject(null));
+
+        activeCanvas.on("mouse:dblclick", handleDoubleClick);
 
         // Add Zoom (Ctrl + Scroll)
         activeCanvas.on("mouse:wheel", (opt: any) => {
@@ -411,6 +455,12 @@ const DesignEditorPage = () => {
               // crossOrigin: 'anonymous' é importante para evitar erros de tainted canvas
               // ao exportar imagens que vêm de outro domínio (api)
               await activeCanvas.loadFromJSON(initialState);
+
+              // Forçar aplicação do fundo do objeto layout (prioridade sobre o JSON do canvas)
+              const finalBg = isTransparent
+                ? "transparent"
+                : initialState.backgroundColor || canvasBg;
+              activeCanvas.set({ backgroundColor: finalBg });
             } catch (jsonErr) {
               console.error(
                 "Erro ao carregar JSON do estado inicial:",
@@ -423,11 +473,24 @@ const DesignEditorPage = () => {
 
             // Garantir que todos os objetos tenham coordenadas e cache corretos após carregar
             activeCanvas.getObjects().forEach((obj: FabricObject) => {
+              if (!obj.id) obj.id = generateId();
               obj.set("objectCaching", false);
+
+              if (obj.type === "image") {
+                obj.set("imageSmoothing", true);
+              }
+
               if (obj.type === "textbox") {
-                obj.set("splitByGrapheme", true);
-                obj.set("padding", 10);
-                (obj as any).initDimensions(); // Recalcular dimensões do texto
+                obj.set("splitByGrapheme", false);
+                obj.set("padding", 15);
+                obj.set("editable", false);
+                obj.set("perPixelTargetFind", false);
+                obj.set("borderColor", "#3b82f6");
+                obj.set("cornerColor", "#3b82f6");
+                obj.set("cornerSize", 10);
+                obj.set("borderScaleFactor", 2);
+                obj.set("borderDashArray", null);
+                (obj as any).initDimensions();
               }
               obj.setCoords();
             });
@@ -558,6 +621,7 @@ const DesignEditorPage = () => {
     }
 
     const text = new Textbox(textStr, {
+      id: generateId(),
       left: dimensions.width / 2 - 100,
       top: dimensions.height / 2 - 10,
       width: 200,
@@ -565,15 +629,36 @@ const DesignEditorPage = () => {
       fontWeight: fontWeight as any,
       fill: "#000000",
       fontFamily,
+      // Configurações críticas para cursor alinhado com o Canva
+      editable: false, // Começa como false para selecionar o componente primeiro
+      selectable: true,
+      evented: true,
+      splitByGrapheme: false, // Voltando para FALSE para corrigir atalhos de palavras e seleção
+      padding: 15,
+      lineHeight: 1.3,
+      textAlign: "left",
+      // Quebra de linha por palavra
+      wordWrap: true,
+      // Evitar cache e distorção
       objectCaching: false,
-      isCustomizable: true,
-      splitByGrapheme: true,
-      padding: 10, // Torna a seleção muito mais fácil
-      lockScalingY: true,
+      noScaleCache: true,
+      strokeUniform: true,
+      // Melhorar visual de seleção
+      hasControls: true,
+      hasBorders: true,
       transparentCorners: false,
       cornerColor: "#3b82f6",
       cornerStrokeColor: "#ffffff",
-      cornerSize: 8,
+      cornerSize: 10,
+      borderColor: "#3b82f6",
+      borderScaleFactor: 2,
+      borderDashArray: null, // Linha sólida para parecer mais profissional
+      lockScalingY: false,
+      isCustomizable: true,
+      perPixelTargetFind: false, // False para facilitar seleção da caixa como um todo
+      // Melhorar seleção de texto
+      selectionBackgroundColor: "rgba(59, 130, 246, 0.3)",
+      selectionColor: "#3b82f6",
     } as any) as unknown as FabricObject;
 
     try {
@@ -601,6 +686,7 @@ const DesignEditorPage = () => {
       let shape: FabricObject;
 
       const props = {
+        id: generateId(),
         left: dimensions.width / 2 - 50,
         top: dimensions.height / 2 - 50,
         fill: type.startsWith("frame") ? "rgba(244, 63, 94, 0.2)" : "#3b82f6",
@@ -684,11 +770,23 @@ const DesignEditorPage = () => {
       const targetWidth = Math.min(dimensions.width * 0.7, 400);
       img.scaleToWidth(targetWidth);
 
+      // Se um objeto está selecionado e é uma moldura, vincular a imagem a ela
+      const imgId = generateId();
+      let frameOpacity = 1;
+      let linkedFrameId = null;
+      if (selectedObject && (selectedObject as any).isFrame) {
+        frameOpacity = selectedObject.opacity || 1;
+        linkedFrameId = (selectedObject as any).id;
+      }
+
       img.set({
+        id: imgId,
+        linkedFrameId,
         left: (dimensions.width - img.getBoundingRect().width) / 2,
         top: (dimensions.height - img.getBoundingRect().height) / 2,
         objectCaching: false,
         imageSmoothing: true,
+        opacity: frameOpacity,
       });
 
       currentCanvas.add(img);
@@ -740,11 +838,23 @@ const DesignEditorPage = () => {
       const targetWidth = Math.min(dimensions.width * 0.7, 400);
       img.scaleToWidth(targetWidth);
 
+      // Se um objeto está selecionado e é uma moldura, vincular a imagem a ela
+      const imgId = generateId();
+      let frameOpacity = 1;
+      let linkedFrameId = null;
+      if (selectedObject && (selectedObject as any).isFrame) {
+        frameOpacity = selectedObject.opacity || 1;
+        linkedFrameId = (selectedObject as any).id;
+      }
+
       img.set({
+        id: imgId,
+        linkedFrameId,
         left: (dimensions.width - img.getBoundingRect().width) / 2,
         top: (dimensions.height - img.getBoundingRect().height) / 2,
         objectCaching: false,
         imageSmoothing: true,
+        opacity: frameOpacity,
       });
 
       currentCanvas.add(img);
@@ -806,11 +916,10 @@ const DesignEditorPage = () => {
             previewImageUrl = currentCanvas.toDataURL({
               format: "png",
               quality: 1,
-              // Multiplier 1 aqui capturará a resolução interna (que já é 2x a base)
-              // Se quisermos 30% da base, usamos 0.3 / 2 = 0.15
-              // Aumentando para 0.4 para melhor qualidade no preview
-              multiplier: 0.4 / INTERNAL_DPI_MULTIPLIER,
-              enableRetinaScaling: false, // Desativar para evitar duplicar o multiplicador
+              // Multiplier para gerar um preview de tamanho razoável mas nítido
+              // Se DPI=3, multiplier 0.1 gera ~30% do tamanho base
+              multiplier: 0.6 / INTERNAL_DPI_MULTIPLIER,
+              enableRetinaScaling: false,
             });
 
             (currentCanvas as any).setViewportTransform(originalTransform);
@@ -1025,6 +1134,21 @@ const DesignEditorPage = () => {
       (selectedObject as any).initDimensions();
     }
     (selectedObject as FabricObject).setCoords();
+
+    // Se a moldura teve opacidade alterada, aplicar a mesma opacidade às imagens vinculadas
+    if ((selectedObject as any).isFrame && key === "opacity") {
+      const frameOpacity = value as number;
+      const allObjects = (canvas as FabricCanvas).getObjects();
+      const frameId = (selectedObject as any).id;
+
+      // Atualizar todas as imagens vinculadas a esta moldura
+      allObjects.forEach((obj: any) => {
+        if (obj.linkedFrameId === frameId && obj.type === "image") {
+          obj.set("opacity", frameOpacity);
+        }
+      });
+    }
+
     (canvas as FabricCanvas).renderAll();
     setIsDirty(true);
     triggerAutoSave();
@@ -1210,7 +1334,7 @@ const DesignEditorPage = () => {
             setCanvasBg(color);
             setIsTransparent(false);
             if (canvas) {
-              (canvas as FabricCanvas).set("backgroundColor", color);
+              (canvas as FabricCanvas).set({ backgroundColor: color });
               (canvas as FabricCanvas).renderAll();
               setIsDirty(true);
               triggerAutoSave();
@@ -1220,10 +1344,9 @@ const DesignEditorPage = () => {
           onToggleTransparency={(val) => {
             setIsTransparent(val);
             if (canvas) {
-              (canvas as FabricCanvas).set(
-                "backgroundColor",
-                val ? "transparent" : canvasBg,
-              );
+              (canvas as FabricCanvas).set({
+                backgroundColor: val ? "transparent" : canvasBg,
+              });
               (canvas as FabricCanvas).renderAll();
               setIsDirty(true);
               triggerAutoSave();

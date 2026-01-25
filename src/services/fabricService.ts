@@ -26,7 +26,8 @@ export const fabricService = {
       selection: true,
       hoverCursor: "pointer",
       enableRetinaScaling: true,
-      devicePixelRatio: window.devicePixelRatio || 1,
+      devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
+      imageSmoothingEnabled: true,
     }) as unknown as FabricCanvas;
 
     // Carregar imagem base como background
@@ -73,11 +74,33 @@ export const fabricService = {
       fontSize: 32,
       fill: "#000000",
       fontFamily: "Arial",
-      editable: true,
-      objectId: uuidv4(),
-      splitByGrapheme: true,
-      padding: 10,
-      breakWords: true,
+      editable: false, // Começa desabilitado para seleção do objeto primeiro
+      selectable: true,
+      evented: true,
+      id: uuidv4(),
+      // Configurações CRÍTICAS para cursor alinhado
+      splitByGrapheme: false, // Voltando para FALSE para corrigir atalhos e posição em textos longos
+      padding: 15,
+      lineHeight: 1.3,
+      textAlign: "left",
+      // FORÇAR quebra de linha por palavra
+      wordWrap: true,
+      // Evitar distorção
+      objectCaching: false,
+      noScaleCache: true,
+      strokeUniform: true,
+      perPixelTargetFind: false, // Facilita seleção da caixa inteira
+      // Melhorar seleção
+      hasControls: true,
+      hasBorders: true,
+      transparentCorners: false,
+      cornerColor: "rgba(59, 130, 246, 0.8)",
+      cornerSize: 8,
+      borderColor: "rgba(59, 130, 246, 0.8)",
+      borderDashArray: [5, 5],
+      // Melhorar seleção de texto
+      selectionBackgroundColor: "rgba(59, 130, 246, 0.2)",
+      selectionColor: "#3b82f6",
       ...options,
     }) as unknown as FabricObject;
 

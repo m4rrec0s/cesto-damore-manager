@@ -217,10 +217,8 @@ const DesignTestPage = () => {
           { cssOnly: true },
         );
 
-        // Zoom interno fixo para nitidez
-        // Carregar estado do layout
         if (layout.fabricJsonState) {
-          let state =
+          const state =
             typeof layout.fabricJsonState === "string"
               ? JSON.parse(layout.fabricJsonState)
               : layout.fabricJsonState;
@@ -725,7 +723,7 @@ const DesignTestPage = () => {
   const photoFrames = objects.filter((obj: any) => obj.isFrame);
 
   return (
-    <div className="min-h-screen bg-neutral-900 text-white flex flex-col">
+    <div className="min-h-screen overflow-hidden bg-neutral-900 text-white flex flex-col">
       <header className="border-b border-neutral-700 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
@@ -782,8 +780,8 @@ const DesignTestPage = () => {
         </div>
       </header>
 
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 flex items-center justify-center p-8 bg-neutral-950 overflow-auto custom-scrollbar">
+      <div className="grid grid-cols-[1fr_20rem] max-h-fit">
+        <div className="flex max-h-fit items-center justify-center p-8 bg-neutral-950 overflow-hidden ">
           <div
             className="bg-white rounded shadow-2xl relative"
             style={{
@@ -799,7 +797,7 @@ const DesignTestPage = () => {
           </div>
         </div>
 
-        <div className="w-80 bg-neutral-800 border-l border-neutral-700 p-6 overflow-y-auto">
+        <div className="w-80 h-screen bg-neutral-800 border-l border-neutral-700 p-6 overflow-y-auto">
           <h2 className="text-lg font-bold mb-6 flex items-center gap-2 text-rose-500">
             <Palette className="h-5 w-5" />
             Opções do Cliente

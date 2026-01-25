@@ -23,6 +23,13 @@ const FONT_FAMILIES = [
   "Great Vibes",
   "Dancing Script",
   "Pacifico",
+  "Luckiest Guy",
+  "Bangers",
+  "Black Ops One",
+  "BBH Bartle",
+  "Pinyon Script",
+  "Rubik Scribble",
+  "Metamorphous",
 ];
 
 const PRESET_COLORS = [
