@@ -177,8 +177,96 @@ const DesignEditorPage = () => {
   const autoSaveTimeout = useRef<NodeJS.Timeout | null>(null);
   const namesSaveTimeout = useRef<NodeJS.Timeout | null>(null);
   const isInternalUpdate = useRef(false);
+  // Track last pointer position (in canvas viewport coordinates) to center zoom on mouse
+  const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
+  // Keep a ref for zoom to read inside event handlers without stale closures
+  const workspaceZoomRef = useRef<number>(workspaceZoom);
+
+  const clamp = (v: number, a: number, b: number) =>
+    Math.max(a, Math.min(b, v));
+
+  // Smooth zoom animation helper
+  const smoothZoom = useCallback(
+    (targetZoom: number, center: { x: number; y: number }, duration = 180) => {
+      const container = containerRef.current;
+      const startZoom = workspaceZoomRef.current || workspaceZoom;
+      if (!container) {
+        setWorkspaceZoom(targetZoom);
+        return;
+      }
+
+      // Avoid scheduling if close enough
+      if (Math.abs(targetZoom - startZoom) < 0.0001) {
+        setWorkspaceZoom(targetZoom);
+        return;
+      }
+
+      const start = performance.now();
+      const contentX = (container.scrollLeft + center.x) / startZoom;
+      const contentY = (container.scrollTop + center.y) / startZoom;
+
+      const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+      let rafId: number;
+
+      const step = (now: number) => {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = easeOutCubic(t);
+        const currentZoom = startZoom + (targetZoom - startZoom) * eased;
+
+        // Update zoom state and scroll to keep focal point
+        setWorkspaceZoom(currentZoom);
+
+        const newScrollLeft = Math.max(
+          0,
+          Math.round(contentX * currentZoom - center.x),
+        );
+        const newScrollTop = Math.max(
+          0,
+          Math.round(contentY * currentZoom - center.y),
+        );
+
+        container.scrollLeft = newScrollLeft;
+        container.scrollTop = newScrollTop;
+
+        const c = fabricRef.current;
+        if (c) {
+          c.calcOffset();
+          c.requestRenderAll();
+        }
+
+        if (t < 1) {
+          rafId = requestAnimationFrame(step);
+        } else {
+          // final snap
+          setWorkspaceZoom(targetZoom);
+          container.scrollLeft = Math.max(
+            0,
+            Math.round(contentX * targetZoom - center.x),
+          );
+          container.scrollTop = Math.max(
+            0,
+            Math.round(contentY * targetZoom - center.y),
+          );
+          if (c) {
+            c.calcOffset();
+            c.renderAll();
+          }
+        }
+      };
+
+      rafId = requestAnimationFrame(step);
+
+      // Return cancel function if needed
+      return () => cancelAnimationFrame(rafId);
+    },
+    [workspaceZoom],
+  );
 
   useEffect(() => {
+    // Keep ref in sync to use in event handlers
+    workspaceZoomRef.current = workspaceZoom;
+
     if (canvas && fabricRef.current) {
       const c = fabricRef.current;
 
@@ -186,20 +274,84 @@ const DesignEditorPage = () => {
       // O modo "CSS Zoom" estava causando bugs de proporção e espaçamento.
       // Agora usamos controle nativo de zoom e dimensions com devicePixelRatio
 
-      c.setDimensions({
-        width: dimensions.width * workspaceZoom,
-        height: dimensions.height * workspaceZoom,
+      // Ensure the internal canvas backing store matches base dimensions (no scaling)
+      c.setDimensions(
+        {
+          width: Math.round(dimensions.width),
+          height: Math.round(dimensions.height),
+        },
+        { cssOnly: false },
+      );
+
+      // Compute device pixel ratio and apply high-quality backing store + viewport transform
+      const DPR = Math.max(1, Math.round(window.devicePixelRatio || 1));
+
+      // Backing store should be scaled by DPR * workspaceZoom for crisp visuals
+      const backingWidth = Math.round(dimensions.width * DPR * workspaceZoom);
+      const backingHeight = Math.round(dimensions.height * DPR * workspaceZoom);
+
+      // set backing store only
+      c.setDimensions(
+        {
+          width: backingWidth,
+          height: backingHeight,
+        },
+        { backstoreOnly: true },
+      );
+
+      // Update CSS display size so the wrapper/scroll area matches current zoom.
+      c.setDimensions(
+        {
+          width: Math.round(dimensions.width * workspaceZoom),
+          height: Math.round(dimensions.height * workspaceZoom),
+        },
+        { cssOnly: true },
+      );
+
+      // Set viewport transform to map backing store -> css correctly (scale = DPR * workspaceZoom)
+      try {
+        (c as any).setViewportTransform([
+          DPR * workspaceZoom,
+          0,
+          0,
+          DPR * workspaceZoom,
+          0,
+          0,
+        ]);
+      } catch (err) {
+        // ignore
+      }
+
+      // Recalcular offsets e viewports para garantir cliques precisos
+      c.calcOffset();
+      if ((c as any).calcViewportBoundaries)
+        (c as any).calcViewportBoundaries();
+
+      // Se estivermos editando um textbox, reentrar na edição para corrigir caret/posição após zoom
+      const active = (c as any).getActiveObject?.() as any;
+      if (active && active.type === "textbox" && active.isEditing) {
+        try {
+          const selStart = active.selectionStart;
+          const selEnd = active.selectionEnd;
+          active.exitEditing();
+          active.enterEditing();
+          active.selectionStart = selStart;
+          active.selectionEnd = selEnd;
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      const objects = c.getObjects();
+      objects.forEach((obj: any) => {
+        if (obj.setCoords) obj.setCoords();
       });
 
-      c.setZoom(workspaceZoom);
+      c.requestRenderAll();
 
-      // Recalcular offsets para garantir cliques precisos
+      // Adicionar um timeout adicional para recalcular offsets após o render
       setTimeout(() => {
         c.calcOffset();
-        const objects = c.getObjects();
-        objects.forEach((obj: any) => {
-          if (obj.setCoords) obj.setCoords();
-        });
         c.requestRenderAll();
       }, 50);
     }
@@ -337,7 +489,7 @@ const DesignEditorPage = () => {
 
         activeCanvas = new Canvas(canvasRef.current!, {
           preserveObjectStacking: true,
-          enableRetinaScaling: true, // Mantém a nitidez em telas de alta densidade
+          enableRetinaScaling: false, // Desativar para gerenciar DPI manualmente e evitar desalinhamentos
           imageSmoothingEnabled: true,
           backgroundColor: isTransparent ? "transparent" : canvasBg,
         } as any) as unknown as FabricCanvas;
@@ -413,19 +565,41 @@ const DesignEditorPage = () => {
 
         activeCanvas.on("mouse:dblclick", handleDoubleClick);
 
-        // Add Zoom (Ctrl + Scroll)
-        activeCanvas.on("mouse:wheel", (opt: any) => {
-          if (!opt.e.ctrlKey) return;
-          opt.e.preventDefault();
-          opt.e.stopPropagation();
+        // Garantir que cliques em Textboxes selecionem a caixa primeiro
+        activeCanvas.on("mouse:down", (opt: any) => {
+          const c = fabricRef.current;
+          const target = opt.target;
+          if (c) {
+            if (target && target.type === "textbox" && !target.isEditing) {
+              c.setActiveObject(target);
+            }
+            // Recalcular offset em cada mouse down para evitar desalinhamentos
+            c.calcOffset();
+          }
+        });
 
-          const delta = opt.e.deltaY;
-          setWorkspaceZoom((prev) => {
-            let newZoom = prev * 0.999 ** delta;
-            if (newZoom > 5) newZoom = 5;
-            if (newZoom < 0.1) newZoom = 0.1;
-            return newZoom;
-          });
+        // Atualizar posição do ponteiro em movimento para centralizar zoom no mouse
+        activeCanvas.on("mouse:move", (opt: any) => {
+          if (opt && opt.pointer) {
+            lastPointerRef.current = opt.pointer;
+          }
+        });
+
+        // Capture wheel but prevent Fabric zoom — we'll handle zoom in the container to keep scroll behavior
+        activeCanvas.on("mouse:wheel", (opt: any) => {
+          if (!opt || !opt.e) return;
+          if (opt.e.ctrlKey) {
+            opt.e.preventDefault();
+            opt.e.stopPropagation();
+            // Capture pointer to be used by the container handler
+            if (opt.pointer) lastPointerRef.current = opt.pointer;
+          }
+        });
+
+        // Adicionar evento after:render para recalcular offsets dinamicamente
+        activeCanvas.on("after:render", () => {
+          const c = fabricRef.current;
+          if (c) c.calcOffset();
         });
 
         // Load initial state if exists
@@ -482,9 +656,12 @@ const DesignEditorPage = () => {
 
               if (obj.type === "textbox") {
                 obj.set("splitByGrapheme", false);
-                obj.set("padding", 15);
+                obj.set("padding", 10); // Reduzido ligeiramente para facilitar seleção interna
                 obj.set("editable", false);
-                obj.set("perPixelTargetFind", false);
+                obj.set("perPixelTargetFind", false); // Mudado para false: torna a bounding box inteira clicável, resolvendo seleção só no texto
+                obj.set("breakWords", true);
+                obj.set("wrap", "word");
+                obj.set("hoverCursor", "move");
                 obj.set("borderColor", "#3b82f6");
                 obj.set("cornerColor", "#3b82f6");
                 obj.set("cornerSize", 10);
@@ -601,7 +778,7 @@ const DesignEditorPage = () => {
     }
 
     if (fontFamily !== "Arial") {
-      loadGoogleFont(fontFamily);
+      await loadGoogleFont(fontFamily);
     }
 
     const { Textbox } = await import("fabric");
@@ -637,8 +814,10 @@ const DesignEditorPage = () => {
       padding: 15,
       lineHeight: 1.3,
       textAlign: "left",
-      // Quebra de linha por palavra
+      // Quebra de linha por palavra e prevenção de overflow
       wordWrap: true,
+      breakWords: true, // Quebra palavras longas para evitar sair da caixa
+      wrap: "word",
       // Evitar cache e distorção
       objectCaching: false,
       noScaleCache: true,
@@ -655,7 +834,8 @@ const DesignEditorPage = () => {
       borderDashArray: null, // Linha sólida para parecer mais profissional
       lockScalingY: false,
       isCustomizable: true,
-      perPixelTargetFind: false, // False para facilitar seleção da caixa como um todo
+      perPixelTargetFind: false, // Mudado para false: torna a bounding box inteira clicável
+      hoverCursor: "move", // Cursor de movimento ao hover
       // Melhorar seleção de texto
       selectionBackgroundColor: "rgba(59, 130, 246, 0.3)",
       selectionColor: "#3b82f6",
@@ -1126,7 +1306,17 @@ const DesignEditorPage = () => {
     if (!selectedObject || !canvas) return;
 
     if (key === "fontFamily" && typeof value === "string") {
-      loadGoogleFont(value);
+      // Load the font and re-initialize dimensions after it has loaded to ensure proper wrapping
+      loadGoogleFont(value).then(() => {
+        if ((selectedObject as any).type === "textbox") {
+          (selectedObject as any).initDimensions();
+        }
+        (selectedObject as FabricObject).setCoords();
+        (canvas as FabricCanvas)?.renderAll();
+        setIsDirty(true);
+        triggerAutoSave();
+        setUpdateNonce((prev) => prev + 1);
+      });
     }
 
     (selectedObject as FabricObject).set(key, value);
@@ -1210,30 +1400,100 @@ const DesignEditorPage = () => {
     };
 
     const container = containerRef.current;
+    let wheelHandler: ((e: WheelEvent) => void) | undefined;
     if (container) {
       container.addEventListener("scroll", handleScroll);
+
+      // Attach non-passive wheel listener to allow preventDefault
+      wheelHandler = (ev: WheelEvent) => {
+        if (!(ev.ctrlKey || ev.metaKey)) return;
+        ev.preventDefault();
+
+        const canvasEl = canvasRef.current;
+        if (!canvasEl) return;
+
+        const rect = canvasEl.getBoundingClientRect();
+        const x = ev.clientX - rect.left;
+        const y = ev.clientY - rect.top;
+
+        const oldZoom = workspaceZoomRef.current || workspaceZoom;
+        const delta = ev.deltaY;
+        const newZoom = clamp(oldZoom * 0.999 ** delta, 0.1, 5);
+
+        const relX = container.scrollLeft + x;
+        const relY = container.scrollTop + y;
+
+        const newScrollLeft = Math.max(
+          0,
+          Math.round((relX / oldZoom) * newZoom - x),
+        );
+        const newScrollTop = Math.max(
+          0,
+          Math.round((relY / oldZoom) * newZoom - y),
+        );
+
+        // Apply new zoom smoothly
+        smoothZoom(newZoom, { x, y });
+      };
+
+      container.addEventListener("wheel", wheelHandler, { passive: false });
     }
     window.addEventListener("resize", handleScroll);
 
     return () => {
       if (container) {
         container.removeEventListener("scroll", handleScroll);
+        if (wheelHandler)
+          container.removeEventListener("wheel", wheelHandler as EventListener);
       }
       window.removeEventListener("resize", handleScroll);
     };
-  }, [canvas]);
+  }, [canvas, workspaceZoom, smoothZoom]);
 
   const handleWorkspaceWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const delta = e.deltaY;
-      setWorkspaceZoom((prev) => {
-        let newZoom = prev * 0.999 ** delta;
-        if (newZoom > 5) newZoom = 5;
-        if (newZoom < 0.1) newZoom = 0.1;
-        return newZoom;
-      });
-    }
+    if (!(e.ctrlKey || e.metaKey)) return;
+
+    e.preventDefault();
+
+    const container = containerRef.current;
+    const canvasEl = canvasRef.current;
+    if (!container || !canvasEl) return;
+
+    const rect = canvasEl.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const oldZoom = workspaceZoomRef.current || workspaceZoom;
+    const delta = e.deltaY;
+    const newZoom = clamp(oldZoom * 0.999 ** delta, 0.1, 5);
+
+    // Compute scroll so the point under the cursor stays fixed
+    const relX = container.scrollLeft + x;
+    const relY = container.scrollTop + y;
+
+    const newScrollLeft = Math.max(
+      0,
+      Math.round((relX / oldZoom) * newZoom - x),
+    );
+    const newScrollTop = Math.max(
+      0,
+      Math.round((relY / oldZoom) * newZoom - y),
+    );
+
+    // Apply the zoom (updates CSS size through React state)
+    setWorkspaceZoom(newZoom);
+
+    // After React updates the DOM, apply the new scroll to keep the focal point
+    setTimeout(() => {
+      container.scrollLeft = newScrollLeft;
+      container.scrollTop = newScrollTop;
+
+      const c = fabricRef.current;
+      if (c) {
+        c.calcOffset();
+        c.requestRenderAll();
+      }
+    }, 0);
   };
 
   if (loading) {
@@ -1363,14 +1623,13 @@ const DesignEditorPage = () => {
               (canvas as FabricCanvas).renderAll();
             }
           }}
-          onWheel={handleWorkspaceWheel}
         >
           <div
             className={styles.designCanvas}
             style={
               {
-                "--design-width": `${dimensions.width * workspaceZoom}px`,
-                "--design-height": `${dimensions.height * workspaceZoom}px`,
+                "--design-width": `${Math.round(dimensions.width * workspaceZoom)}px`,
+                "--design-height": `${Math.round(dimensions.height * workspaceZoom)}px`,
                 transform: "none",
                 transformOrigin: "center center",
                 transition: "none",
