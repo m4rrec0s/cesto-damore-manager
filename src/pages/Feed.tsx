@@ -9,12 +9,117 @@ import {
   Settings,
   X,
   Save,
+  GripVertical,
+  Package,
+  Search,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useApi } from "../services/api";
 import { Button } from "@/components/ui/button";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type Tab = "banners" | "sections" | "configurations";
+
+// Componente para item sortável de seção
+function SortableSectionItem({
+  section,
+  onEdit,
+  onDelete,
+  onManageItems,
+}: any) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: section.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`p-4 flex items-center gap-4 hover:bg-neutral-50 transition-colors border-b border-neutral-100 last:border-b-0 ${
+        isDragging ? "bg-blue-50" : ""
+      }`}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="p-2 text-neutral-400 hover:text-neutral-600 cursor-grab active:cursor-grabbing"
+      >
+        <GripVertical className="w-5 h-5" />
+      </button>
+
+      <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 shrink-0">
+        <Layers className="w-5 h-5" />
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <h4 className="font-bold text-neutral-950 truncate">{section.title}</h4>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-neutral-500 truncate">
+            {section.section_type}
+          </p>
+          {section.section_type === "CUSTOM_PRODUCTS" && (
+            <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">
+              {section.items?.length || 0} produtos
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        {section.section_type === "CUSTOM_PRODUCTS" && (
+          <Button
+            onClick={() => onManageItems(section)}
+            className="p-2 text-neutral-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
+            title="Gerenciar Produtos"
+          >
+            <Package className="w-4 h-4" />
+          </Button>
+        )}
+        <Button
+          onClick={() => onEdit(section)}
+          className="p-2 text-neutral-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+        >
+          <Edit2 className="w-4 h-4" />
+        </Button>
+        <Button
+          onClick={() => onDelete(section.id)}
+          className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function Feed() {
   const api = useApi();
@@ -24,8 +129,17 @@ export function Feed() {
     sections: [] as any[],
     configurations: [] as any[],
     sectionTypes: [] as any[],
+    products: [] as any[],
   });
   const [loading, setLoading] = useState(true);
+
+  // Sensors para drag and drop
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   // Modal states
   const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
@@ -59,33 +173,63 @@ export function Feed() {
     is_active: true,
   });
 
+  const [isItemsModalOpen, setIsItemsModalOpen] = useState(false);
+  const [managingSection, setManagingSection] = useState<any>(null);
+  const [searchProduct, setSearchProduct] = useState("");
+  const [modalProducts, setModalProducts] = useState<any[]>([]);
+  const [modalPagination, setModalPagination] = useState({
+    page: 1,
+    totalPages: 1,
+    total: 0,
+  });
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
+
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadFeedData();
   }, []);
 
-  const loadFeedData = async () => {
+  useEffect(() => {
+    if (isItemsModalOpen && managingSection) {
+      const updated = data.sections.find((s) => s.id === managingSection.id);
+      if (updated) setManagingSection(updated);
+    }
+  }, [data.sections, isItemsModalOpen]);
+
+  useEffect(() => {
+    if (isItemsModalOpen) {
+      const timer = setTimeout(() => {
+        loadModalProducts(1, searchProduct);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [searchProduct, isItemsModalOpen]);
+
+  const loadFeedData = async (silent = false) => {
     try {
-      setLoading(true);
-      const [banners, sections, configs, sectionTypes] = await Promise.all([
-        api.get("/admin/feed/banners"),
-        api.get("/admin/feed/sections"),
-        api.get("/admin/feed/configurations"),
-        api.getSectionTypes(),
-      ]);
+      if (!silent) setLoading(true);
+      const [banners, sections, configs, sectionTypes, products] =
+        await Promise.all([
+          api.get("/admin/feed/banners"),
+          api.get("/admin/feed/sections"),
+          api.get("/admin/feed/configurations"),
+          api.getSectionTypes(),
+          api.getProducts({ perPage: 1000 }),
+        ]);
 
       setData({
         banners: banners.data,
         sections: sections.data,
         configurations: configs.data,
         sectionTypes: sectionTypes,
+        products: products.products || [],
       });
     } catch (error) {
       console.error("Erro ao carregar feed:", error);
       toast.error("Erro ao carregar dados do feed");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -108,6 +252,41 @@ export function Feed() {
       loadFeedData();
     } catch (error) {
       toast.error("Erro ao excluir seção");
+    }
+  };
+
+  const handleDragEndSections = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = data.sections.findIndex((s) => s.id === active.id);
+      const newIndex = data.sections.findIndex((s) => s.id === over.id);
+
+      const newSections = arrayMove(data.sections, oldIndex, newIndex);
+
+      // Update display order
+      const updates = newSections.map((section, index) => ({
+        ...section,
+        display_order: index,
+      }));
+
+      setData({ ...data, sections: updates });
+
+      // Save to backend
+      for (const section of updates) {
+        try {
+          await api.updateFeedSection(section.id, {
+            display_order: section.display_order,
+          });
+        } catch (error) {
+          console.error(
+            `Erro ao atualizar ordem da seção ${section.id}:`,
+            error,
+          );
+        }
+      }
+
+      toast.success("Ordem atualizada com sucesso");
     }
   };
 
@@ -276,6 +455,61 @@ export function Feed() {
     }
   };
 
+  const openManageItems = (section: any) => {
+    setManagingSection(section);
+    setIsItemsModalOpen(true);
+    setSearchProduct("");
+    loadModalProducts(1, "");
+  };
+
+  const loadModalProducts = async (page: number, search: string) => {
+    try {
+      setIsSearchingProducts(true);
+      const response = await api.getProducts({
+        page,
+        perPage: 8,
+        search,
+      });
+
+      setModalProducts(response.products);
+      setModalPagination({
+        page: response.pagination.page,
+        totalPages: response.pagination.totalPages,
+        total: response.pagination.total,
+      });
+    } catch (error) {
+      console.error("Erro ao buscar produtos:", error);
+      toast.error("Não foi possível carregar os produtos");
+    } finally {
+      setIsSearchingProducts(false);
+    }
+  };
+
+  const handleAddItemToSection = async (product: any) => {
+    try {
+      await api.post(`/admin/feed/sections/${managingSection.id}/items`, {
+        feed_section_id: managingSection.id,
+        item_type: "PRODUCT",
+        item_id: product.id,
+        display_order: managingSection.items?.length || 0,
+      });
+      toast.success("Produto adicionado com sucesso");
+      await loadFeedData(true);
+    } catch (error) {
+      toast.error("Erro ao adicionar produto");
+    }
+  };
+
+  const handleRemoveItemFromSection = async (itemId: string) => {
+    try {
+      await api.delete(`/admin/feed/section-items/${itemId}`);
+      toast.success("Produto removido com sucesso");
+      await loadFeedData(true);
+    } catch (error) {
+      toast.error("Erro ao remover produto");
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -419,46 +653,40 @@ export function Feed() {
         )}
 
         {activeTab === "sections" && (
-          <div className="divide-y divide-neutral-50">
-            {data.sections.length === 0 ? (
-              <div className="p-12 text-center">
-                <p className="text-neutral-400">Nenhuma seção cadastrada.</p>
-              </div>
-            ) : (
-              data.sections.map((section) => (
-                <div
-                  key={section.id}
-                  className="p-4 flex items-center gap-4 hover:bg-neutral-50 transition-colors"
-                >
-                  <div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center text-neutral-500 shrink-0">
-                    <Layers className="w-6 h-6" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-neutral-950 truncate">
-                      {section.title}
-                    </h4>
-                    <p className="text-sm text-neutral-500 truncate">
-                      {section.section_type}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={() => openSectionModal(section)}
-                      className="p-2 text-neutral-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                    >
-                      <Edit2 className="w-5 h-5" />
-                    </Button>
-                    <Button
-                      onClick={() => handleDeleteSection(section.id)}
-                      className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </Button>
-                  </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEndSections}
+          >
+            <div className="divide-y divide-neutral-100">
+              {data.sections.length === 0 ? (
+                <div className="p-12 text-center">
+                  <Layers className="w-12 h-12 text-neutral-200 mx-auto mb-3" />
+                  <p className="text-neutral-400 font-medium">
+                    Nenhuma seção cadastrada.
+                  </p>
+                  <p className="text-sm text-neutral-500 mt-1">
+                    Comece criando sua primeira seção
+                  </p>
                 </div>
-              ))
-            )}
-          </div>
+              ) : (
+                <SortableContext
+                  items={data.sections.map((s) => s.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {data.sections.map((section) => (
+                    <SortableSectionItem
+                      key={section.id}
+                      section={section}
+                      onEdit={openSectionModal}
+                      onDelete={handleDeleteSection}
+                      onManageItems={openManageItems}
+                    />
+                  ))}
+                </SortableContext>
+              )}
+            </div>
+          </DndContext>
         )}
 
         {activeTab === "configurations" && (
@@ -949,6 +1177,188 @@ export function Feed() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Gerenciar Produtos Modal */}
+      {isItemsModalOpen && managingSection && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2rem] w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50">
+              <div>
+                <h2 className="text-xl font-bold text-neutral-950">
+                  Gerenciar Produtos: {managingSection.title}
+                </h2>
+                <p className="text-sm text-neutral-500">
+                  Adicione ou remova produtos desta seção personalizada
+                </p>
+              </div>
+              <Button
+                onClick={() => setIsItemsModalOpen(false)}
+                className="p-2 hover:bg-neutral-100 rounded-full transition-colors"
+              >
+                <X className="w-5 h-5 text-neutral-500" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-hidden flex divide-x divide-neutral-100">
+              {/* Produtos Atuais */}
+              <div className="w-1/2 flex flex-col bg-neutral-50/30">
+                <div className="p-4 border-b border-neutral-100 flex justify-between items-center">
+                  <h3 className="font-bold text-neutral-800 flex items-center gap-2">
+                    <Package className="w-4 h-4 text-blue-600" />
+                    Produtos na Seção ({managingSection.items?.length || 0})
+                  </h3>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                  {managingSection.items?.length === 0 ? (
+                    <div className="text-center py-10 opacity-50 text-neutral-500">
+                      Nenhum produto adicionado.
+                    </div>
+                  ) : (
+                    managingSection.items?.map((item: any) => {
+                      const product = data.products.find(
+                        (p) => p.id === item.item_id,
+                      );
+                      return (
+                        <div
+                          key={item.id}
+                          className="bg-white p-3 rounded-xl border border-neutral-100 flex items-center gap-3"
+                        >
+                          <div className="w-10 h-10 bg-neutral-100 rounded-lg shrink-0 overflow-hidden">
+                            {product?.image_url && (
+                              <img
+                                src={product.image_url}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-neutral-900 truncate">
+                              {product?.name || "Produto não encontrado"}
+                            </p>
+                            <p className="text-xs text-neutral-500">
+                              R$ {product?.price?.toFixed(2)}
+                            </p>
+                          </div>
+                          <Button
+                            onClick={() => handleRemoveItemFromSection(item.id)}
+                            className="p-2 text-red-400 hover:text-red-600 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Buscar/Adicionar Produtos */}
+              <div className="w-1/2 flex flex-col">
+                <div className="p-4 border-b border-neutral-100">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                    <input
+                      type="text"
+                      placeholder="Buscar por nome..."
+                      value={searchProduct}
+                      onChange={(e) => setSearchProduct(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-neutral-100 border-none rounded-xl focus:ring-2 focus:ring-neutral-900 outline-none transition-all text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-2 relative">
+                  {isSearchingProducts ? (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10">
+                      <Loader className="w-8 h-8 animate-spin text-neutral-400" />
+                    </div>
+                  ) : modalProducts.length === 0 ? (
+                    <div className="text-center py-10 opacity-50 text-neutral-500">
+                      Nenhum produto encontrado.
+                    </div>
+                  ) : (
+                    modalProducts
+                      .filter(
+                        (p) =>
+                          !managingSection.items?.some(
+                            (item: any) => item.item_id === p.id,
+                          ),
+                      )
+                      .map((product) => (
+                        <div
+                          key={product.id}
+                          className="hover:bg-neutral-50 p-3 rounded-xl flex items-center gap-3 transition-colors border border-transparent hover:border-neutral-100"
+                        >
+                          <div className="w-10 h-10 bg-neutral-100 rounded-lg shrink-0 overflow-hidden">
+                            {product.image_url && (
+                              <img
+                                src={product.image_url}
+                                alt=""
+                                className="w-full h-full object-cover"
+                              />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-neutral-900 truncate">
+                              {product.name}
+                            </p>
+                            <p className="text-xs text-neutral-500">
+                              R$ {product.price?.toFixed(2)}
+                            </p>
+                          </div>
+                          <Button
+                            onClick={() => handleAddItemToSection(product)}
+                            className="p-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-all"
+                          >
+                            <Plus className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ))
+                  )}
+                </div>
+
+                {/* Paginação Modal */}
+                {modalPagination.totalPages > 1 && (
+                  <div className="p-4 border-t border-neutral-100 flex items-center justify-between bg-neutral-50/50">
+                    <p className="text-xs text-neutral-500 font-medium">
+                      Página {modalPagination.page} de{" "}
+                      {modalPagination.totalPages}
+                    </p>
+                    <div className="flex gap-1">
+                      <Button
+                        onClick={() =>
+                          loadModalProducts(
+                            modalPagination.page - 1,
+                            searchProduct,
+                          )
+                        }
+                        disabled={modalPagination.page === 1}
+                        className="p-2 hover:bg-neutral-200 rounded-lg disabled:opacity-30 transition-all"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        onClick={() =>
+                          loadModalProducts(
+                            modalPagination.page + 1,
+                            searchProduct,
+                          )
+                        }
+                        disabled={
+                          modalPagination.page === modalPagination.totalPages
+                        }
+                        className="p-2 hover:bg-neutral-200 rounded-lg disabled:opacity-30 transition-all"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}

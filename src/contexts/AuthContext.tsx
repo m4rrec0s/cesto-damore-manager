@@ -36,7 +36,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // O role será sempre validado com o servidor
           setUser(userData);
           setAppToken(storedAppToken);
-          console.log("✅ Usuário carregado do localStorage");
         } catch (e) {
           console.error("❌ Erro ao fazer parse do usuário armazenado", e);
           localStorage.removeItem("user");
@@ -73,11 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof document !== "undefined") {
       const expirationDate = new Date();
       expirationDate.setTime(
-        expirationDate.getTime() + 7 * 24 * 60 * 60 * 1000
+        expirationDate.getTime() + 7 * 24 * 60 * 60 * 1000,
       );
       document.cookie = `appToken=${token};expires=${expirationDate.toUTCString()};path=/`;
       document.cookie = `user=${JSON.stringify(
-        safeUserData
+        safeUserData,
       )};expires=${expirationDate.toUTCString()};path=/`;
     }
   };
@@ -103,7 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (!auth) {
         throw new Error(
-          "Firebase não foi inicializado corretamente. Verifique as variáveis de ambiente."
+          "Firebase não foi inicializado corretamente. Verifique as variáveis de ambiente.",
         );
       }
 
@@ -120,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login(response.user, response.appToken);
       } else {
         throw new Error(
-          "Resposta inválida do servidor: faltam dados de usuário ou token"
+          "Resposta inválida do servidor: faltam dados de usuário ou token",
         );
       }
     } catch (error) {
