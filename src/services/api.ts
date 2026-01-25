@@ -1033,6 +1033,9 @@ class ApiService {
   blockSession = async (sessionId: string) =>
     (await this.post(`/admin/ai/agent/sessions/${sessionId}/block`, {})).data;
 
+  unblockSession = async (sessionId: string) =>
+    (await this.post(`/admin/ai/agent/sessions/${sessionId}/unblock`, {})).data;
+
   getSessionHistory = async (sessionId: string) =>
     (
       await this.client.get(`/ai/agent/history/${sessionId}`, {
