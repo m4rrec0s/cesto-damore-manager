@@ -20,6 +20,30 @@ import { Textarea } from "@/components/ui/textarea";
 const CM_TO_PX = 37.795;
 const INTERNAL_DPI_MULTIPLIER = 2;
 
+// Carrega fonte do Google com timeout e evita bloqueio se falhar
+const loadGoogleFont = (fontFamily: string) => {
+  if (document.getElementById(`font-${fontFamily.replace(/\s+/g, "-")}`))
+    return Promise.resolve();
+
+  return new Promise<void>((resolve) => {
+    const link = document.createElement("link");
+    link.id = `font-${fontFamily.replace(/\s+/g, "-")}`;
+    link.rel = "stylesheet";
+    link.href = `https://fonts.googleapis.com/css2?family=${fontFamily.replace(/\s+/g, "+")}:wght@400;700;900&display=swap`;
+    link.onload = () => {
+      // Espera no máximo 2s pela font face
+      Promise.race([
+        document.fonts.load(`1em "${fontFamily}"`),
+        new Promise((r) => setTimeout(r, 2000)),
+      ])
+        .then(() => resolve())
+        .catch(() => resolve());
+    };
+    link.onerror = () => resolve();
+    document.head.appendChild(link);
+  });
+};
+
 const DesignTestPage = () => {
   const navigate = useNavigate();
   const { layoutId } = useParams<{ layoutId: string }>();
@@ -236,6 +260,21 @@ const DesignTestPage = () => {
           }
 
           try {
+            // Pre-carregar fontes usadas no estado para evitar mudanças de layout
+            if (state && state.objects) {
+              const fontsToLoad = new Set<string>();
+              state.objects.forEach((o: any) => {
+                if (o.fontFamily && o.fontFamily !== "Arial") {
+                  fontsToLoad.add(o.fontFamily);
+                }
+              });
+              if (fontsToLoad.size > 0) {
+                await Promise.all(
+                  Array.from(fontsToLoad).map((f) => loadGoogleFont(f)),
+                );
+              }
+            }
+
             await c.loadFromJSON(state);
           } catch (jsonErr) {
             console.error("Erro ao carregar estado do canvas:", jsonErr);
@@ -317,9 +356,27 @@ const DesignTestPage = () => {
 
           // Re-initialize textboxes after render to ensure proper wrapping and padding
           // Fixes issue where text overflows on first render due to fonts or DPI timing
-          setTimeout(() => {
+          setTimeout(async () => {
+            // Wait briefly for fonts to settle (avoid waiting indefinitely)
+            try {
+              await Promise.race([
+                (document as any).fonts?.ready || Promise.resolve(),
+                new Promise((r) => setTimeout(r, 800)),
+              ]);
+            } catch (e) {
+              // ignore
+            }
+
             c.getObjects().forEach((o: any) => {
               if (o.type === "textbox") {
+                // preserve center to avoid shifts when dimensions change
+                let center: { x: number; y: number } | null = null;
+                try {
+                  center = o.getCenterPoint ? o.getCenterPoint() : null;
+                } catch (err) {
+                  center = null;
+                }
+
                 if (typeof o.padding === "undefined") o.set("padding", 15);
                 o.set("splitByGrapheme", false);
                 o.set("objectCaching", false);
@@ -328,6 +385,16 @@ const DesignTestPage = () => {
                 } catch (e) {
                   // ignore
                 }
+
+                // Reposition to preserved center (if available)
+                if (center && o.setPositionByOrigin) {
+                  try {
+                    o.setPositionByOrigin(center, "center", "center");
+                  } catch (err) {
+                    // ignore
+                  }
+                }
+
                 o.setCoords && o.setCoords();
               }
             });
@@ -449,7 +516,9 @@ const DesignTestPage = () => {
       finalUrl = `${import.meta.env.VITE_API_URL}${finalUrl}`;
     }
 
-    const img = await FabricImage.fromURL(finalUrl);
+    const img = (await FabricImage.fromURL(finalUrl, {
+      crossOrigin: "anonymous",
+    })) as any;
 
     const frameWidth = frame.width * frame.scaleX;
     const frameHeight = frame.height * frame.scaleY;

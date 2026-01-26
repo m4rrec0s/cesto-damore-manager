@@ -141,6 +141,26 @@ const loadGoogleFont = (fontFamily: string) => {
   });
 };
 
+// Carrega todas as fontes referenciadas num estado do Fabric (ou JSON string)
+const preloadFontsFromState = async (stateOrJson: any) => {
+  try {
+    const state =
+      typeof stateOrJson === "string" ? JSON.parse(stateOrJson) : stateOrJson;
+    if (!state || !state.objects) return;
+    const fonts = new Set<string>();
+    state.objects.forEach((obj: any) => {
+      if (obj.fontFamily && obj.fontFamily !== "Arial")
+        fonts.add(obj.fontFamily);
+    });
+    if (fonts.size > 0) {
+      await Promise.all(Array.from(fonts).map((f) => loadGoogleFont(f)));
+    }
+  } catch (e) {
+    // ignore parsing errors
+    return;
+  }
+};
+
 const DesignEditorPage = () => {
   const { layoutId } = useParams<{ layoutId: string }>();
   const navigate = useNavigate();
@@ -675,16 +695,43 @@ const DesignEditorPage = () => {
             activeCanvas.renderAll();
 
             // Re-run textbox init after a tick to ensure fonts/DPR have settled
-            setTimeout(() => {
+            setTimeout(async () => {
               if (!activeCanvas) return;
+
+              try {
+                await Promise.race([
+                  (document as any).fonts?.ready || Promise.resolve(),
+                  new Promise((r) => setTimeout(r, 800)),
+                ]);
+              } catch (err) {
+                // ignore
+              }
+
               activeCanvas.getObjects().forEach((o: any) => {
                 if (o.type === "textbox") {
+                  // preserve center while initDimensions can change width/height
+                  let center: { x: number; y: number } | null = null;
+                  try {
+                    center = o.getCenterPoint ? o.getCenterPoint() : null;
+                  } catch (err) {
+                    center = null;
+                  }
+
                   if (typeof o.padding === "undefined") o.set("padding", 10);
                   try {
                     if (o.initDimensions) o.initDimensions();
                   } catch (e) {
                     /* ignore */
                   }
+
+                  if (center && o.setPositionByOrigin) {
+                    try {
+                      o.setPositionByOrigin(center, "center", "center");
+                    } catch (err) {
+                      // ignore
+                    }
+                  }
+
                   if (o.setCoords) o.setCoords();
                 }
               });
@@ -1176,7 +1223,26 @@ const DesignEditorPage = () => {
       isInternalUpdate.current = true;
       isHistoryUpdate.current = true;
       const c = canvas as FabricCanvas;
+
+      // Preload fonts referenced in this history state to avoid reflow/caret problems
+      await preloadFontsFromState(json);
+
       await c.loadFromJSON(JSON.parse(json));
+
+      // Re-init textboxes and offsets to ensure dimensions and pointer mapping are correct
+      c.getObjects().forEach((obj: any) => {
+        if (obj.type === "textbox") {
+          try {
+            obj.initDimensions && obj.initDimensions();
+          } catch (e) {
+            /* ignore */
+          }
+          if (typeof obj.padding === "undefined") obj.set("padding", 10);
+        }
+        obj.set("objectCaching", false);
+        obj.setCoords && obj.setCoords();
+      });
+      c.calcOffset();
       c.renderAll();
 
       setHistoryIndex(prevIndex);
@@ -1202,7 +1268,26 @@ const DesignEditorPage = () => {
       isInternalUpdate.current = true;
       isHistoryUpdate.current = true;
       const c = canvas as FabricCanvas;
+
+      // Preload fonts for this state before restoring
+      await preloadFontsFromState(json);
+
       await c.loadFromJSON(JSON.parse(json));
+
+      // Re-init textboxes and offsets
+      c.getObjects().forEach((obj: any) => {
+        if (obj.type === "textbox") {
+          try {
+            obj.initDimensions && obj.initDimensions();
+          } catch (e) {
+            /* ignore */
+          }
+          if (typeof obj.padding === "undefined") obj.set("padding", 10);
+        }
+        obj.set("objectCaching", false);
+        obj.setCoords && obj.setCoords();
+      });
+      c.calcOffset();
       c.renderAll();
 
       setHistoryIndex(nextIndex);
