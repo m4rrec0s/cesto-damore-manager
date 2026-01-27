@@ -596,6 +596,7 @@ const DesignTestPage = () => {
     // Propagar opacidade da moldura para a imagem e vincular para atualizações futuras
     img.set({
       opacity: typeof frame.opacity === "number" ? frame.opacity : 1,
+      angle: frame.angle || 0, // Sincronizar rotação da moldura
       linkedFrameId: frame.id || frame.name,
     });
 
