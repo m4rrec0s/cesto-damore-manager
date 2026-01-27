@@ -27,6 +27,7 @@ interface AIAgentSession {
   is_blocked: boolean;
   expires_at: string;
   created_at: string;
+  last_message_at?: string;
   customer?: {
     name: string;
   };
@@ -68,7 +69,16 @@ export function Service() {
     try {
       setLoading(true);
       const data = await api.getSessions();
-      setSessions(data);
+
+      // Ordenar sessões pela última interação (mais recente primeiro)
+      const sortedData = data.sort((a: AIAgentSession, b: AIAgentSession) => {
+        // Usar last_message_at se disponível, caso contrário usar created_at
+        const dateA = new Date(a.last_message_at || a.created_at).getTime();
+        const dateB = new Date(b.last_message_at || b.created_at).getTime();
+        return dateB - dateA; // Descendente (mais recente primeiro)
+      });
+
+      setSessions(sortedData);
     } catch (error) {
       console.error("Erro ao carregar sessões:", error);
       toast.error("Erro ao carregar sessões de atendimento");
