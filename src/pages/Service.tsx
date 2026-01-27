@@ -8,6 +8,7 @@ import {
   Lock,
   Unlock,
   ShieldAlert,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,6 @@ interface AIAgentSession {
   is_blocked: boolean;
   expires_at: string;
   created_at: string;
-  last_message_at?: string;
   customer?: {
     name: string;
   };
@@ -69,20 +69,11 @@ export function Service() {
     try {
       setLoading(true);
       const data = await api.getSessions();
-
-      // Ordenar sessões pela última interação (mais recente primeiro)
-      const sortedData = data.sort((a: AIAgentSession, b: AIAgentSession) => {
-        // Usar last_message_at se disponível, caso contrário usar created_at
-        const dateA = new Date(a.last_message_at || a.created_at).getTime();
-        const dateB = new Date(b.last_message_at || b.created_at).getTime();
-        return dateB - dateA; // Descendente (mais recente primeiro)
-      });
-
-      setSessions(sortedData);
+      setSessions(data);
+      setLoading(false);
     } catch (error) {
       console.error("Erro ao carregar sessões:", error);
       toast.error("Erro ao carregar sessões de atendimento");
-    } finally {
       setLoading(false);
     }
   };
@@ -129,6 +120,20 @@ export function Service() {
     } catch (error) {
       console.error("Erro ao desbloquear atendimento:", error);
       toast.error("Erro ao desbloquear atendimento");
+    }
+  };
+
+  const handleClearHistory = async () => {
+    if (!selectedSession) return;
+
+    try {
+      await api.clearSessionHistory(selectedSession.id);
+      toast.success("Histórico da sessão limpo com sucesso");
+      setMessages([]); // Limpar mensagens da tela
+      loadSessions(); // Recarregar contagem de mensagens
+    } catch (error) {
+      console.error("Erro ao limpar histórico:", error);
+      toast.error("Erro ao limpar histórico da sessão");
     }
   };
 
@@ -229,25 +234,37 @@ export function Service() {
                 </div>
               </div>
 
-              {selectedSession.is_blocked ? (
+              <div className="flex items-center gap-2">
                 <Button
-                  onClick={handleUnblock}
+                  onClick={handleClearHistory}
                   variant="outline"
-                  className="bg-white border-green-200 text-green-700 hover:bg-green-50 gap-2 font-bold"
+                  className="bg-white border-red-200 text-red-600 hover:bg-red-50 gap-2 font-bold"
+                  title="Limpar todas as mensagens desta sessão"
                 >
-                  <Unlock size={16} />
-                  Desbloquear IA
+                  <Trash2 size={16} />
+                  Limpar Histórico
                 </Button>
-              ) : (
-                <Button
-                  onClick={handleBlock}
-                  variant="outline"
-                  className="bg-white border-amber-200 text-amber-700 hover:bg-amber-50 gap-2 font-bold"
-                >
-                  <Lock size={16} />
-                  Bloquear IA (Assumir)
-                </Button>
-              )}
+
+                {selectedSession.is_blocked ? (
+                  <Button
+                    onClick={handleUnblock}
+                    variant="outline"
+                    className="bg-white border-green-200 text-green-700 hover:bg-green-50 gap-2 font-bold"
+                  >
+                    <Unlock size={16} />
+                    Desbloquear IA
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleBlock}
+                    variant="outline"
+                    className="bg-white border-amber-200 text-amber-700 hover:bg-amber-50 gap-2 font-bold"
+                  >
+                    <Lock size={16} />
+                    Bloquear IA (Assumir)
+                  </Button>
+                )}
+              </div>
             </div>
 
             {/* Messages Area */}
