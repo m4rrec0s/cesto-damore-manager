@@ -223,12 +223,41 @@ export function ItemsTab() {
           formData as unknown as Record<string, unknown>,
           imageFile || undefined,
         );
+
+        // ✅ Garantir regra DYNAMIC_LAYOUT se ativou customização
+        if (formData.allows_customization) {
+          const hasDynamicLayout = itemCustomizations.some(
+            (c) => c.type === "DYNAMIC_LAYOUT",
+          );
+          if (!hasDynamicLayout) {
+            await api.createCustomization({
+              item_id: editingItem.id,
+              name: "Design Personalizado",
+              type: "DYNAMIC_LAYOUT",
+              price: 0,
+              isRequired: true,
+              customization_data: { autoSelectSameType: true },
+            });
+          }
+        }
         toast.success("Item atualizado!");
       } else {
-        await api.createItem(
+        const newItem = await api.createItem(
           formData as unknown as Record<string, unknown>,
           imageFile || undefined,
         );
+
+        // ✅ Para novos itens também
+        if (formData.allows_customization) {
+          await api.createCustomization({
+            item_id: (newItem as any).id,
+            name: "Design Personalizado",
+            type: "DYNAMIC_LAYOUT",
+            price: 0,
+            isRequired: true,
+            customization_data: { autoSelectSameType: true },
+          });
+        }
         toast.success("Item criado!");
       }
       setIsModalOpen(false);
@@ -928,9 +957,9 @@ export function ItemsTab() {
                                   const options = [
                                     ...((customizationFormData
                                       .customization_data?.options as Record<
-                                      string,
-                                      unknown
-                                    >[]) || []),
+                                        string,
+                                        unknown
+                                      >[]) || []),
                                   ];
                                   options[idx] = {
                                     ...options[idx],
@@ -959,9 +988,9 @@ export function ItemsTab() {
                                     const options = [
                                       ...((customizationFormData
                                         .customization_data?.options as Record<
-                                        string,
-                                        unknown
-                                      >[]) || []),
+                                          string,
+                                          unknown
+                                        >[]) || []),
                                     ];
                                     options[idx] = {
                                       ...options[idx],
@@ -1041,13 +1070,13 @@ export function ItemsTab() {
                                     onClick={() => {
                                       const newLayouts = isSelected
                                         ? selectedLayouts.filter(
-                                            (l: Record<string, unknown>) =>
-                                              l.id !== layout.id,
-                                          )
+                                          (l: Record<string, unknown>) =>
+                                            l.id !== layout.id,
+                                        )
                                         : [
-                                            ...selectedLayouts,
-                                            layout as Record<string, unknown>,
-                                          ];
+                                          ...selectedLayouts,
+                                          layout as Record<string, unknown>,
+                                        ];
                                       setCustomizationFormData({
                                         ...customizationFormData,
                                         customization_data: {

@@ -179,6 +179,7 @@ const DesignEditorPage = () => {
     width: 10 * CM_TO_PX,
     height: 15 * CM_TO_PX,
   });
+  const [productionTime, setProductionTime] = useState(0);
   const [activePanel, setActivePanel] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [updateNonce, setUpdateNonce] = useState(0); // Trigger re-renders for selected object changes
@@ -394,12 +395,11 @@ const DesignEditorPage = () => {
 
         if (layout) {
           setDesignName(layout.name);
-          if (layout.width && layout.height) {
-            setDimensions({
-              width: Math.round(layout.width),
-              height: Math.round(layout.height),
-            });
-          }
+          setDimensions({
+            width: Math.round(layout.width),
+            height: Math.round(layout.height),
+          });
+          setProductionTime(layout.productionTime || 0);
 
           // Store state to load after canvas init
           if (layout.fabricJsonState) {
@@ -1241,6 +1241,7 @@ const DesignEditorPage = () => {
           fabricJsonState: currentCanvas.toObject(CUSTOM_PROPS),
           width: Math.round(dimensions.width),
           height: Math.round(dimensions.height),
+          productionTime,
           previewImageUrl, // Se for auto-save, envia undefined e mantém o atual no banco
           token,
           isPublished: isManual ? true : undefined,
@@ -1254,7 +1255,14 @@ const DesignEditorPage = () => {
         setSaving(false);
       }
     },
-    [canvas, layoutId, designName, dimensions.width, dimensions.height],
+    [
+      canvas,
+      layoutId,
+      designName,
+      dimensions.width,
+      dimensions.height,
+      productionTime,
+    ],
   );
 
   const triggerAutoSave = useCallback(() => {
@@ -1700,6 +1708,12 @@ const DesignEditorPage = () => {
         loading={loading}
         user={user}
         isDirty={isDirty}
+        productionTime={productionTime}
+        setProductionTime={(time) => {
+          setProductionTime(time);
+          setIsDirty(true);
+          triggerAutoSave();
+        }}
       />
 
       <div className="absolute top-14 left-1/2 -translate-x-1/2 z-50">

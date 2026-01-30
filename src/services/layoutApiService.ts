@@ -20,6 +20,7 @@ export const layoutApiService = {
     fabricJsonState: Record<string, unknown>;
     width: number;
     height: number;
+    productionTime?: number;
     tags?: string[];
     token: string;
   }) {
@@ -33,6 +34,7 @@ export const layoutApiService = {
           fabricJsonState: data.fabricJsonState,
           width: data.width,
           height: data.height,
+          productionTime: data.productionTime || 0,
           tags: data.tags || [],
         },
         {
@@ -116,6 +118,7 @@ export const layoutApiService = {
       isPublished?: boolean;
       width?: number;
       height?: number;
+      productionTime?: number;
       token: string;
     },
   ) {
@@ -130,6 +133,7 @@ export const layoutApiService = {
           isPublished: data.isPublished,
           width: data.width,
           height: data.height,
+          productionTime: data.productionTime,
         },
         {
           headers: {

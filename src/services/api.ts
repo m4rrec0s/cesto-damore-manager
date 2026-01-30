@@ -801,7 +801,7 @@ class ApiService {
 
   createLayout = async (payload: Record<string, unknown>, imageFile?: File) => {
     if (!imageFile) {
-      return (await this.post("/admin/layouts", payload)).data;
+      return (await this.post("/layouts/dynamic", payload)).data;
     }
 
     const formData = new FormData();
@@ -813,7 +813,7 @@ class ApiService {
     formData.append("image", imageFile);
 
     return (
-      await this.client.post("/admin/layouts", formData, {
+      await this.client.post("/layouts/dynamic", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       })
     ).data;
@@ -826,7 +826,7 @@ class ApiService {
   ) => {
     this.validateAdminRole();
     if (!imageFile) {
-      return (await this.put(`/admin/layouts/${id}`, payload)).data;
+      return (await this.put(`/layouts/dynamic/${id}`, payload)).data;
     }
 
     const formData = new FormData();
@@ -838,7 +838,7 @@ class ApiService {
     formData.append("image", imageFile);
 
     return (
-      await this.client.put(`/admin/layouts/${id}`, formData, {
+      await this.client.put(`/layouts/dynamic/${id}`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       })
     ).data;
@@ -846,7 +846,7 @@ class ApiService {
 
   deleteLayout = async (id: string) => {
     this.validateAdminRole();
-    return (await this.delete(`/admin/layouts/${id}`)).data;
+    return (await this.delete(`/layouts/dynamic/${id}`)).data;
   };
 
   // ===== Temporary Uploads (Com TTL) =====

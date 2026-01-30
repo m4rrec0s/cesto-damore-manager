@@ -35,6 +35,8 @@ interface DesignToolbarProps {
   loading: boolean;
   user: any;
   isDirty?: boolean;
+  productionTime: number;
+  setProductionTime: (time: number) => void;
 }
 
 const SeparatorVertical = () => (
@@ -54,6 +56,8 @@ export const DesignToolbar = ({
   loading,
   user,
   isDirty,
+  productionTime,
+  setProductionTime,
 }: DesignToolbarProps) => {
   return (
     <header className="flex items-center justify-between h-12 px-6 border-b border-neutral-700 bg-linear-to-r from-teal-500 via-blue-500 to-purple-500 shrink-0">
@@ -162,9 +166,19 @@ export const DesignToolbar = ({
         <Input
           value={designName}
           onChange={(e) => setDesignName(e.target.value)}
-          className="font-semibold max-w-xs h-8 bg-black/20 border-white/10"
+          className="font-semibold max-w-[200px] h-8 bg-black/20 border-white/10"
           placeholder="Nome do design"
         />
+        <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-md px-2 h-8">
+          <span className="text-[10px] uppercase font-bold text-white/60 whitespace-nowrap">Tempo (h)</span>
+          <Input
+            type="number"
+            value={productionTime}
+            onChange={(e) => setProductionTime(parseInt(e.target.value) || 0)}
+            className="w-16 h-6 bg-transparent border-none text-center p-0 font-bold focus-visible:ring-0"
+            min={0}
+          />
+        </div>
         <Avatar className="h-8 w-8 border border-green-500">
           <AvatarImage src={user?.image_url || ""} />
           <AvatarFallback className="text-black text-xs">

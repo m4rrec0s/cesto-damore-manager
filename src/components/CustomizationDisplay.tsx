@@ -1,4 +1,4 @@
-import { ImageIcon, Type, MousePointerClick } from "lucide-react";
+import { ImageIcon, Type, MousePointerClick, Clock } from "lucide-react";
 import {
   parseCustomizationData,
   getCustomizationTypeLabel,
@@ -28,8 +28,8 @@ export function CustomizationDisplay({
         return (
           <div className="space-y-3">
             {data.photos &&
-            Array.isArray(data.photos) &&
-            data.photos.length > 0 ? (
+              Array.isArray(data.photos) &&
+              data.photos.length > 0 ? (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                 {data.photos.map((photo, idx) => (
                   <div
@@ -94,7 +94,7 @@ export function CustomizationDisplay({
         return (
           <div className="space-y-3">
             {data.text &&
-            (data.text.startsWith("http") || data.text.startsWith("/")) ? (
+              (data.text.startsWith("http") || data.text.startsWith("/")) ? (
               <div className="relative aspect-video w-full max-w-sm overflow-hidden rounded-2xl border border-neutral-100 bg-neutral-50 shadow-sm">
                 <img
                   src={data.text}
@@ -105,17 +105,27 @@ export function CustomizationDisplay({
             ) : null}
 
             {data.selected_item_label ||
-            (typeof data.selected_item === "string"
-              ? data.selected_item
-              : (data.selected_item as any)?.selected_item) ? (
-              <div className="p-3 bg-white border border-neutral-100 rounded-xl shadow-sm inline-block">
-                <p className="text-sm text-neutral-950">
-                  <span className="font-bold text-neutral-600">Layout:</span>{" "}
-                  {data.selected_item_label ||
-                    (typeof data.selected_item === "string"
-                      ? data.selected_item
-                      : (data.selected_item as any)?.selected_item)}
-                </p>
+              (typeof data.selected_item === "string"
+                ? data.selected_item
+                : (data.selected_item as any)?.selected_item) ? (
+              <div className="flex flex-col gap-2">
+                <div className="p-3 bg-white border border-neutral-100 rounded-xl shadow-sm inline-block w-fit">
+                  <p className="text-sm text-neutral-950">
+                    <span className="font-bold text-neutral-600">Layout:</span>{" "}
+                    {data.selected_item_label ||
+                      (typeof data.selected_item === "string"
+                        ? data.selected_item
+                        : (data.selected_item as any)?.selected_item)}
+                  </p>
+                </div>
+                {(data.additional_time as number) > 0 && (
+                  <div className="flex items-center gap-1.5 pl-1">
+                    <Clock className="h-3.5 w-3.5 text-neutral-400" />
+                    <span className="text-xs font-semibold text-neutral-500">
+                      Produção: {String(data.additional_time)}h
+                    </span>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
