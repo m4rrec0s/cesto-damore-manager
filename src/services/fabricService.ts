@@ -211,10 +211,12 @@ export const fabricService = {
     const cloned = await new Promise<FabricObject>((resolve) => {
       activeObject.clone((clonedObj: unknown) => {
         const cloned = clonedObj as FabricObject;
+        const newId = uuidv4();
         cloned.set({
           left: (activeObject.left || 0) + 10,
           top: (activeObject.top || 0) + 10,
-          objectId: uuidv4(),
+          objectId: newId,
+          id: newId, // Ensure compatibility with both naming conventions
         });
         resolve(cloned);
       });

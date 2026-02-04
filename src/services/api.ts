@@ -259,6 +259,7 @@ export interface Order {
   payment_method?: string | null;
   grand_total?: number | null;
   recipient_phone?: string | null;
+  google_drive_folder_url?: string | null;
   payment?: {
     id: string;
     status: string;

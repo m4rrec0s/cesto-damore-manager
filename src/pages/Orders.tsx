@@ -11,6 +11,7 @@ import {
   Loader2,
   MessageSquare,
   Filter,
+  MessageCircle,
 } from "lucide-react";
 import { useApi } from "../services/api";
 import type { Order, OrderStatus } from "../types";
@@ -155,67 +156,83 @@ export function Orders() {
                 onClick={() =>
                   setExpandedId(expandedId === order.id ? null : order.id)
                 }
-                className="p-6 cursor-pointer flex flex-col md:flex-row md:items-center justify-between gap-4"
+                className="p-4 cursor-pointer hover:bg-neutral-50/50 transition-colors"
               >
-                <div className="flex items-center gap-4">
-                  <div
-                    className={clsx(
-                      "w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm",
-                      order.status === "PAID"
-                        ? "bg-emerald-50 text-emerald-600"
-                        : order.status === "PENDING"
-                          ? "bg-amber-50 text-amber-600"
-                          : "bg-neutral-50 text-neutral-600",
-                    )}
-                  >
-                    {order.status === "DELIVERED" ? (
-                      <CheckCircle2 size={24} />
-                    ) : order.status === "CANCELED" ? (
-                      <XCircle size={24} />
-                    ) : (
-                      <Package size={24} />
-                    )}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-neutral-400 uppercase tracking-tighter">
-                        #{shortId(order.id)}
-                      </span>
-                      <span className="text-neutral-200">•</span>
-                      <span className="text-xs font-medium text-neutral-600">
-                        {formatDate(order.created_at)}
-                      </span>
-                    </div>
-                    <h4 className="font-bold text-neutral-950 text-lg">
-                      {order.user?.name || "Cliente Convidado"}
-                    </h4>
-                    <span
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div
                       className={clsx(
-                        "inline-block px-3 py-1 mt-1 rounded-full text-[10px] font-bold border",
-                        STATUS_COLORS[order.status],
+                        "w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0",
+                        order.status === "PAID"
+                          ? "bg-emerald-50 text-emerald-600"
+                          : order.status === "PENDING"
+                            ? "bg-amber-50 text-amber-600"
+                            : order.status === "CANCELED"
+                              ? "bg-red-50 text-red-600"
+                              : "bg-neutral-50 text-neutral-600",
                       )}
                     >
-                      {STATUS_LABELS[order.status]}
-                    </span>
-                  </div>
-                </div>
+                      {order.status === "DELIVERED" ? (
+                        <CheckCircle2 size={20} />
+                      ) : order.status === "CANCELED" ? (
+                        <XCircle size={20} />
+                      ) : (
+                        <Package size={20} />
+                      )}
+                    </div>
 
-                <div className="flex flex-wrap items-center gap-6 md:gap-10">
-                  <div className="text-right">
-                    <p className="text-xs font-medium text-neutral-400 uppercase tracking-wider">
-                      Total
-                    </p>
-                    <p className="text-xl font-black text-neutral-950">
-                      {formatCurrency(order.total)}
-                    </p>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-tight">
+                          #{shortId(order.id)}
+                        </span>
+                        <span className="text-neutral-200 text-xs">•</span>
+                        <span className="text-[10px] font-medium text-neutral-500">
+                          {formatDate(order.created_at)}
+                        </span>
+                      </div>
+
+                      <h4 className="font-bold text-neutral-950 text-base mb-1 truncate">
+                        {order.user?.name || "Cliente Convidado"}
+                      </h4>
+
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span
+                          className={clsx(
+                            "inline-block px-2 py-0.5 rounded-full text-[9px] font-bold border",
+                            STATUS_COLORS[order.status],
+                          )}
+                        >
+                          {STATUS_LABELS[order.status]}
+                        </span>
+
+                        <div className="flex items-center gap-1">
+                          <Package size={12} className="text-neutral-400" />
+                          <span className="text-[10px] font-medium text-neutral-600">
+                            {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'itens'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <ChevronDown
-                    size={24}
-                    className={clsx(
-                      "text-neutral-300 transition-transform duration-300 hidden md:block",
-                      expandedId === order.id && "rotate-180",
-                    )}
-                  />
+
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="text-right">
+                      <p className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">
+                        Total
+                      </p>
+                      <p className="text-xl font-black text-neutral-950">
+                        {formatCurrency(order.total)}
+                      </p>
+                    </div>
+                    <ChevronDown
+                      size={20}
+                      className={clsx(
+                        "text-neutral-300 transition-transform duration-300",
+                        expandedId === order.id && "rotate-180",
+                      )}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -228,24 +245,24 @@ export function Orders() {
                     transition={{ duration: 0.3 }}
                     className="border-t border-neutral-50"
                   >
-                    <div className="p-8 grid grid-cols-1 lg:grid-cols-2 gap-10">
-                      <div className="space-y-8">
+                    <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                      <div className="space-y-5">
                         <div>
-                          <h5 className="text-sm font-bold text-neutral-950 mb-4 flex items-center gap-2">
+                          <h5 className="text-xs font-bold text-neutral-950 mb-3 flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-neutral-500 rounded-full" />
                             Detalhes do Cliente
                           </h5>
-                          <div className="space-y-3 pl-3.5">
-                            <div className="flex items-center gap-3 text-neutral-900/70 font-medium">
+                          <div className="space-y-2 pl-3">
+                            <div className="flex items-center gap-2 text-neutral-900/70 font-medium text-sm">
                               <MessageSquare
-                                size={16}
+                                size={14}
                                 className="text-neutral-400"
                               />
                               <span>{order.user?.email}</span>
                             </div>
                             {order.user?.phone && (
-                              <div className="flex items-center gap-3 text-neutral-900/70 font-medium">
-                                <Phone size={16} className="text-neutral-400" />
+                              <div className="flex items-center gap-2 text-neutral-900/70 font-medium text-sm">
+                                <Phone size={14} className="text-neutral-400" />
                                 <a
                                   href={`https://wa.me/55${onlyDigits(
                                     order.user.phone,
@@ -261,26 +278,26 @@ export function Orders() {
                         </div>
 
                         <div>
-                          <h5 className="text-sm font-bold text-neutral-950 mb-4 flex items-center gap-2">
+                          <h5 className="text-xs font-bold text-neutral-950 mb-3 flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-neutral-500 rounded-full" />
                             Informações de Entrega
                           </h5>
-                          <div className="space-y-3 pl-3.5">
-                            <div className="flex items-start gap-3 text-neutral-900/70 font-medium">
+                          <div className="space-y-2 pl-3">
+                            <div className="flex items-start gap-2 text-neutral-900/70 font-medium text-sm">
                               <MapPin
-                                size={16}
-                                className="text-neutral-400 mt-1"
+                                size={14}
+                                className="text-neutral-400 mt-0.5"
                               />
-                              <span>
+                              <span className="text-xs">
                                 {order.delivery_address || "Retirada na Loja"}
                               </span>
                             </div>
-                            <div className="flex items-center gap-3 text-neutral-900/70 font-medium">
+                            <div className="flex items-center gap-2 text-neutral-900/70 font-medium text-sm">
                               <Calendar
-                                size={16}
+                                size={14}
                                 className="text-neutral-400"
                               />
-                              <span>
+                              <span className="text-xs">
                                 {order.created_at
                                   ? formatDate(order.created_at)
                                   : "N/A"}
@@ -290,11 +307,11 @@ export function Orders() {
                         </div>
 
                         <div>
-                          <h5 className="text-sm font-bold text-neutral-950 mb-4 flex items-center gap-2">
+                          <h5 className="text-xs font-bold text-neutral-950 mb-3 flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-neutral-500 rounded-full" />
                             Ações Rápidas
                           </h5>
-                          <div className="flex flex-wrap gap-3 pl-3.5">
+                          <div className="flex flex-wrap gap-2 pl-3">
                             {STATUS_FLOW.map((status) => (
                               <Button
                                 key={status}
@@ -306,14 +323,14 @@ export function Orders() {
                                   handleUpdateStatus(order.id, status)
                                 }
                                 className={clsx(
-                                  "px-4 py-2 rounded-xl text-xs font-bold transition-all shadow-sm",
+                                  "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm",
                                   order.status === status
                                     ? "bg-neutral-100 text-neutral-600 cursor-default"
                                     : "bg-white border border-neutral-100 text-neutral-900 hover:bg-neutral-50",
                                 )}
                               >
                                 {updatingId === order.id &&
-                                order.status !== status
+                                  order.status !== status
                                   ? "..."
                                   : STATUS_LABELS[status]}
                               </Button>
@@ -323,44 +340,111 @@ export function Orders() {
                                 onClick={() =>
                                   handleUpdateStatus(order.id, "CANCELED")
                                 }
-                                className="px-4 py-2 rounded-xl text-xs font-bold bg-white border border-neutral-100 text-neutral-400 hover:bg-neutral-50"
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-white border border-neutral-100 text-neutral-400 hover:bg-neutral-50"
                               >
                                 Cancelar
                               </Button>
                             )}
+                            {order.status === "CANCELED" && (
+                              <Button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (confirm("Tem certeza que deseja excluir permanentemente este pedido?")) {
+                                    try {
+                                      await api.deleteOrder(order.id);
+                                      toast.success("Pedido excluído com sucesso");
+                                      fetchOrders();
+                                    } catch (e) {
+                                      toast.error("Erro ao excluir pedido");
+                                    }
+                                  }
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-red-50 text-red-600 border border-red-100 hover:bg-red-100"
+                              >
+                                Excluir
+                              </Button>
+                            )}
                           </div>
+
+                          {order.user?.phone && (
+                            <div className="mt-4 pl-3">
+                              <Button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const phone = order.user?.phone;
+                                  if (phone) {
+                                    const formattedPhone = `55${onlyDigits(phone)}`;
+                                    window.open(`/service?phone=${formattedPhone}`, '_blank');
+                                  }
+                                }}
+                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100"
+                              >
+                                <MessageCircle size={14} />
+                                Ver Chat do Cliente
+                              </Button>
+                            </div>
+                          )}
+
+                          {order.google_drive_folder_url && (
+                            <div className="mt-4 pl-3">
+                              <a
+                                href={order.google_drive_folder_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+                              >
+                                <svg className="w-4 h-4" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg"><path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da" /><path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47" /><path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 5.85-10.15c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 10.15z" fill="#ea4335" /><path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d" /><path d="m59.8 53h-27.5l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.5c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc" /><path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8h29.75z" fill="#ffba00" /></svg>
+                                Arquivos no Drive
+                              </a>
+                              <p className="text-[9px] text-neutral-400 mt-0.5">Imagens e arquivos de personalização</p>
+                            </div>
+                          )}
+
                         </div>
                       </div>
 
-                      <div>
-                        <h5 className="text-sm font-bold text-neutral-950 mb-4 flex items-center gap-2">
+                      <div className="lg:col-span-2">
+                        <h5 className="text-xs font-bold text-neutral-950 mb-3 flex items-center gap-2">
                           <span className="w-1.5 h-1.5 bg-neutral-500 rounded-full" />
-                          Itens e Customizações
+                          Itens do Pedido
                         </h5>
-                        <div className="space-y-6">
+                        <div className="space-y-3">
                           {order.items?.map((item: any, idx: number) => (
                             <div
                               key={idx}
-                              className="bg-neutral-50/50 rounded-2xl p-5 border border-neutral-100/50"
+                              className="bg-neutral-50/50 rounded-xl p-4 border border-neutral-100/50"
                             >
-                              <div className="flex justify-between items-start mb-4">
-                                <div>
-                                  <h6 className="font-bold text-neutral-950">
-                                    {item.product?.name || "Produto"}
-                                  </h6>
-                                  <p className="text-xs text-neutral-600 font-medium">
-                                    Qtd: {item.quantity} •{" "}
-                                    {formatCurrency(item.price)}
-                                  </p>
+                              <div className="flex gap-3 mb-3">
+                                {item.product?.image_url && (
+                                  <div className="w-16 h-16 rounded-lg overflow-hidden bg-white border border-neutral-200 shrink-0">
+                                    <img
+                                      src={item.product.image_url}
+                                      alt={item.product.name}
+                                      className="w-full h-full object-contain p-1"
+                                    />
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex justify-between items-start gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <h6 className="font-bold text-neutral-950 text-sm mb-0.5">
+                                        {item.product?.name || "Produto"}
+                                      </h6>
+                                      <p className="text-[10px] text-neutral-600 font-medium">
+                                        Quantidade: {item.quantity} • Unitário: {formatCurrency(item.price)}
+                                      </p>
+                                    </div>
+                                    <span className="text-sm font-black text-neutral-950 shrink-0">
+                                      {formatCurrency(item.price * item.quantity)}
+                                    </span>
+                                  </div>
                                 </div>
-                                <span className="text-sm font-black text-neutral-950">
-                                  {formatCurrency(item.price * item.quantity)}
-                                </span>
                               </div>
 
                               {item.customizations &&
                                 item.customizations.length > 0 && (
-                                  <div className="space-y-3 mt-4">
+                                  <div className="space-y-2 mt-3 pt-3 border-t border-neutral-200">
+                                    <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Personalizações</p>
                                     {item.customizations.map((cust: any) => (
                                       <CustomizationDisplay
                                         key={cust.id}

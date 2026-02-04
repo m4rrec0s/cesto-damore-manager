@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import { Link } from "react-router-dom";
+import { useUI } from "../../contexts/UIContext";
 
 interface DesignToolbarProps {
   designId?: string | null;
@@ -59,6 +60,8 @@ export const DesignToolbar = ({
   productionTime,
   setProductionTime,
 }: DesignToolbarProps) => {
+  const { toggleSidebar } = useUI();
+
   return (
     <header className="flex items-center justify-between h-12 px-6 border-b border-neutral-700 bg-linear-to-r from-teal-500 via-blue-500 to-purple-500 shrink-0">
       <div className="flex items-center w-full">
@@ -66,6 +69,7 @@ export const DesignToolbar = ({
           <Button
             variant="link"
             className="px-0 py-0 text-white hover:no-underline"
+            onClick={toggleSidebar}
           >
             <Menu className="h-4 w-4" />
           </Button>

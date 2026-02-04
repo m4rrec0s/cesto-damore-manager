@@ -16,7 +16,7 @@ import { useEditor } from "../../hooks/useEditor";
 import { fabricService } from "../../services/fabricService";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
-
+import placeholderImg from "../../assets/placeholder.png";
 interface ToolbarProps {
   onAddText?: () => void;
   onAddImage?: () => void;
@@ -105,6 +105,29 @@ export function Toolbar({
     }
   };
 
+  const handleAddFrame = async () => {
+    if (!state.canvas) {
+      toast.error("Canvas não inicializado");
+      return;
+    }
+
+    try {
+      await fabricService.addImage(
+        state.canvas as unknown as never,
+        placeholderImg,
+        {
+          name: "Moldura",
+          isFrame: true, // Custom property to identify frames
+          opacity: 0.5,
+        }
+      );
+      toast.success("Moldura adicionada");
+    } catch (error) {
+      console.error("Erro ao adicionar moldura:", error);
+      toast.error("Erro ao adicionar moldura");
+    }
+  };
+
   const canUndo = state.currentHistoryIndex > 0;
   const canRedo = state.currentHistoryIndex < state.history.length - 1;
 
@@ -121,6 +144,21 @@ export function Toolbar({
         >
           <Type size={18} />
           <span className="hidden sm:inline">Texto</span>
+        </Button>
+
+
+
+
+
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleAddFrame}
+          title="Adicionar moldura (placeholder)"
+          className="gap-2"
+        >
+          <Square size={18} className="border-dashed border-2" />
+          <span className="hidden sm:inline">Moldura</span>
         </Button>
 
         <Button

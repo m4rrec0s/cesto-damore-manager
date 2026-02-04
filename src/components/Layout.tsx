@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -16,6 +16,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { useAuth } from "../contexts/useAuth";
+import { useUI } from "../contexts/UIContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "./ui/button";
 import logo from "../assets/logocestodamore.png";
@@ -42,11 +43,20 @@ const navItems = [
 ];
 
 export function Layout({ children }: { children: ReactNode }) {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const { isSidebarOpen, setIsSidebarOpen } = useUI();
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const path = location.pathname;
+
+  // Garante que a sidebar esteja sempre aberta em telas grandes, exceto no editor
+  useEffect(() => {
+    if (!path.startsWith("/layouts/editor")) {
+      if (window.innerWidth >= 768) {
+        setIsSidebarOpen(true);
+      }
+    }
+  }, [path, setIsSidebarOpen]);
 
   const handleLogout = () => {
     logout();
@@ -70,8 +80,8 @@ export function Layout({ children }: { children: ReactNode }) {
       <aside
         className={`
         fixed md:static top-0 left-0 z-50 h-dvh w-fit md:h-full overflow-hidden border-r border-neutral-200 transform transition-all duration-300 ease-in-out bg-white
-        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full "} 
-        md:translate-x-0 md: 
+        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full  w-0 md:w-0 border-none"} 
+        md:translate-x-0 
       `}
       >
         <div className="h-full flex flex-col p-3">
@@ -85,7 +95,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 <Link
                   key={item.name}
                   to={item.href}
-                  onClick={() => setIsSidebarOpen(false)}
+                  onClick={() => {
+                    if (window.innerWidth < 768) setIsSidebarOpen(false);
+                  }}
                   className={`
                     flex flex-col items-center px-4 py-3 rounded-xl transition-all duration-200 font-medium text-xs  justify-start
                     ${isActive

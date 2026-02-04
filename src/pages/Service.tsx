@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useApi } from "../services/api";
 import {
   MessageCircle,
@@ -38,6 +39,7 @@ interface AIAgentSession {
 
 export function Service() {
   const api = useApi();
+  const [searchParams] = useSearchParams();
   const [sessions, setSessions] = useState<AIAgentSession[]>([]);
   const [selectedSession, setSelectedSession] = useState<AIAgentSession | null>(
     null,
@@ -70,6 +72,23 @@ export function Service() {
       setLoading(true);
       const data = await api.getSessions();
       setSessions(data);
+
+      // Check if there's a phone parameter in the URL
+      const phoneParam = searchParams.get('phone');
+      if (phoneParam && data.length > 0) {
+        // Find session matching the phone number
+        const matchingSession = data.find(
+          (session: AIAgentSession) => session.customer_phone === phoneParam
+        );
+
+        if (matchingSession) {
+          setSelectedSession(matchingSession);
+          toast.success(`Chat do cliente ${matchingSession.customer?.name || phoneParam} carregado`);
+        } else {
+          toast.error(`Nenhuma sessão encontrada para o telefone ${phoneParam}`);
+        }
+      }
+
       setLoading(false);
     } catch (error) {
       console.error("Erro ao carregar sessões:", error);
@@ -173,9 +192,8 @@ export function Service() {
                 type="button"
                 key={session.id}
                 onClick={() => setSelectedSession(session)}
-                className={`w-full p-4 text-left hover:bg-neutral-50 transition-colors border-b border-neutral-50 ${
-                  selectedSession?.id === session.id ? "bg-neutral-200/80" : ""
-                }`}
+                className={`w-full p-4 text-left hover:bg-neutral-50 transition-colors border-b border-neutral-50 ${selectedSession?.id === session.id ? "bg-neutral-200/80" : ""
+                  }`}
               >
                 <div className="flex justify-between items-start mb-1">
                   <span className="font-bold text-neutral-900 flex items-center gap-2 truncate">
@@ -286,21 +304,19 @@ export function Service() {
                       className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
                     >
                       <div
-                        className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm ${
-                          msg.role === "user"
+                        className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm shadow-sm ${msg.role === "user"
                             ? "bg-neutral-900 text-white rounded-tr-none"
                             : "bg-white text-neutral-800 border border-neutral-100 rounded-tl-none"
-                        }`}
+                          }`}
                       >
                         <p className="whitespace-pre-wrap leading-relaxed">
                           {msg.content}
                         </p>
                         <div
-                          className={`text-[10px] mt-1 ${
-                            msg.role === "user"
+                          className={`text-[10px] mt-1 ${msg.role === "user"
                               ? "text-neutral-400"
                               : "text-neutral-400"
-                          }`}
+                            }`}
                         >
                           {format(new Date(msg.created_at), "HH:mm")}
                         </div>

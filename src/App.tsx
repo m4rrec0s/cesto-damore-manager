@@ -15,10 +15,11 @@ import { FollowUp } from "./pages/FollowUp";
 import DesignEditorPage from "./pages/DesignEditorPage";
 import { NewDesignPage } from "./pages/NewDesignPage";
 import DesignTestPage from "./pages/DesignTestPage";
+import { UIProvider } from "./contexts/UIContext";
 
 export default function App() {
   return (
-    <>
+    <UIProvider>
       <Toaster
         position="top-right"
         richColors
@@ -137,6 +138,6 @@ export default function App() {
         {/* Fallback */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
-    </>
+    </UIProvider>
   );
 }
