@@ -55,21 +55,27 @@ export function Dashboard() {
   const api = useApi();
   const [stats, setStats] = useState<any>(null);
   const [topSelling, setTopSelling] = useState<any[]>([]);
+  const [trendSummary, setTrendSummary] = useState<any>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingAI, setLoadingAI] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      const res = await api.getBusinessStatus(60);
-      const statusData = res.data || res;
+      const [statusRes, trendRes] = await Promise.all([
+        api.getBusinessStatus(60),
+        api.getTrendSummary(),
+      ]);
+      const statusData = statusRes.data || statusRes;
       setStats(statusData);
       setTopSelling(statusData.top_products || []);
+      setTrendSummary(trendRes);
 
       // Fetch existing AI summary on load
       try {
@@ -188,8 +194,22 @@ export function Dashboard() {
     });
   };
 
+  const trendProductsSold = trendSummary?.top_products_sold || [];
+  const trendProductsViewed = trendSummary?.top_products_viewed || [];
+  const trendLayoutsViewed = trendSummary?.top_layouts_viewed || [];
+  const trendRegions = trendSummary?.top_regions || [];
+
+  const regionColors = [
+    "#111827",
+    "#1f2937",
+    "#374151",
+    "#4b5563",
+    "#6b7280",
+    "#9ca3af",
+  ];
+
   return (
-    <div className="space-y-8 p-6 max-w-[1600px] mx-auto">
+    <div className="space-y-8 p-6 max-w-400 mx-auto">
       <div>
         <h2 className="text-3xl font-semibold text-neutral-950 mb-1">Visão Geral</h2>
         <p className="text-neutral-500">Acompanhe as métricas e insights da sua loja.</p>
@@ -391,6 +411,203 @@ export function Dashboard() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div className="lg:col-span-8 space-y-6">
+          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-neutral-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-neutral-900 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-emerald-500" />
+                Tendencias (30d)
+              </h3>
+              <span className="text-xs font-bold text-neutral-400 uppercase tracking-widest bg-neutral-50 px-3 py-1 rounded-full border border-neutral-100">
+                Atualizado diariamente
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-neutral-700">Produtos mais vendidos</h4>
+                <div className="rounded-2xl border border-neutral-100">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Produto</TableHead>
+                        <TableHead className="text-right">Vendas</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {trendProductsSold.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={2} className="text-center text-neutral-400">
+                            Sem dados de vendas
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        trendProductsSold.slice(0, 6).map((item: any) => (
+                          <TableRow key={item.product_id}>
+                            <TableCell className="font-medium text-neutral-900">
+                              {item.name}
+                            </TableCell>
+                            <TableCell className="text-right text-neutral-700">
+                              {item.total_sold}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-sm font-bold text-neutral-700">Produtos mais vistos</h4>
+                <div className="rounded-2xl border border-neutral-100">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Produto</TableHead>
+                        <TableHead className="text-right">Visitas</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {trendProductsViewed.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={2} className="text-center text-neutral-400">
+                            Sem dados de visitas
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        trendProductsViewed.slice(0, 6).map((item: any) => (
+                          <TableRow key={item.product_id}>
+                            <TableCell className="font-medium text-neutral-900">
+                              {item.name}
+                            </TableCell>
+                            <TableCell className="text-right text-neutral-700">
+                              {item.total_views}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-neutral-100">
+            <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+              <TrendingDown className="w-5 h-5 text-amber-500" />
+              Layouts mais acessados
+            </h3>
+            <div className="rounded-2xl border border-neutral-100">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Layout</TableHead>
+                    <TableHead className="text-right">Visitas</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {trendLayoutsViewed.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-center text-neutral-400">
+                        Sem dados de layouts
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    trendLayoutsViewed.slice(0, 6).map((item: any) => (
+                      <TableRow key={item.layout_id}>
+                        <TableCell className="font-medium text-neutral-900">
+                          {item.name}
+                        </TableCell>
+                        <TableCell className="text-right text-neutral-700">
+                          {item.total_views}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-4 space-y-6">
+          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-neutral-100">
+            <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2">
+              <ArrowUpRight className="w-5 h-5 text-indigo-500" />
+              Regioes com mais acessos
+            </h3>
+            {trendRegions.length === 0 ? (
+              <div className="p-8 text-center text-neutral-400 text-sm">
+                Sem dados de acesso
+              </div>
+            ) : (
+              <ChartContainer config={revenueConfig} className="h-72 w-full">
+                <PieChart>
+                  <Pie
+                    data={trendRegions.map((region: any) => ({
+                      name: region.region,
+                      value: region.total_access,
+                    }))}
+                    dataKey="value"
+                    nameKey="name"
+                    innerRadius={55}
+                    outerRadius={95}
+                    paddingAngle={2}
+                  >
+                    {trendRegions.map((_: any, idx: number) => (
+                      <Cell
+                        key={`cell-${idx}`}
+                        fill={regionColors[idx % regionColors.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: any, name: any) => [value, name]}
+                  />
+                </PieChart>
+              </ChartContainer>
+            )}
+          </div>
+
+          <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-neutral-100">
+            <h3 className="text-lg font-bold text-neutral-900 mb-4">IPs mais ativos</h3>
+            <div className="rounded-2xl border border-neutral-100">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>IP</TableHead>
+                    <TableHead className="text-right">Acessos</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {(trendSummary?.top_ips || []).length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={2} className="text-center text-neutral-400">
+                        Sem dados de IP
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    trendSummary.top_ips.slice(0, 6).map((item: any) => (
+                      <TableRow key={item.ip}>
+                        <TableCell className="font-medium text-neutral-900">
+                          {item.ip}
+                        </TableCell>
+                        <TableCell className="text-right text-neutral-700">
+                          {item.total_access}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </div>
       </div>

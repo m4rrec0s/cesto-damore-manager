@@ -1028,6 +1028,10 @@ class ApiService {
     ).data;
   };
 
+  getTrendSummary = async () => {
+    return (await this.get("/admin/trends/summary")).data;
+  };
+
   // ===== AIAgent Sessions =====
   getSessions = async () => (await this.get("/admin/ai/agent/sessions")).data;
 
