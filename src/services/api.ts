@@ -1035,6 +1035,9 @@ class ApiService {
   // ===== AIAgent Sessions =====
   getSessions = async () => (await this.get("/admin/ai/agent/sessions")).data;
 
+  getServiceSessions = async () =>
+    (await this.get("/admin/ai/agent/messages/sessions")).data;
+
   blockSession = async (sessionId: string) =>
     (await this.post(`/admin/ai/agent/sessions/${sessionId}/block`, {})).data;
 
@@ -1052,6 +1055,27 @@ class ApiService {
         },
       })
     ).data;
+
+  getServiceSessionMessages = async (
+    sessionId: string,
+    page: number = 1,
+    limit: number = 50,
+  ) =>
+    (
+      await this.get(`/admin/ai/agent/messages/service/${sessionId}`, {
+        params: { page, limit },
+      })
+    ).data;
+
+  getServiceSessionsStreamUrl = () => {
+    const apiKey = encodeURIComponent(import.meta.env.VITE_AI_API_KEY || "");
+    return `${API_URL}/ai/agent/messages/stream/sessions?x_ai_api_key=${apiKey}`;
+  };
+
+  getServiceSessionStreamUrl = (sessionId: string) => {
+    const apiKey = encodeURIComponent(import.meta.env.VITE_AI_API_KEY || "");
+    return `${API_URL}/ai/agent/messages/stream/${encodeURIComponent(sessionId)}?x_ai_api_key=${apiKey}`;
+  };
 
   // ===== Holidays =====
   getHolidays = async () => (await this.get("/admin/holidays")).data;
