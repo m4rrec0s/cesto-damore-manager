@@ -1146,85 +1146,31 @@ const DesignEditorPage = () => {
         let previewImageUrl: string | undefined;
         if (isManual) {
           try {
-            // Export preview using an offscreen Fabric canvas to avoid touching the
-            // user's active canvas and to ensure consistent scale and quality.
-            const state = currentCanvas.toObject(CUSTOM_PROPS);
+            // Export direto do canvas ativo: evita timeouts de loadFromJSON e
+            // força viewport fixa para não herdar zoom da tela (causa preview pequeno no canto).
+            const originalTransform = [
+              ...((currentCanvas as any).viewportTransform || [1, 0, 0, 1, 0, 0]),
+            ];
 
-            // Preload fonts used by the state to avoid layout/caret shifts
             try {
-              await preloadFontsFromState(state);
-            } catch (e) {
-              // ignore
-            }
+              (currentCanvas as any).setViewportTransform([
+                INTERNAL_DPI_MULTIPLIER,
+                0,
+                0,
+                INTERNAL_DPI_MULTIPLIER,
+                0,
+                0,
+              ]);
+              currentCanvas.renderAll();
 
-            const { Canvas: ExportCanvas } = await import("fabric");
-
-            // For preview: use identity viewport (no visual zoom) with multiplier 2 for quality.
-            // This keeps the image at correct visual scale while maintaining reasonable file size.
-            const previewViewport = [1, 0, 0, 1, 0, 0];
-            const previewMultiplier = 2;
-
-            const exportEl = document.createElement("canvas");
-            const exportCanvas = new (ExportCanvas as any)(exportEl, {
-              preserveObjectStacking: true,
-              enableRetinaScaling: false,
-              imageSmoothingEnabled: true,
-              backgroundColor: currentCanvas.backgroundColor || "#ffffff",
-            });
-
-            // Backing store: physical pixels (1x since using identity viewport)
-            exportCanvas.setDimensions(
-              {
-                width: Math.round(dimensions.width),
-                height: Math.round(dimensions.height),
-              },
-              { backstoreOnly: true },
-            );
-
-            // CSS size: logical design size
-            exportCanvas.setDimensions(
-              {
-                width: Math.round(dimensions.width),
-                height: Math.round(dimensions.height),
-              },
-              { cssOnly: true },
-            );
-
-            // Set viewport to identity (no zoom)
-            try {
-              exportCanvas.setViewportTransform(previewViewport);
-            } catch (e) {
-              // ignore
-            }
-
-            await exportCanvas.loadFromJSON(state);
-
-            // Ensure objects are ready
-            exportCanvas.getObjects().forEach((o: any) => {
-              o.set("objectCaching", false);
-              if (o.type === "textbox") {
-                try {
-                  o.initDimensions && o.initDimensions();
-                } catch (e) {
-                  /* ignore */
-                }
-              }
-              o.setCoords && o.setCoords();
-            });
-            exportCanvas.renderAll();
-
-            // Export from the prepared canvas with the preview multiplier already defined above
-            previewImageUrl = exportCanvas.toDataURL({
-              format: "png",
-              multiplier: previewMultiplier,
-              enableRetinaScaling: false,
-            });
-
-            // Cleanup
-            try {
-              exportCanvas.dispose && exportCanvas.dispose();
-            } catch (e) {
-              /* ignore */
+              previewImageUrl = currentCanvas.toDataURL({
+                format: "png",
+                multiplier: 2 / INTERNAL_DPI_MULTIPLIER,
+                enableRetinaScaling: false,
+              });
+            } finally {
+              (currentCanvas as any).setViewportTransform(originalTransform);
+              currentCanvas.renderAll();
             }
           } catch (err) {
             console.warn("Falha ao gerar preview:", err);
