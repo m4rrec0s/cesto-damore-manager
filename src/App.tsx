@@ -119,6 +119,14 @@ export default function App() {
           }
         />
         <Route
+          path="/service/:sessionId"
+          element={
+            <AdminRoute>
+              <Service />
+            </AdminRoute>
+          }
+        />
+        <Route
           path="/holidays"
           element={
             <AdminRoute>
