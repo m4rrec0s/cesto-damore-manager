@@ -117,8 +117,10 @@ export function ItemsTab() {
         setLoadingCustomizations(true);
         const data = await api.getCustomizations(itemId);
         setItemCustomizations(data || []);
+        return data || [];
       } catch (error) {
         console.error("Erro ao carregar customizações:", error);
+        return [];
       } finally {
         setLoadingCustomizations(false);
       }
@@ -258,67 +260,12 @@ export function ItemsTab() {
           formData as unknown as Record<string, unknown>,
           imageFile || undefined,
         );
-
-        // ✅ Garantir regra DYNAMIC_LAYOUT se ativou customização
-        if (formData.allows_customization) {
-          const hasDynamicLayout = itemCustomizations.some(
-            (c) => c.type === "DYNAMIC_LAYOUT",
-          );
-          if (!hasDynamicLayout) {
-            try {
-              await api.createCustomization({
-                item_id: editingItem.id,
-                name: "Design Personalizado",
-                type: "DYNAMIC_LAYOUT",
-                price: 0,
-                isRequired: true,
-                customization_data: {
-                  layouts: [],
-                  autoSelectSameType: true,
-                },
-              });
-            } catch (customizationError) {
-              console.error(
-                "Falha ao criar customização padrão de DYNAMIC_LAYOUT:",
-                customizationError,
-              );
-              toast.warning(
-                "Item salvo, mas a customização padrão não foi criada. Configure-a manualmente.",
-              );
-            }
-          }
-        }
         toast.success("Item atualizado!");
       } else {
-        const newItem = await api.createItem(
+        await api.createItem(
           formData as unknown as Record<string, unknown>,
           imageFile || undefined,
         );
-
-        // ✅ Para novos itens também
-        if (formData.allows_customization) {
-          try {
-            await api.createCustomization({
-              item_id: (newItem as any).id,
-              name: "Design Personalizado",
-              type: "DYNAMIC_LAYOUT",
-              price: 0,
-              isRequired: true,
-              customization_data: {
-                layouts: [],
-                autoSelectSameType: true,
-              },
-            });
-          } catch (customizationError) {
-            console.error(
-              "Falha ao criar customização padrão de DYNAMIC_LAYOUT:",
-              customizationError,
-            );
-            toast.warning(
-              "Item criado, mas a customização padrão não foi criada. Configure-a manualmente.",
-            );
-          }
-        }
         toast.success("Item criado!");
       }
       setIsModalOpen(false);
@@ -709,9 +656,9 @@ export function ItemsTab() {
                             itemCustomizations.map((custom) => (
                               <div
                                 key={custom.id}
-                                className="group flex items-center justify-between p-4 bg-white border border-neutral-100 rounded-[1.5rem] shadow-sm hover:border-neutral-200 hover:shadow-md transition-all"
+                                className="group flex items-start justify-between gap-3 p-4 bg-white border border-neutral-100 rounded-[1.5rem] shadow-sm hover:border-neutral-200 hover:shadow-md transition-all"
                               >
-                                <div className="flex items-center gap-4">
+                                <div className="flex min-w-0 flex-1 items-center gap-4">
                                   <div className="w-12 h-12 rounded-xl bg-neutral-50 flex items-center justify-center text-neutral-400 group-hover:bg-neutral-600 group-hover:text-white transition-colors">
                                     {custom.type === "TEXT" && (
                                       <span className="font-bold text-xs">
@@ -728,18 +675,18 @@ export function ItemsTab() {
                                       <Box size={20} />
                                     )}
                                   </div>
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <h4 className="text-sm font-bold text-neutral-900 leading-tight">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <h4 className="min-w-0 text-sm font-bold text-neutral-900 leading-tight break-words">
                                         {custom.name}
                                       </h4>
                                       {custom.isRequired && (
-                                        <span className="px-1.5 py-0.5 bg-red-50 text-red-500 rounded text-[8px] font-black uppercase">
+                                        <span className="shrink-0 px-1.5 py-0.5 bg-red-50 text-red-500 rounded text-[8px] font-black uppercase">
                                           Obrigatório
                                         </span>
                                       )}
                                     </div>
-                                    <div className="flex items-center gap-2 mt-0.5">
+                                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
                                       <p className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
                                         {custom.type === "TEXT"
                                           ? "Texto"
@@ -760,7 +707,7 @@ export function ItemsTab() {
                                     </div>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="flex shrink-0 items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                   <Button
                                     type="button"
                                     variant="ghost"
@@ -788,11 +735,33 @@ export function ItemsTab() {
                                           await api.deleteCustomization(
                                             custom.id,
                                           );
-                                          setItemCustomizations(
-                                            itemCustomizations.filter(
-                                              (c) => c.id !== custom.id,
-                                            ),
-                                          );
+                                          if (editingItem?.id) {
+                                            const refreshedCustomizations =
+                                              await fetchItemCustomizations(
+                                                editingItem.id,
+                                              );
+                                            const stillExists =
+                                              refreshedCustomizations.some(
+                                                (c: Customization) =>
+                                                  c.id === custom.id,
+                                              );
+
+                                            if (stillExists) {
+                                              throw new Error(
+                                                "A customização não foi removida no servidor.",
+                                              );
+                                            }
+
+                                            setItemCustomizations(
+                                              refreshedCustomizations,
+                                            );
+                                          } else {
+                                            setItemCustomizations((prev) =>
+                                              prev.filter(
+                                                (c) => c.id !== custom.id,
+                                              ),
+                                            );
+                                          }
                                           toast.success(
                                             "Customização removida",
                                           );
@@ -922,9 +891,10 @@ export function ItemsTab() {
                           setCustomizationFormData({
                             ...customizationFormData,
                             type: e.target.value as CustomizationTypeValue,
-                            customization_data: getDefaultCustomizationDataByType(
-                              e.target.value as CustomizationTypeValue,
-                            ),
+                            customization_data:
+                              getDefaultCustomizationDataByType(
+                                e.target.value as CustomizationTypeValue,
+                              ),
                           })
                         }
                         className="w-full h-12 px-4 rounded-2xl border border-neutral-100 bg-neutral-50/30 font-bold focus:ring-2 focus:ring-neutral-500/10"
@@ -1021,9 +991,9 @@ export function ItemsTab() {
                                   const options = [
                                     ...((customizationFormData
                                       .customization_data?.options as Record<
-                                        string,
-                                        unknown
-                                      >[]) || []),
+                                      string,
+                                      unknown
+                                    >[]) || []),
                                   ];
                                   options[idx] = {
                                     ...options[idx],
@@ -1052,9 +1022,9 @@ export function ItemsTab() {
                                     const options = [
                                       ...((customizationFormData
                                         .customization_data?.options as Record<
-                                          string,
-                                          unknown
-                                        >[]) || []),
+                                        string,
+                                        unknown
+                                      >[]) || []),
                                     ];
                                     options[idx] = {
                                       ...options[idx],
@@ -1134,13 +1104,13 @@ export function ItemsTab() {
                                     onClick={() => {
                                       const newLayouts = isSelected
                                         ? selectedLayouts.filter(
-                                          (l: Record<string, unknown>) =>
-                                            l.id !== layout.id,
-                                        )
+                                            (l: Record<string, unknown>) =>
+                                              l.id !== layout.id,
+                                          )
                                         : [
-                                          ...selectedLayouts,
-                                          layout as Record<string, unknown>,
-                                        ];
+                                            ...selectedLayouts,
+                                            layout as Record<string, unknown>,
+                                          ];
                                       setCustomizationFormData({
                                         ...customizationFormData,
                                         customization_data: {
