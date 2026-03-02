@@ -35,6 +35,37 @@ import {
 } from "../ui/table";
 import { Input } from "../ui/input";
 
+const getDefaultCustomizationDataByType = (
+  type: CustomizationTypeValue,
+): Record<string, unknown> => {
+  switch (type) {
+    case "TEXT":
+      return { fields: [] };
+    case "MULTIPLE_CHOICE":
+      return { options: [] };
+    case "DYNAMIC_LAYOUT":
+      return { layouts: [] };
+    case "IMAGES":
+      return { DYNAMIC_LAYOUT: null };
+    default:
+      return {};
+  }
+};
+
+const normalizeCustomizationPayload = (payload: {
+  name: string;
+  type: CustomizationTypeValue;
+  price: number;
+  isRequired: boolean;
+  customization_data: Record<string, unknown>;
+}) => ({
+  ...payload,
+  customization_data: {
+    ...getDefaultCustomizationDataByType(payload.type),
+    ...(payload.customization_data || {}),
+  },
+});
+
 export function ItemsTab() {
   const api = useApi();
   const [items, setItems] = useState<Item[]>([]);
@@ -194,14 +225,18 @@ export function ItemsTab() {
     if (!editingItem) return;
 
     try {
+      const normalizedPayload = normalizeCustomizationPayload(
+        customizationFormData,
+      );
+
       if (editingCustomization) {
         await api.updateCustomization(editingCustomization.id, {
-          ...customizationFormData,
+          ...normalizedPayload,
         });
         toast.success("Customização atualizada");
       } else {
         await api.createCustomization({
-          ...customizationFormData,
+          ...normalizedPayload,
           item_id: editingItem.id,
         });
         toast.success("Customização criada");
@@ -230,14 +265,27 @@ export function ItemsTab() {
             (c) => c.type === "DYNAMIC_LAYOUT",
           );
           if (!hasDynamicLayout) {
-            await api.createCustomization({
-              item_id: editingItem.id,
-              name: "Design Personalizado",
-              type: "DYNAMIC_LAYOUT",
-              price: 0,
-              isRequired: true,
-              customization_data: { autoSelectSameType: true },
-            });
+            try {
+              await api.createCustomization({
+                item_id: editingItem.id,
+                name: "Design Personalizado",
+                type: "DYNAMIC_LAYOUT",
+                price: 0,
+                isRequired: true,
+                customization_data: {
+                  layouts: [],
+                  autoSelectSameType: true,
+                },
+              });
+            } catch (customizationError) {
+              console.error(
+                "Falha ao criar customização padrão de DYNAMIC_LAYOUT:",
+                customizationError,
+              );
+              toast.warning(
+                "Item salvo, mas a customização padrão não foi criada. Configure-a manualmente.",
+              );
+            }
           }
         }
         toast.success("Item atualizado!");
@@ -249,14 +297,27 @@ export function ItemsTab() {
 
         // ✅ Para novos itens também
         if (formData.allows_customization) {
-          await api.createCustomization({
-            item_id: (newItem as any).id,
-            name: "Design Personalizado",
-            type: "DYNAMIC_LAYOUT",
-            price: 0,
-            isRequired: true,
-            customization_data: { autoSelectSameType: true },
-          });
+          try {
+            await api.createCustomization({
+              item_id: (newItem as any).id,
+              name: "Design Personalizado",
+              type: "DYNAMIC_LAYOUT",
+              price: 0,
+              isRequired: true,
+              customization_data: {
+                layouts: [],
+                autoSelectSameType: true,
+              },
+            });
+          } catch (customizationError) {
+            console.error(
+              "Falha ao criar customização padrão de DYNAMIC_LAYOUT:",
+              customizationError,
+            );
+            toast.warning(
+              "Item criado, mas a customização padrão não foi criada. Configure-a manualmente.",
+            );
+          }
         }
         toast.success("Item criado!");
       }
@@ -861,6 +922,9 @@ export function ItemsTab() {
                           setCustomizationFormData({
                             ...customizationFormData,
                             type: e.target.value as CustomizationTypeValue,
+                            customization_data: getDefaultCustomizationDataByType(
+                              e.target.value as CustomizationTypeValue,
+                            ),
                           })
                         }
                         className="w-full h-12 px-4 rounded-2xl border border-neutral-100 bg-neutral-50/30 font-bold focus:ring-2 focus:ring-neutral-500/10"
