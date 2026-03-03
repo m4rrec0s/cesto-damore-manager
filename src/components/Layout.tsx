@@ -14,6 +14,7 @@ import {
   X,
   Calendar,
   RefreshCw,
+  FlaskConical,
 } from "lucide-react";
 import { useAuth } from "../contexts/useAuth";
 import { useUI } from "../contexts/UIContext";
@@ -37,6 +38,7 @@ const navItems = [
   },
   { name: "Feed", href: "/feed", icon: PackageCheck },
   { name: "Atendimento", href: "/service", icon: BotMessageSquare },
+  { name: "Teste LLM", href: "/llm-test", icon: FlaskConical },
   { name: "Feriados", href: "/holidays", icon: Calendar },
   { name: "Follow-up", href: "/follow-up", icon: RefreshCw },
   { name: "Design Editor", href: "/layouts", icon: Palette },

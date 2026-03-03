@@ -13,6 +13,7 @@ import {
   Trash2,
   ChevronUp,
   ArrowLeft,
+  FlaskConical,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,7 +29,7 @@ interface AIAgentMessage {
 
 interface AIAgentSession {
   id: string;
-  customer_phone: string;
+  customer_phone: string | null;
   is_blocked: boolean;
   expires_at: string;
   created_at: string;
@@ -69,6 +70,8 @@ interface NewMessageEvent {
   created_at: string;
 }
 
+type SessionFilter = "all" | "lab" | "prod";
+
 export function Service() {
   const api = useApi();
   const navigate = useNavigate();
@@ -83,6 +86,7 @@ export function Service() {
   const [hasMore, setHasMore] = useState(false);
   const [totalMessages, setTotalMessages] = useState(0);
   const [bumpedSessionId, setBumpedSessionId] = useState<string | null>(null);
+  const [sessionFilter, setSessionFilter] = useState<SessionFilter>("all");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const knownMessageIdsRef = useRef<Set<string>>(new Set());
@@ -101,6 +105,36 @@ export function Service() {
     () => sessions.find((session) => session.id === routeSessionId) || null,
     [sessions, routeSessionId],
   );
+
+  const isLabSession = (sessionId: string, customerPhone?: string | null) => {
+    const normalized = sessionId.toLowerCase();
+    if (
+      normalized.startsWith("session-lab-") ||
+      normalized.startsWith("lab-") ||
+      normalized.includes("-lab-") ||
+      normalized.includes("_lab_")
+    ) {
+      return true;
+    }
+
+    // fallback: sessões com letras no id e sem telefone tendem a ser ambientes LAB
+    if (!customerPhone && /^session-[a-z]/i.test(sessionId)) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const filteredSessions = useMemo(() => {
+    if (sessionFilter === "all") return sessions;
+    if (sessionFilter === "lab")
+      return sessions.filter((session) =>
+        isLabSession(session.id, session.customer_phone),
+      );
+    return sessions.filter(
+      (session) => !isLabSession(session.id, session.customer_phone),
+    );
+  }, [sessions, sessionFilter]);
 
   useEffect(() => {
     routeSessionIdRef.current = routeSessionId;
@@ -447,6 +481,41 @@ export function Service() {
             Atendimento IA
           </h2>
           <p className="text-xs text-slate-500 mt-1">Sessões ativas</p>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSessionFilter("all")}
+              className={`text-[11px] px-2 py-1 rounded-full border ${
+                sessionFilter === "all"
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-slate-600 border-slate-200"
+              }`}
+            >
+              Todas
+            </button>
+            <button
+              type="button"
+              onClick={() => setSessionFilter("lab")}
+              className={`text-[11px] px-2 py-1 rounded-full border ${
+                sessionFilter === "lab"
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-white text-emerald-700 border-emerald-200"
+              }`}
+            >
+              LAB
+            </button>
+            <button
+              type="button"
+              onClick={() => setSessionFilter("prod")}
+              className={`text-[11px] px-2 py-1 rounded-full border ${
+                sessionFilter === "prod"
+                  ? "bg-slate-700 text-white border-slate-700"
+                  : "bg-white text-slate-700 border-slate-200"
+              }`}
+            >
+              Produção
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto">
@@ -455,14 +524,15 @@ export function Service() {
               <Loader className="w-5 h-5 animate-spin text-slate-400 mx-auto mb-2" />
               <p className="text-slate-400 text-sm">Carregando sessões...</p>
             </div>
-          ) : sessions.length === 0 ? (
+          ) : filteredSessions.length === 0 ? (
             <div className="p-8 text-center text-slate-400 text-sm">
-              Nenhuma sessão disponível
+              Nenhuma sessão disponível para este filtro
             </div>
           ) : (
-            sessions.map((session) => {
+            filteredSessions.map((session) => {
               const selected = selectedSession?.id === session.id;
               const bumped = bumpedSessionId === session.id;
+              const lab = isLabSession(session.id, session.customer_phone);
 
               return (
                 <motion.button
@@ -478,7 +548,13 @@ export function Service() {
                   key={session.id}
                   onClick={() => handleSelectSession(session)}
                   className={`w-full p-4 text-left border-b border-slate-100 ${
-                    selected ? "bg-slate-100" : "hover:bg-slate-50"
+                    selected
+                      ? lab
+                        ? "bg-emerald-50"
+                        : "bg-slate-100"
+                      : lab
+                        ? "bg-emerald-50/40 hover:bg-emerald-50"
+                        : "hover:bg-slate-50"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-3">
@@ -493,6 +569,12 @@ export function Service() {
                           session.customer_phone ||
                           "Cliente"}
                       </span>
+                      {lab && (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-semibold">
+                          <FlaskConical size={10} />
+                          LAB
+                        </span>
+                      )}
                     </div>
                     <User size={14} className="text-slate-400 shrink-0" />
                   </div>
@@ -556,8 +638,18 @@ export function Service() {
                 <div className="min-w-0">
                   <h3 className="font-semibold text-slate-900 truncate">
                     {selectedSession.customer?.name ||
-                      selectedSession.customer_phone}
+                      selectedSession.customer_phone ||
+                      "Cliente"}
                   </h3>
+                  {isLabSession(
+                    selectedSession.id,
+                    selectedSession.customer_phone,
+                  ) && (
+                    <p className="text-[11px] mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-100 text-emerald-800 px-2 py-0.5 w-fit">
+                      <FlaskConical size={10} />
+                      Sessão LAB
+                    </p>
+                  )}
                   <p className="text-xs text-slate-500 mt-1">
                     {totalMessages} mensagens na sessão
                   </p>
