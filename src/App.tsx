@@ -15,6 +15,7 @@ import { FollowUp } from "./pages/FollowUp";
 import DesignEditorPage from "./pages/DesignEditorPage";
 import { NewDesignPage } from "./pages/NewDesignPage";
 import DesignTestPage from "./pages/DesignTestPage";
+import { LlmTestSessionPage } from "./pages/LlmTestSessionPage";
 import { UIProvider } from "./contexts/UIContext";
 
 export default function App() {
@@ -123,6 +124,14 @@ export default function App() {
           element={
             <AdminRoute>
               <Service />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/llm-test"
+          element={
+            <AdminRoute>
+              <LlmTestSessionPage />
             </AdminRoute>
           }
         />
