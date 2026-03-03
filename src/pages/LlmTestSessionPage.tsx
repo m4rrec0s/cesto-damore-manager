@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
+  ArrowLeft,
   Bot,
   Image as ImageIcon,
   Loader2,
@@ -144,6 +145,7 @@ export function LlmTestSessionPage() {
   const [activeSessionId, setActiveSessionId] = useState<string>("");
   const [isSending, setIsSending] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const userId = user?.id || "anonymous";
   const customerName = user?.name?.trim() || "cliente";
@@ -179,6 +181,17 @@ export function LlmTestSessionPage() {
     [sessions, activeSessionId],
   );
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }, 40);
+
+    return () => clearTimeout(timer);
+  }, [activeSessionId, activeSession?.messages.length]);
+
   const createSession = () => {
     const next = createLabSession(userId);
     setSessions((prev) => [next, ...prev]);
@@ -204,7 +217,9 @@ export function LlmTestSessionPage() {
     await clearSessionOnServer(activeSession);
 
     setSessions((prev) => {
-      const filtered = prev.filter((session) => session.id !== activeSession.id);
+      const filtered = prev.filter(
+        (session) => session.id !== activeSession.id,
+      );
       if (filtered.length > 0) {
         setActiveSessionId(filtered[0].id);
         return filtered;
@@ -313,44 +328,68 @@ export function LlmTestSessionPage() {
     }
   };
 
+  const showMobileChat = Boolean(activeSessionId);
+
   return (
-    <div className="h-full min-h-0 w-full bg-neutral-100 p-3 md:p-6">
-      <div className="mx-auto h-full max-w-6xl rounded-3xl border border-neutral-200 bg-white shadow-sm flex min-h-0 overflow-hidden">
-        <aside className="w-72 border-r border-neutral-200 bg-neutral-50 p-3 hidden md:flex md:flex-col md:min-h-0">
+    <div className="h-full min-h-0 w-full bg-slate-100 flex flex-col md:flex-row">
+      <aside
+        className={`md:flex md:w-80 md:min-w-80 border-r border-slate-200 bg-white flex-col min-h-0 ${
+          showMobileChat ? "hidden md:flex" : "flex"
+        }`}
+      >
+        <div className="p-4 border-b border-slate-200 shrink-0">
+          <h2 className="text-lg font-semibold text-slate-900">
+            Sessoes LAB
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">Teste da IA</p>
           <Button onClick={createSession} className="mb-3 gap-2">
             <Plus size={14} />
             Nova sessão LAB
           </Button>
-          <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
-            {sessions.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                onClick={() => setActiveSessionId(session.id)}
-                className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                  session.id === activeSessionId
-                    ? "border-neutral-900 bg-white"
-                    : "border-neutral-200 bg-white hover:bg-neutral-100"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-                    LAB
-                  </span>
-                  <span className="text-[11px] text-neutral-400">
-                    {session.messages.length} msg
-                  </span>
-                </div>
-                <p className="text-xs text-neutral-500 mt-2 truncate">
-                  {session.messages.at(-1)?.content || "Sessão vazia"}
-                </p>
-              </button>
-            ))}
-          </div>
-        </aside>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-2">
+          {sessions.map((session) => (
+            <button
+              key={session.id}
+              type="button"
+              onClick={() => setActiveSessionId(session.id)}
+              className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                session.id === activeSessionId
+                  ? "border-emerald-300 bg-emerald-50"
+                  : "border-slate-200 bg-white hover:bg-slate-50"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full">
+                  LAB
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  {session.messages.length} msg
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-2 truncate">
+                {session.messages.at(-1)?.content || "Sessao vazia"}
+              </p>
+            </button>
+          ))}
+        </div>
+      </aside>
 
-        <section className="flex-1 flex min-h-0 flex-col">
-          <header className="border-b border-neutral-200 p-4 md:p-5 flex items-center justify-between">
+      <section
+        className={`flex-1 min-h-0 flex-col bg-slate-50 ${
+          showMobileChat ? "flex" : "hidden md:flex"
+        }`}
+      >
+        <header className="border-b border-slate-200 p-3 md:p-5 bg-white flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <Button
+              type="button"
+              variant="ghost"
+              className="md:hidden px-2"
+              onClick={() => setActiveSessionId("")}
+            >
+              <ArrowLeft size={16} />
+            </Button>
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-10 w-10 rounded-xl bg-neutral-900 text-white flex items-center justify-center">
                 <Sparkles size={18} />
@@ -364,126 +403,118 @@ export function LlmTestSessionPage() {
                 </p>
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={createSession}
-                className="md:hidden"
-              >
-                <Plus size={14} />
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={deleteCurrentSession}
-                className="border-red-200 text-red-600 hover:bg-red-50 gap-2"
-              >
-                <Trash2 size={14} />
-                <span className="hidden md:inline">Excluir sessão</span>
-              </Button>
-            </div>
-          </header>
-
-          <main className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 space-y-5 bg-neutral-50">
-            {!activeSession || activeSession.messages.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-neutral-500 text-sm">
-                Envie a primeira mensagem para iniciar o teste.
-              </div>
-            ) : (
-              activeSession.messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[92%] md:max-w-[80%] rounded-2xl p-4 shadow-sm ${
-                      message.role === "user"
-                        ? "bg-neutral-900 text-white rounded-br-md"
-                        : "bg-white border border-neutral-200 text-neutral-800 rounded-bl-md"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 text-xs mb-2 opacity-80">
-                      {message.role === "user" ? (
-                        <User size={14} />
-                      ) : (
-                        <Bot size={14} />
-                      )}
-                      <span>{message.role === "user" ? "Você" : "IA"}</span>
-                    </div>
-                    <p className="text-sm whitespace-pre-wrap leading-relaxed">
-                      {message.content}
-                    </p>
-
-                    {message.images && message.images.length > 0 && (
-                      <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {message.images.map((url) => (
-                          <button
-                            key={url}
-                            type="button"
-                            onClick={() => setPreviewImageUrl(url)}
-                            className="group relative overflow-hidden rounded-lg border border-neutral-200 bg-neutral-100"
-                          >
-                            <img
-                              src={url}
-                              alt="Pré-visualização enviada pela IA"
-                              className="h-28 w-full object-cover transition-transform duration-200 group-hover:scale-105"
-                              loading="lazy"
-                              referrerPolicy="no-referrer"
-                            />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
-                              <ImageIcon
-                                size={18}
-                                className="text-white opacity-0 group-hover:opacity-100"
-                              />
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))
-            )}
-
-            {isSending && (
-              <div className="flex justify-start">
-                <div className="rounded-2xl rounded-bl-md border border-neutral-200 bg-white px-4 py-3 flex items-center gap-2 text-neutral-600 text-sm">
-                  <Loader2 size={16} className="animate-spin" />
-                  Aguardando resposta do n8n...
-                </div>
-              </div>
-            )}
-          </main>
-
-          <form
-            onSubmit={sendMessage}
-            className="border-t border-neutral-200 p-4 md:p-5 bg-white"
+          <Button
+            type="button"
+            variant="outline"
+            onClick={deleteCurrentSession}
+            className="border-red-200 text-red-600 hover:bg-red-50 gap-2 shrink-0"
           >
-            <div className="flex items-end gap-2">
-              <textarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder="Digite sua mensagem para a IA..."
-                rows={2}
-                className="min-h-[52px] max-h-40 flex-1 resize-y rounded-xl border border-neutral-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-300"
-              />
-              <Button
-                type="submit"
-                disabled={isSending || !input.trim()}
-                className="h-[52px] px-4"
-              >
-                {isSending ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <SendHorizontal size={16} />
-                )}
-              </Button>
+            <Trash2 size={14} />
+            <span className="hidden sm:inline">Excluir</span>
+          </Button>
+        </header>
+
+        <main className="flex-1 min-h-0 overflow-y-auto px-3 py-4 md:px-6 md:py-5 space-y-4">
+          {!activeSession || activeSession.messages.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-slate-500 text-sm">
+              Envie a primeira mensagem para iniciar o teste.
             </div>
-          </form>
-        </section>
-      </div>
+          ) : (
+            activeSession.messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[92%] md:max-w-[82%] rounded-2xl p-4 shadow-sm ${
+                    message.role === "user"
+                      ? "bg-slate-900 text-white rounded-tr-md"
+                      : "bg-white border border-slate-200 text-slate-800 rounded-tl-md"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 text-xs mb-2 opacity-80">
+                    {message.role === "user" ? <User size={14} /> : <Bot size={14} />}
+                    <span>{message.role === "user" ? "Voce" : "IA"}</span>
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">
+                    {message.content}
+                  </p>
+
+                  {message.images && message.images.length > 0 && (
+                    <div className="mt-3 grid grid-cols-2 md:grid-cols-3 gap-2">
+                      {message.images.map((url) => (
+                        <button
+                          key={url}
+                          type="button"
+                          onClick={() => setPreviewImageUrl(url)}
+                          className="group relative overflow-hidden rounded-lg border border-slate-200 bg-slate-100"
+                        >
+                          <img
+                            src={url}
+                            alt="Pre-visualizacao enviada pela IA"
+                            className="h-28 w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center">
+                            <ImageIcon
+                              size={18}
+                              className="text-white opacity-0 group-hover:opacity-100"
+                            />
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+          <div ref={messagesEndRef} />
+
+          {isSending && (
+            <div className="flex justify-start">
+              <div className="rounded-2xl rounded-tl-md border border-slate-200 bg-white px-4 py-3 flex items-center gap-2 text-slate-600 text-sm">
+                <Loader2 size={16} className="animate-spin" />
+                Aguardando resposta do n8n...
+              </div>
+            </div>
+          )}
+        </main>
+        <form
+          onSubmit={sendMessage}
+          className="border-t border-slate-200 p-3 md:p-5 bg-white shrink-0"
+        >
+          <div className="flex items-end gap-2">
+            <textarea
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  sendMessage(event as unknown as FormEvent);
+                }
+              }}
+              placeholder="Digite sua mensagem para a IA..."
+              rows={2}
+              className="min-h-[52px] max-h-40 flex-1 resize-y rounded-xl border border-slate-300 px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
+            />
+            <Button
+              type="submit"
+              disabled={isSending || !input.trim()}
+              className="h-[52px] w-[52px] p-0 shrink-0"
+            >
+              {isSending ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <SendHorizontal size={16} />
+              )}
+            </Button>
+          </div>
+        </form>
+      </section>
 
       {previewImageUrl && (
         <div
@@ -495,7 +526,7 @@ export function LlmTestSessionPage() {
               setPreviewImageUrl(null);
             }
           }}
-          className="fixed inset-0 z-[80] bg-black/70 p-4 md:p-10 flex items-center justify-center"
+          className="fixed inset-0 z-80 bg-black/70 p-4 md:p-10 flex items-center justify-center"
         >
           <button
             type="button"
@@ -512,6 +543,7 @@ export function LlmTestSessionPage() {
           />
         </div>
       )}
+
     </div>
   );
 }
