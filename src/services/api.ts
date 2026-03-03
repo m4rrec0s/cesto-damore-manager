@@ -64,6 +64,20 @@ export interface PaginationInfo {
   totalPages: number;
 }
 
+export type PromptOverrideMode = "temporary" | "permanent";
+
+export interface PromptPriorityOverrideConfig {
+  id: number;
+  prompt_text: string;
+  is_enabled: boolean;
+  mode: PromptOverrideMode;
+  starts_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  is_active_now: boolean;
+}
+
 // ===== Product Types =====
 export interface ProductComponent {
   id: string;
@@ -1076,6 +1090,44 @@ class ApiService {
     const apiKey = encodeURIComponent(import.meta.env.VITE_AI_API_KEY || "");
     return `${API_URL}/ai/agent/messages/stream/${encodeURIComponent(sessionId)}?x_ai_api_key=${apiKey}`;
   };
+
+  listPromptPriorityOverrides = async (): Promise<{
+    status: "success" | "error";
+    prompts: PromptPriorityOverrideConfig[];
+    error?: string;
+  }> => (await this.get("/admin/ai/prompt-overrides")).data;
+
+  createPromptPriorityOverride = async (payload: {
+    prompt_text: string;
+    is_enabled: boolean;
+    mode: PromptOverrideMode;
+    starts_at?: string | null;
+    expires_at?: string | null;
+  }): Promise<{
+    status: "success" | "error";
+    prompt: PromptPriorityOverrideConfig;
+    error?: string;
+  }> => (await this.post("/admin/ai/prompt-overrides", payload)).data;
+
+  updatePromptPriorityOverride = async (
+    id: number,
+    payload: {
+      prompt_text: string;
+      is_enabled: boolean;
+      mode: PromptOverrideMode;
+      starts_at?: string | null;
+      expires_at?: string | null;
+    },
+  ): Promise<{
+    status: "success" | "error";
+    prompt: PromptPriorityOverrideConfig;
+    error?: string;
+  }> => (await this.put(`/admin/ai/prompt-overrides/${id}`, payload)).data;
+
+  deletePromptPriorityOverride = async (
+    id: number,
+  ): Promise<{ status: "success" | "error"; message?: string; error?: string }> =>
+    (await this.delete(`/admin/ai/prompt-overrides/${id}`)).data;
 
   // ===== Holidays =====
   getHolidays = async () => (await this.get("/admin/holidays")).data;
