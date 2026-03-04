@@ -78,6 +78,13 @@ export interface PromptPriorityOverrideConfig {
   is_active_now: boolean;
 }
 
+export interface PromptInjectionMetadata {
+  syntax: string;
+  available_fields: string[];
+  default_fields: string[];
+  dynamic_rule: string;
+}
+
 // ===== Product Types =====
 export interface ProductComponent {
   id: string;
@@ -1094,6 +1101,7 @@ class ApiService {
   listPromptPriorityOverrides = async (): Promise<{
     status: "success" | "error";
     prompts: PromptPriorityOverrideConfig[];
+    prompt_injection?: PromptInjectionMetadata;
     error?: string;
   }> => (await this.get("/admin/ai/prompt-overrides")).data;
 
