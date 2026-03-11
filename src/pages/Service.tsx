@@ -72,6 +72,14 @@ interface NewMessageEvent {
 
 type SessionFilter = "all" | "lab" | "prod";
 
+const normalizePhone = (value?: string | null) => {
+  const digits = (value || "").replace(/\D/g, "");
+  if (digits.length === 13 && digits.startsWith("55")) {
+    return digits.slice(2);
+  }
+  return digits;
+};
+
 export function Service() {
   const api = useApi();
   const navigate = useNavigate();
@@ -327,8 +335,10 @@ export function Service() {
         const phoneParam = searchParams.get("phone");
 
         if (phoneParam) {
+          const normalizedPhoneParam = normalizePhone(phoneParam);
           const matchingSession = data.find(
-            (session: AIAgentSession) => session.customer_phone === phoneParam,
+            (session: AIAgentSession) =>
+              normalizePhone(session.customer_phone) === normalizedPhoneParam,
           );
 
           if (matchingSession) {

@@ -35,6 +35,41 @@ import {
 } from "../ui/table";
 import { Input } from "../ui/input";
 
+type CropFormatKey =
+  | "FREE"
+  | "1:1"
+  | "16:9"
+  | "4:3"
+  | "A4_PORTRAIT"
+  | "A4_LANDSCAPE"
+  | "CUSTOM";
+
+type CropUnit = "px" | "cm";
+
+const getAspectRatioByFormat = (
+  format: CropFormatKey,
+  width?: number,
+  height?: number,
+): number | undefined => {
+  switch (format) {
+    case "1:1":
+      return 1;
+    case "16:9":
+      return 16 / 9;
+    case "4:3":
+      return 4 / 3;
+    case "A4_PORTRAIT":
+      return 210 / 297;
+    case "A4_LANDSCAPE":
+      return 297 / 210;
+    case "CUSTOM":
+      if (!width || !height || width <= 0 || height <= 0) return undefined;
+      return width / height;
+    default:
+      return undefined;
+  }
+};
+
 const getDefaultCustomizationDataByType = (
   type: CustomizationTypeValue,
 ): Record<string, unknown> => {
@@ -46,7 +81,16 @@ const getDefaultCustomizationDataByType = (
     case "DYNAMIC_LAYOUT":
       return { layouts: [] };
     case "IMAGES":
-      return { DYNAMIC_LAYOUT: null };
+      return {
+        dynamic_layout: { max_images: 10 },
+        image_crop: {
+          format: "1:1",
+          aspect_ratio: 1,
+          unit: "px",
+          width: 1000,
+          height: 1000,
+        },
+      };
     default:
       return {};
   }
@@ -217,7 +261,10 @@ export function ItemsTab() {
       type: custom.type,
       price: custom.price,
       isRequired: custom.isRequired,
-      customization_data: custom.customization_data,
+      customization_data: {
+        ...getDefaultCustomizationDataByType(custom.type),
+        ...(custom.customization_data || {}),
+      },
     });
     setIsCustomizationFormOpen(true);
   };
@@ -677,7 +724,7 @@ export function ItemsTab() {
                                   </div>
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
-                                      <h4 className="min-w-0 text-sm font-bold text-neutral-900 leading-tight break-words">
+                                      <h4 className="min-w-0 text-sm font-bold text-neutral-900 leading-tight wrap-break-word">
                                         {custom.name}
                                       </h4>
                                       {custom.isRequired && (
@@ -1143,6 +1190,295 @@ export function ItemsTab() {
                             )}
                           </div>
                         )}
+                      </div>
+                    )}
+
+                    {customizationFormData.type === "IMAGES" && (
+                      <div className="space-y-4">
+                        <label className="text-xs font-black text-neutral-600 uppercase tracking-widest block">
+                          🖼️ Formato de Recorte (IMAGE)
+                        </label>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1 block">
+                              Máximo de imagens
+                            </label>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={20}
+                              value={
+                                Number(
+                                  (
+                                    customizationFormData.customization_data as Record<
+                                      string,
+                                      unknown
+                                    >
+                                  )?.dynamic_layout &&
+                                    ((
+                                      (
+                                        customizationFormData.customization_data as Record<
+                                          string,
+                                          unknown
+                                        >
+                                      ).dynamic_layout as Record<
+                                        string,
+                                        unknown
+                                      >
+                                    ).max_images as number),
+                                ) || 10
+                              }
+                              onChange={(e) => {
+                                const currentData =
+                                  customizationFormData.customization_data ||
+                                  {};
+                                const currentDynamic =
+                                  ((currentData as Record<string, unknown>)
+                                    .dynamic_layout as Record<
+                                    string,
+                                    unknown
+                                  >) || {};
+
+                                setCustomizationFormData({
+                                  ...customizationFormData,
+                                  customization_data: {
+                                    ...currentData,
+                                    dynamic_layout: {
+                                      ...currentDynamic,
+                                      max_images: Math.max(
+                                        1,
+                                        Number(e.target.value) || 1,
+                                      ),
+                                    },
+                                  },
+                                });
+                              }}
+                              className="h-10 rounded-xl border-neutral-100"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1 block">
+                              Formato
+                            </label>
+                            <select
+                              title="Formato de recorte"
+                              value={
+                                ((
+                                  (
+                                    customizationFormData.customization_data as Record<
+                                      string,
+                                      unknown
+                                    >
+                                  )?.image_crop as Record<string, unknown>
+                                )?.format as string) || "1:1"
+                              }
+                              onChange={(e) => {
+                                const format = e.target.value as CropFormatKey;
+                                const currentData =
+                                  customizationFormData.customization_data ||
+                                  {};
+                                const currentCrop =
+                                  ((currentData as Record<string, unknown>)
+                                    .image_crop as Record<string, unknown>) ||
+                                  {};
+
+                                const width = Number(currentCrop.width) || 1000;
+                                const height =
+                                  Number(currentCrop.height) || 1000;
+                                const aspectRatio = getAspectRatioByFormat(
+                                  format,
+                                  width,
+                                  height,
+                                );
+
+                                setCustomizationFormData({
+                                  ...customizationFormData,
+                                  customization_data: {
+                                    ...currentData,
+                                    image_crop: {
+                                      ...currentCrop,
+                                      format,
+                                      aspect_ratio: aspectRatio,
+                                    },
+                                  },
+                                });
+                              }}
+                              className="w-full h-10 px-3 rounded-xl border border-neutral-100 bg-neutral-50/30 text-sm font-semibold"
+                            >
+                              <option value="FREE">Livre</option>
+                              <option value="1:1">1:1</option>
+                              <option value="16:9">16:9</option>
+                              <option value="4:3">4:3</option>
+                              <option value="A4_PORTRAIT">A4 Retrato</option>
+                              <option value="A4_LANDSCAPE">A4 Paisagem</option>
+                              <option value="CUSTOM">Customizado</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {(((
+                          (
+                            customizationFormData.customization_data as Record<
+                              string,
+                              unknown
+                            >
+                          )?.image_crop as Record<string, unknown>
+                        )?.format as string) || "1:1") === "CUSTOM" && (
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1 block">
+                                Largura
+                              </label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={Number(
+                                  ((
+                                    (
+                                      customizationFormData.customization_data as Record<
+                                        string,
+                                        unknown
+                                      >
+                                    )?.image_crop as Record<string, unknown>
+                                  )?.width as number) || 1000,
+                                )}
+                                onChange={(e) => {
+                                  const width = Math.max(
+                                    1,
+                                    Number(e.target.value) || 1,
+                                  );
+                                  const currentData =
+                                    customizationFormData.customization_data ||
+                                    {};
+                                  const currentCrop =
+                                    ((currentData as Record<string, unknown>)
+                                      .image_crop as Record<string, unknown>) ||
+                                    {};
+                                  const height =
+                                    Number(currentCrop.height) || 1000;
+
+                                  setCustomizationFormData({
+                                    ...customizationFormData,
+                                    customization_data: {
+                                      ...currentData,
+                                      image_crop: {
+                                        ...currentCrop,
+                                        width,
+                                        aspect_ratio: getAspectRatioByFormat(
+                                          "CUSTOM",
+                                          width,
+                                          height,
+                                        ),
+                                      },
+                                    },
+                                  });
+                                }}
+                                className="h-10 rounded-xl border-neutral-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1 block">
+                                Altura
+                              </label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={Number(
+                                  ((
+                                    (
+                                      customizationFormData.customization_data as Record<
+                                        string,
+                                        unknown
+                                      >
+                                    )?.image_crop as Record<string, unknown>
+                                  )?.height as number) || 1000,
+                                )}
+                                onChange={(e) => {
+                                  const height = Math.max(
+                                    1,
+                                    Number(e.target.value) || 1,
+                                  );
+                                  const currentData =
+                                    customizationFormData.customization_data ||
+                                    {};
+                                  const currentCrop =
+                                    ((currentData as Record<string, unknown>)
+                                      .image_crop as Record<string, unknown>) ||
+                                    {};
+                                  const width =
+                                    Number(currentCrop.width) || 1000;
+
+                                  setCustomizationFormData({
+                                    ...customizationFormData,
+                                    customization_data: {
+                                      ...currentData,
+                                      image_crop: {
+                                        ...currentCrop,
+                                        height,
+                                        aspect_ratio: getAspectRatioByFormat(
+                                          "CUSTOM",
+                                          width,
+                                          height,
+                                        ),
+                                      },
+                                    },
+                                  });
+                                }}
+                                className="h-10 rounded-xl border-neutral-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1 block">
+                                Unidade
+                              </label>
+                              <select
+                                title="Unidade do formato customizado"
+                                value={
+                                  ((
+                                    (
+                                      customizationFormData.customization_data as Record<
+                                        string,
+                                        unknown
+                                      >
+                                    )?.image_crop as Record<string, unknown>
+                                  )?.unit as CropUnit) || "px"
+                                }
+                                onChange={(e) => {
+                                  const unit = e.target.value as CropUnit;
+                                  const currentData =
+                                    customizationFormData.customization_data ||
+                                    {};
+                                  const currentCrop =
+                                    ((currentData as Record<string, unknown>)
+                                      .image_crop as Record<string, unknown>) ||
+                                    {};
+
+                                  setCustomizationFormData({
+                                    ...customizationFormData,
+                                    customization_data: {
+                                      ...currentData,
+                                      image_crop: {
+                                        ...currentCrop,
+                                        unit,
+                                      },
+                                    },
+                                  });
+                                }}
+                                className="w-full h-10 px-3 rounded-xl border border-neutral-100 bg-neutral-50/30 text-sm font-semibold"
+                              >
+                                <option value="px">px</option>
+                                <option value="cm">cm</option>
+                              </select>
+                            </div>
+                          </div>
+                        )}
+
+                        <p className="text-[11px] text-neutral-500">
+                          Esse formato será aplicado no frontend automaticamente
+                          com base no JSON da customização.
+                        </p>
                       </div>
                     )}
                   </div>

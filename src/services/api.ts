@@ -76,6 +76,8 @@ export interface PromptPriorityOverrideConfig {
   created_at: string;
   updated_at: string;
   is_active_now: boolean;
+  trigger_keywords: string;
+  display_order: number;
 }
 
 export interface PromptInjectionMetadata {
@@ -265,6 +267,7 @@ export interface Order {
   user_id: string;
   user?: User & { phone?: string | null };
   items: OrderItemDetailed[];
+  items_count?: number;
   total: number;
   discount?: number | null;
   created_at: string;
@@ -907,6 +910,7 @@ class ApiService {
     status?: string;
     page?: number;
     limit?: number;
+    summary?: boolean;
   }): Promise<OrdersResponse> => await this.client.get("/orders", { params });
 
   getOrder = async (id: string) => (await this.get(`/orders/${id}`)).data;
@@ -1111,6 +1115,7 @@ class ApiService {
     mode: PromptOverrideMode;
     starts_at?: string | null;
     expires_at?: string | null;
+    trigger_keywords?: string | null;
   }): Promise<{
     status: "success" | "error";
     prompt: PromptPriorityOverrideConfig;
@@ -1125,6 +1130,7 @@ class ApiService {
       mode: PromptOverrideMode;
       starts_at?: string | null;
       expires_at?: string | null;
+      trigger_keywords?: string | null;
     },
   ): Promise<{
     status: "success" | "error";
@@ -1132,10 +1138,19 @@ class ApiService {
     error?: string;
   }> => (await this.put(`/admin/ai/prompt-overrides/${id}`, payload)).data;
 
+  reorderPromptPriorityOverrides = async (
+    ids: number[],
+  ): Promise<{
+    status: "success" | "error";
+  }> => (await this.post("/admin/ai/prompt-overrides/reorder", { ids })).data;
+
   deletePromptPriorityOverride = async (
     id: number,
-  ): Promise<{ status: "success" | "error"; message?: string; error?: string }> =>
-    (await this.delete(`/admin/ai/prompt-overrides/${id}`)).data;
+  ): Promise<{
+    status: "success" | "error";
+    message?: string;
+    error?: string;
+  }> => (await this.delete(`/admin/ai/prompt-overrides/${id}`)).data;
 
   // ===== Holidays =====
   getHolidays = async () => (await this.get("/admin/holidays")).data;

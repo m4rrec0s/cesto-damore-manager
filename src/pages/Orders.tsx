@@ -12,6 +12,8 @@ import {
   MessageSquare,
   Filter,
   MessageCircle,
+  Edit3,
+  Image as ImageIcon,
 } from "lucide-react";
 import { useApi } from "../services/api";
 import type { Order, OrderStatus } from "../types";
@@ -23,10 +25,16 @@ import {
   onlyDigits,
   extractErrorMessage,
 } from "../utils/format";
+import { parseCustomizationData } from "../utils/customization";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { Button } from "@/components/ui/button";
+
+type OrderSummary = Order & {
+  items_count?: number;
+  items?: Order["items"];
+};
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   PENDING: "Pendente",
@@ -46,9 +54,56 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
 
 const STATUS_FLOW: OrderStatus[] = ["PENDING", "PAID", "SHIPPED", "DELIVERED"];
 
+const getCustomizationSummary = (customization: {
+  customization_type?: string;
+  value?: string | null;
+}) => {
+  const data = parseCustomizationData(customization.value);
+  const type = customization.customization_type || data.customization_type;
+
+  switch (type) {
+    case "TEXT":
+    case "TEXT_INPUT":
+      return data.text ? `Texto: ${String(data.text)}` : "Texto não informado";
+    case "MULTIPLE_CHOICE":
+      return (
+        data.selected_option_label ||
+        data.selected_option ||
+        "Opção não selecionada"
+      );
+    case "IMAGES": {
+      const photos = Array.isArray(data.photos) ? data.photos : [];
+      return photos.length > 0 ? `${photos.length} foto(s)` : "Sem fotos anexadas";
+    }
+    case "DYNAMIC_LAYOUT":
+      return (
+        data.selected_item_label ||
+        (typeof data.selected_item === "string"
+          ? data.selected_item
+          : data.selected_item?.selected_item) ||
+        "Design personalizado"
+      );
+    default:
+      return "Personalização registrada";
+  }
+};
+
+const getItemCount = (order: OrderSummary) => {
+  if (typeof order.items_count === "number") return order.items_count;
+  if (Array.isArray(order.items)) return order.items.length;
+  return 0;
+};
+
+const resolveClientPhone = (order?: Order | null) => {
+  if (!order) return "";
+  return onlyDigits(order.user?.phone || order.recipient_phone || "");
+};
+
 export function Orders() {
   const api = useApi();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderSummary[]>([]);
+  const [orderDetails, setOrderDetails] = useState<Record<string, Order>>({});
+  const [detailsLoadingMap, setDetailsLoadingMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -57,7 +112,7 @@ export function Orders() {
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const params = filter === "all" ? {} : { status: filter };
+      const params = filter === "all" ? { summary: true } : { status: filter, summary: true };
       const response = await api.getOrders(params);
       setOrders(response.data.data || []);
     } catch (e) {
@@ -71,12 +126,43 @@ export function Orders() {
     fetchOrders();
   }, [fetchOrders]);
 
+  const fetchOrderDetails = useCallback(
+    async (orderId: string) => {
+      if (orderDetails[orderId]) return;
+
+      setDetailsLoadingMap((prev) => ({ ...prev, [orderId]: true }));
+      try {
+        const details = await api.getOrder(orderId);
+        setOrderDetails((prev) => ({ ...prev, [orderId]: details }));
+      } catch (e) {
+        toast.error(extractErrorMessage(e, "Erro ao carregar detalhes do pedido"));
+      } finally {
+        setDetailsLoadingMap((prev) => ({ ...prev, [orderId]: false }));
+      }
+    },
+    [api, orderDetails],
+  );
+
+  const handleToggleOrder = async (orderId: string) => {
+    const isClosing = expandedId === orderId;
+    setExpandedId(isClosing ? null : orderId);
+
+    if (!isClosing) {
+      await fetchOrderDetails(orderId);
+    }
+  };
+
   const handleUpdateStatus = async (orderId: string, status: OrderStatus) => {
     setUpdatingId(orderId);
     try {
       await api.updateOrderStatus(orderId, status, { notifyCustomer: true });
       toast.success("Status atualizado com sucesso!");
-      fetchOrders();
+      await fetchOrders();
+
+      if (orderDetails[orderId]) {
+        const details = await api.getOrder(orderId);
+        setOrderDetails((prev) => ({ ...prev, [orderId]: details }));
+      }
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao atualizar status"));
     } finally {
@@ -92,7 +178,7 @@ export function Orders() {
             Gerenciamento de Pedidos
           </h2>
           <p className="text-neutral-600/70 font-medium">
-            Acompanhe e atualize o status dos pedidos em tempo real.
+            Lista rápida com detalhes carregados apenas quando necessário.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -128,7 +214,7 @@ export function Orders() {
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Loader2 size={48} className="animate-spin text-neutral-500" />
           <p className="text-neutral-900/60 font-medium italic">
-            Buscando pedidos incríveis...
+            Buscando pedidos...
           </p>
         </div>
       ) : orders.length === 0 ? (
@@ -141,297 +227,267 @@ export function Orders() {
               Nenhum pedido encontrado
             </h3>
             <p className="text-neutral-600/60 font-medium">
-              Tente ajustar seus filtros ou aguarde novas vendas!
+              Tente ajustar seus filtros ou aguarde novas vendas.
             </p>
           </div>
         </div>
       ) : (
         <div className="space-y-4">
-          {orders.map((order) => (
-            <div
-              key={order.id}
-              className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden transition-all hover:shadow-md"
-            >
-              <div
-                onClick={() =>
-                  setExpandedId(expandedId === order.id ? null : order.id)
-                }
-                className="p-4 cursor-pointer hover:bg-neutral-50/50 transition-colors"
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <div
-                      className={clsx(
-                        "w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0",
-                        order.status === "PAID"
-                          ? "bg-emerald-50 text-emerald-600"
-                          : order.status === "PENDING"
-                            ? "bg-amber-50 text-amber-600"
-                            : order.status === "CANCELED"
-                              ? "bg-red-50 text-red-600"
-                              : "bg-neutral-50 text-neutral-600",
-                      )}
-                    >
-                      {order.status === "DELIVERED" ? (
-                        <CheckCircle2 size={20} />
-                      ) : order.status === "CANCELED" ? (
-                        <XCircle size={20} />
-                      ) : (
-                        <Package size={20} />
-                      )}
-                    </div>
+          {orders.map((order) => {
+            const details = orderDetails[order.id];
+            const activeOrder: OrderSummary = details || order;
+            const detailsLoading = detailsLoadingMap[order.id];
+            const itemCount = getItemCount(activeOrder);
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
-                        <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-tight">
-                          #{shortId(order.id)}
-                        </span>
-                        <span className="text-neutral-200 text-xs">•</span>
-                        <span className="text-[10px] font-medium text-neutral-500">
-                          {formatDate(order.created_at)}
-                        </span>
+            return (
+              <div
+                key={order.id}
+                className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden transition-all hover:shadow-md"
+              >
+                <div
+                  onClick={() => void handleToggleOrder(order.id)}
+                  className="p-4 cursor-pointer hover:bg-neutral-50/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div
+                        className={clsx(
+                          "w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0",
+                          activeOrder.status === "PAID"
+                            ? "bg-emerald-50 text-emerald-600"
+                            : activeOrder.status === "PENDING"
+                              ? "bg-amber-50 text-amber-600"
+                              : activeOrder.status === "CANCELED"
+                                ? "bg-red-50 text-red-600"
+                                : "bg-neutral-50 text-neutral-600",
+                        )}
+                      >
+                        {activeOrder.status === "DELIVERED" ? (
+                          <CheckCircle2 size={20} />
+                        ) : activeOrder.status === "CANCELED" ? (
+                          <XCircle size={20} />
+                        ) : (
+                          <Package size={20} />
+                        )}
                       </div>
 
-                      <h4 className="font-bold text-neutral-950 text-base mb-1 truncate">
-                        {order.user?.name || "Cliente Convidado"}
-                      </h4>
-
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span
-                          className={clsx(
-                            "inline-block px-2 py-0.5 rounded-full text-[9px] font-bold border",
-                            STATUS_COLORS[order.status],
-                          )}
-                        >
-                          {STATUS_LABELS[order.status]}
-                        </span>
-
-                        <div className="flex items-center gap-1">
-                          <Package size={12} className="text-neutral-400" />
-                          <span className="text-[10px] font-medium text-neutral-600">
-                            {order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'itens'}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-tight">
+                            #{shortId(activeOrder.id)}
+                          </span>
+                          <span className="text-neutral-200 text-xs">•</span>
+                          <span className="text-[10px] font-medium text-neutral-500">
+                            {formatDate(activeOrder.created_at)}
                           </span>
                         </div>
+
+                        <h4 className="font-bold text-neutral-950 text-base mb-1 truncate">
+                          {activeOrder.user?.name || "Cliente Convidado"}
+                        </h4>
+
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={clsx(
+                              "inline-block px-2 py-0.5 rounded-full text-[9px] font-bold border",
+                              STATUS_COLORS[activeOrder.status],
+                            )}
+                          >
+                            {STATUS_LABELS[activeOrder.status]}
+                          </span>
+
+                          <div className="flex items-center gap-1">
+                            <Package size={12} className="text-neutral-400" />
+                            <span className="text-[10px] font-medium text-neutral-600">
+                              {itemCount} {itemCount === 1 ? "item" : "itens"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div className="text-right">
-                      <p className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">
-                        Total
-                      </p>
-                      <p className="text-xl font-black text-neutral-950">
-                        {formatCurrency(order.total)}
-                      </p>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="text-right">
+                        <p className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">
+                          Total
+                        </p>
+                        <p className="text-xl font-black text-neutral-950">
+                          {formatCurrency(activeOrder.grand_total || activeOrder.total)}
+                        </p>
+                      </div>
+                      <ChevronDown
+                        size={20}
+                        className={clsx(
+                          "text-neutral-300 transition-transform duration-300",
+                          expandedId === order.id && "rotate-180",
+                        )}
+                      />
                     </div>
-                    <ChevronDown
-                      size={20}
-                      className={clsx(
-                        "text-neutral-300 transition-transform duration-300",
-                        expandedId === order.id && "rotate-180",
-                      )}
-                    />
                   </div>
                 </div>
-              </div>
 
-              <AnimatePresence>
-                {expandedId === order.id && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="border-t border-neutral-50"
-                  >
-                    <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
-                      <div className="space-y-5">
-                        <div>
-                          <h5 className="text-xs font-bold text-neutral-950 mb-3 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 bg-neutral-500 rounded-full" />
-                            Detalhes do Cliente
-                          </h5>
-                          <div className="space-y-2 pl-3">
-                            <div className="flex items-center gap-2 text-neutral-900/70 font-medium text-sm">
-                              <MessageSquare
-                                size={14}
-                                className="text-neutral-400"
-                              />
-                              <span>{order.user?.email}</span>
-                            </div>
-                            {order.user?.phone && (
-                              <div className="flex items-center gap-2 text-neutral-900/70 font-medium text-sm">
-                                <Phone size={14} className="text-neutral-400" />
-                                <a
-                                  href={`https://wa.me/55${onlyDigits(
-                                    order.user.phone,
-                                  )}`}
-                                  target="_blank"
-                                  className="hover:text-neutral-600 transition-colors underline decoration-neutral-200 underline-offset-4"
-                                >
-                                  {order.user.phone}
-                                </a>
+                <AnimatePresence>
+                  {expandedId === order.id && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="border-t border-neutral-50"
+                    >
+                      {detailsLoading && !details ? (
+                        <div className="p-8 flex items-center justify-center gap-2 text-sm text-neutral-500">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Carregando detalhes do pedido...
+                        </div>
+                      ) : !details ? (
+                        <div className="p-8 text-sm text-red-500">
+                          Não foi possível carregar os detalhes desse pedido.
+                        </div>
+                      ) : (
+                        <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                          <div className="space-y-5">
+                            <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 space-y-3">
+                              <h5 className="text-xs font-bold text-neutral-950 flex items-center gap-2">
+                                <MessageSquare size={12} /> Dados do Cliente
+                              </h5>
+                              <div className="space-y-2 text-sm text-neutral-700">
+                                <p className="font-semibold text-neutral-900">
+                                  {details.user?.name || "Cliente convidado"}
+                                </p>
+                                {details.user?.email && <p>{details.user.email}</p>}
+                                {details.user?.phone && (
+                                  <a
+                                    href={`https://wa.me/55${onlyDigits(details.user.phone)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-2 text-blue-600 hover:underline"
+                                  >
+                                    <Phone size={14} /> {details.user.phone}
+                                  </a>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        </div>
-
-                        <div>
-                          <h5 className="text-xs font-bold text-neutral-950 mb-3 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 bg-neutral-500 rounded-full" />
-                            Informações de Entrega
-                          </h5>
-                          <div className="space-y-2 pl-3">
-                            <div className="flex items-start gap-2 text-neutral-900/70 font-medium text-sm">
-                              <MapPin
-                                size={14}
-                                className="text-neutral-400 mt-0.5"
-                              />
-                              <span className="text-xs">
-                                {order.delivery_address || "Retirada na Loja"}
-                              </span>
                             </div>
-                            <div className="flex items-center gap-2 text-neutral-900/70 font-medium text-sm">
-                              <Calendar
-                                size={14}
-                                className="text-neutral-400"
-                              />
-                              <span className="text-xs">
-                                {order.created_at
-                                  ? formatDate(order.created_at)
-                                  : "N/A"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
 
-                        <div>
-                          <h5 className="text-xs font-bold text-neutral-950 mb-3 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 bg-neutral-500 rounded-full" />
-                            Ações Rápidas
-                          </h5>
-                          <div className="flex flex-wrap gap-2 pl-3">
-                            {STATUS_FLOW.map((status) => (
-                              <Button
-                                key={status}
-                                disabled={
-                                  updatingId === order.id ||
-                                  order.status === status
-                                }
-                                onClick={() =>
-                                  handleUpdateStatus(order.id, status)
-                                }
-                                className={clsx(
-                                  "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm",
-                                  order.status === status
-                                    ? "bg-neutral-100 text-neutral-600 cursor-default"
-                                    : "bg-white border border-neutral-100 text-neutral-900 hover:bg-neutral-50",
+                            <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 space-y-3">
+                              <h5 className="text-xs font-bold text-neutral-950 flex items-center gap-2">
+                                <MapPin size={12} /> Entrega
+                              </h5>
+                              <p className="text-xs text-neutral-700 leading-relaxed">
+                                {details.delivery_address || "Retirada na Loja"}
+                              </p>
+                              <p className="text-xs text-neutral-500 inline-flex items-center gap-1">
+                                <Calendar size={12} />
+                                {details.created_at ? formatDate(details.created_at) : "N/A"}
+                              </p>
+                            </div>
+
+                            <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 space-y-3">
+                              <h5 className="text-xs font-bold text-neutral-950">Ações</h5>
+                              <div className="flex flex-wrap gap-2">
+                                {STATUS_FLOW.map((status) => (
+                                  <Button
+                                    key={status}
+                                    disabled={updatingId === details.id || details.status === status}
+                                    onClick={() => handleUpdateStatus(details.id, status)}
+                                    className={clsx(
+                                      "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm",
+                                      details.status === status
+                                        ? "bg-neutral-100 text-neutral-600 cursor-default"
+                                        : "bg-white border border-neutral-100 text-neutral-900 hover:bg-neutral-50",
+                                    )}
+                                  >
+                                    {updatingId === details.id && details.status !== status
+                                      ? "..."
+                                      : STATUS_LABELS[status]}
+                                  </Button>
+                                ))}
+                                {details.status !== "CANCELED" && (
+                                  <Button
+                                    onClick={() => handleUpdateStatus(details.id, "CANCELED")}
+                                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-white border border-neutral-100 text-neutral-400 hover:bg-neutral-50"
+                                  >
+                                    Cancelar
+                                  </Button>
                                 )}
-                              >
-                                {updatingId === order.id &&
-                                  order.status !== status
-                                  ? "..."
-                                  : STATUS_LABELS[status]}
-                              </Button>
-                            ))}
-                            {order.status !== "CANCELED" && (
-                              <Button
-                                onClick={() =>
-                                  handleUpdateStatus(order.id, "CANCELED")
-                                }
-                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-white border border-neutral-100 text-neutral-400 hover:bg-neutral-50"
-                              >
-                                Cancelar
-                              </Button>
-                            )}
-                            {order.status === "CANCELED" && (
-                              <Button
-                                onClick={async (e) => {
-                                  e.stopPropagation();
-                                  if (confirm("Tem certeza que deseja excluir permanentemente este pedido?")) {
-                                    try {
-                                      await api.deleteOrder(order.id);
-                                      toast.success("Pedido excluído com sucesso");
-                                      fetchOrders();
-                                    } catch (e) {
-                                      toast.error("Erro ao excluir pedido");
-                                    }
-                                  }
-                                }}
-                                className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-red-50 text-red-600 border border-red-100 hover:bg-red-100"
-                              >
-                                Excluir
-                              </Button>
-                            )}
+                                {details.status === "CANCELED" && (
+                                  <Button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      if (confirm("Tem certeza que deseja excluir permanentemente este pedido?")) {
+                                        try {
+                                          await api.deleteOrder(details.id);
+                                          toast.success("Pedido excluído com sucesso");
+                                          setExpandedId((prev) => (prev === details.id ? null : prev));
+                                          setOrderDetails((prev) => {
+                                            const next = { ...prev };
+                                            delete next[details.id];
+                                            return next;
+                                          });
+                                          await fetchOrders();
+                                        } catch (e) {
+                                          toast.error(extractErrorMessage(e, "Erro ao excluir pedido"));
+                                        }
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-red-50 text-red-600 border border-red-100 hover:bg-red-100"
+                                  >
+                                    Excluir
+                                  </Button>
+                                )}
+                              </div>
+
+                              {resolveClientPhone(details) && (
+                                <Button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const phone = resolveClientPhone(details);
+                                    window.open(`/service?phone=${encodeURIComponent(phone)}`, "_blank");
+                                  }}
+                                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100"
+                                >
+                                  <MessageCircle size={14} />
+                                  Abrir Sessão do Cliente
+                                </Button>
+                              )}
+
+                              {details.google_drive_folder_url && (
+                                <a
+                                  href={details.google_drive_folder_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+                                >
+                                  Arquivos no Drive
+                                </a>
+                              )}
+                            </div>
                           </div>
 
-                          {order.user?.phone && (
-                            <div className="mt-4 pl-3">
-                              <Button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const phone = order.user?.phone;
-                                  if (phone) {
-                                    const formattedPhone = `55${onlyDigits(phone)}`;
-                                    window.open(`/service?phone=${formattedPhone}`, '_blank');
-                                  }
-                                }}
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100"
+                          <div className="lg:col-span-2 space-y-4">
+                            <h5 className="text-xs font-bold text-neutral-950">Itens e Revisão de Customização</h5>
+                            {details.items?.map((item: any, idx: number) => (
+                              <div
+                                key={idx}
+                                className="rounded-2xl border border-neutral-200 bg-white overflow-hidden"
                               >
-                                <MessageCircle size={14} />
-                                Ver Chat do Cliente
-                              </Button>
-                            </div>
-                          )}
-
-                          {order.google_drive_folder_url && (
-                            <div className="mt-4 pl-3">
-                              <a
-                                href={order.google_drive_folder_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
-                              >
-                                <svg className="w-4 h-4" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg"><path d="m6.6 66.85 3.85 6.65c.8 1.4 1.95 2.5 3.3 3.3l13.75-23.8h-27.5c0 1.55.4 3.1 1.2 4.5z" fill="#0066da" /><path d="m43.65 25-13.75-23.8c-1.35.8-2.5 1.9-3.3 3.3l-25.4 44a9.06 9.06 0 0 0 -1.2 4.5h27.5z" fill="#00ac47" /><path d="m73.55 76.8c1.35-.8 2.5-1.9 3.3-3.3l1.6-2.75 5.85-10.15c.8-1.4 1.2-2.95 1.2-4.5h-27.502l5.852 10.15z" fill="#ea4335" /><path d="m43.65 25 13.75-23.8c-1.35-.8-2.9-1.2-4.5-1.2h-18.5c-1.6 0-3.15.45-4.5 1.2z" fill="#00832d" /><path d="m59.8 53h-27.5l-13.75 23.8c1.35.8 2.9 1.2 4.5 1.2h50.5c1.6 0 3.15-.45 4.5-1.2z" fill="#2684fc" /><path d="m73.4 26.5-12.7-22c-.8-1.4-1.95-2.5-3.3-3.3l-13.75 23.8h29.75z" fill="#ffba00" /></svg>
-                                Arquivos no Drive
-                              </a>
-                              <p className="text-[9px] text-neutral-400 mt-0.5">Imagens e arquivos de personalização</p>
-                            </div>
-                          )}
-
-                        </div>
-                      </div>
-
-                      <div className="lg:col-span-2">
-                        <h5 className="text-xs font-bold text-neutral-950 mb-3 flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 bg-neutral-500 rounded-full" />
-                          Itens do Pedido
-                        </h5>
-                        <div className="space-y-3">
-                          {order.items?.map((item: any, idx: number) => (
-                            <div
-                              key={idx}
-                              className="bg-neutral-50/50 rounded-xl p-4 border border-neutral-100/50"
-                            >
-                              <div className="flex gap-3 mb-3">
-                                {item.product?.image_url && (
-                                  <div className="w-16 h-16 rounded-lg overflow-hidden bg-white border border-neutral-200 shrink-0">
-                                    <img
-                                      src={item.product.image_url}
-                                      alt={item.product.name}
-                                      className="w-full h-full object-contain p-1"
-                                    />
-                                  </div>
-                                )}
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex justify-between items-start gap-3">
+                                <div className="p-4 border-b border-neutral-100 bg-gradient-to-r from-neutral-50 to-white">
+                                  <div className="flex gap-3">
+                                    {item.product?.image_url && (
+                                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-white border border-neutral-200 shrink-0">
+                                        <img
+                                          src={item.product.image_url}
+                                          alt={item.product.name}
+                                          className="w-full h-full object-contain p-1"
+                                        />
+                                      </div>
+                                    )}
                                     <div className="flex-1 min-w-0">
-                                      <h6 className="font-bold text-neutral-950 text-sm mb-0.5">
+                                      <h6 className="font-bold text-neutral-950 text-sm">
                                         {item.product?.name || "Produto"}
                                       </h6>
-                                      <p className="text-[10px] text-neutral-600 font-medium">
-                                        Quantidade: {item.quantity} • Unitário: {formatCurrency(item.price)}
+                                      <p className="text-[11px] text-neutral-600 font-medium">
+                                        Quantidade: {item.quantity} | Unitário: {formatCurrency(item.price)}
                                       </p>
                                     </div>
                                     <span className="text-sm font-black text-neutral-950 shrink-0">
@@ -439,30 +495,44 @@ export function Orders() {
                                     </span>
                                   </div>
                                 </div>
-                              </div>
 
-                              {item.customizations &&
-                                item.customizations.length > 0 && (
-                                  <div className="space-y-2 mt-3 pt-3 border-t border-neutral-200">
-                                    <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Personalizações</p>
-                                    {item.customizations.map((cust: any) => (
-                                      <CustomizationDisplay
-                                        key={cust.id}
-                                        customization={cust}
-                                      />
-                                    ))}
-                                  </div>
-                                )}
-                            </div>
-                          ))}
+                                <div className="p-4 space-y-3">
+                                  {!item.customizations || item.customizations.length === 0 ? (
+                                    <div className="rounded-xl border border-dashed border-neutral-200 p-4 text-xs text-neutral-500">
+                                      Sem personalizações neste item.
+                                    </div>
+                                  ) : (
+                                    item.customizations.map((cust: any) => (
+                                      <div key={cust.id} className="rounded-xl border border-neutral-100 bg-neutral-50/40 p-3 space-y-2">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <p className="text-xs font-semibold text-neutral-900 inline-flex items-center gap-1.5">
+                                            <Edit3 size={12} />
+                                            {cust.title || "Personalização"}
+                                          </p>
+                                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                            Revisada
+                                          </span>
+                                        </div>
+                                        <p className="text-xs text-neutral-600 inline-flex items-center gap-1.5">
+                                          <ImageIcon size={12} />
+                                          {getCustomizationSummary(cust)}
+                                        </p>
+                                        <CustomizationDisplay customization={cust} />
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          ))}
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
