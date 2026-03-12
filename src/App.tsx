@@ -16,6 +16,7 @@ import DesignEditorPage from "./pages/DesignEditorPage";
 import { NewDesignPage } from "./pages/NewDesignPage";
 import DesignTestPage from "./pages/DesignTestPage";
 import { LlmTestSessionPage } from "./pages/LlmTestSessionPage";
+import { LlmPromptPriorityPage } from "./pages/LlmPromptPriorityPage";
 import { UIProvider } from "./contexts/UIContext";
 
 export default function App() {
@@ -132,6 +133,14 @@ export default function App() {
           element={
             <AdminRoute>
               <LlmTestSessionPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/llm-prompt-priority"
+          element={
+            <AdminRoute>
+              <LlmPromptPriorityPage />
             </AdminRoute>
           }
         />

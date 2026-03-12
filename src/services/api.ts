@@ -64,6 +64,29 @@ export interface PaginationInfo {
   totalPages: number;
 }
 
+export type PromptOverrideMode = "temporary" | "permanent";
+
+export interface PromptPriorityOverrideConfig {
+  id: number;
+  prompt_text: string;
+  is_enabled: boolean;
+  mode: PromptOverrideMode;
+  starts_at: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
+  is_active_now: boolean;
+  trigger_keywords: string;
+  display_order: number;
+}
+
+export interface PromptInjectionMetadata {
+  syntax: string;
+  available_fields: string[];
+  default_fields: string[];
+  dynamic_rule: string;
+}
+
 // ===== Product Types =====
 export interface ProductComponent {
   id: string;
@@ -244,6 +267,7 @@ export interface Order {
   user_id: string;
   user?: User & { phone?: string | null };
   items: OrderItemDetailed[];
+  items_count?: number;
   total: number;
   discount?: number | null;
   created_at: string;
@@ -886,6 +910,7 @@ class ApiService {
     status?: string;
     page?: number;
     limit?: number;
+    summary?: boolean;
   }): Promise<OrdersResponse> => await this.client.get("/orders", { params });
 
   getOrder = async (id: string) => (await this.get(`/orders/${id}`)).data;
@@ -1076,6 +1101,56 @@ class ApiService {
     const apiKey = encodeURIComponent(import.meta.env.VITE_AI_API_KEY || "");
     return `${API_URL}/ai/agent/messages/stream/${encodeURIComponent(sessionId)}?x_ai_api_key=${apiKey}`;
   };
+
+  listPromptPriorityOverrides = async (): Promise<{
+    status: "success" | "error";
+    prompts: PromptPriorityOverrideConfig[];
+    prompt_injection?: PromptInjectionMetadata;
+    error?: string;
+  }> => (await this.get("/admin/ai/prompt-overrides")).data;
+
+  createPromptPriorityOverride = async (payload: {
+    prompt_text: string;
+    is_enabled: boolean;
+    mode: PromptOverrideMode;
+    starts_at?: string | null;
+    expires_at?: string | null;
+    trigger_keywords?: string | null;
+  }): Promise<{
+    status: "success" | "error";
+    prompt: PromptPriorityOverrideConfig;
+    error?: string;
+  }> => (await this.post("/admin/ai/prompt-overrides", payload)).data;
+
+  updatePromptPriorityOverride = async (
+    id: number,
+    payload: {
+      prompt_text: string;
+      is_enabled: boolean;
+      mode: PromptOverrideMode;
+      starts_at?: string | null;
+      expires_at?: string | null;
+      trigger_keywords?: string | null;
+    },
+  ): Promise<{
+    status: "success" | "error";
+    prompt: PromptPriorityOverrideConfig;
+    error?: string;
+  }> => (await this.put(`/admin/ai/prompt-overrides/${id}`, payload)).data;
+
+  reorderPromptPriorityOverrides = async (
+    ids: number[],
+  ): Promise<{
+    status: "success" | "error";
+  }> => (await this.post("/admin/ai/prompt-overrides/reorder", { ids })).data;
+
+  deletePromptPriorityOverride = async (
+    id: number,
+  ): Promise<{
+    status: "success" | "error";
+    message?: string;
+    error?: string;
+  }> => (await this.delete(`/admin/ai/prompt-overrides/${id}`)).data;
 
   // ===== Holidays =====
   getHolidays = async () => (await this.get("/admin/holidays")).data;

@@ -39,6 +39,11 @@ const navItems = [
   { name: "Feed", href: "/feed", icon: PackageCheck },
   { name: "Atendimento", href: "/service", icon: BotMessageSquare },
   { name: "Teste LLM", href: "/llm-test", icon: FlaskConical },
+  {
+    name: "Prompt Prioritário",
+    href: "/llm-prompt-priority",
+    icon: BotMessageSquare,
+  },
   { name: "Feriados", href: "/holidays", icon: Calendar },
   { name: "Follow-up", href: "/follow-up", icon: RefreshCw },
   { name: "Design Editor", href: "/layouts", icon: Palette },
