@@ -38,6 +38,8 @@ const navItems = [
   },
   { name: "Feed", href: "/feed", icon: PackageCheck },
   { name: "Atendimento", href: "/service", icon: BotMessageSquare },
+  { name: "Fluxo do Bot", href: "/bot-flow", icon: BotMessageSquare },
+  { name: "Teste do Bot", href: "/bot-test", icon: BotMessageSquare },
   { name: "Teste LLM", href: "/llm-test", icon: FlaskConical },
   {
     name: "Prompt Prioritário",

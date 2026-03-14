@@ -18,7 +18,6 @@ import DesignTestPage from "./pages/DesignTestPage";
 import { LlmTestSessionPage } from "./pages/LlmTestSessionPage";
 import { LlmPromptPriorityPage } from "./pages/LlmPromptPriorityPage";
 import BotFlowPage from "./pages/BotFlowPage";
-import { BotChatTest } from "./pages/BotChatTest";
 import { UIProvider } from "./contexts/UIContext";
 
 export default function App() {
@@ -172,7 +171,6 @@ export default function App() {
         />
 
         {/* Fallback */}
-        <Route path="/bot-test" element={<AdminRoute><BotChatTest /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </UIProvider>
