@@ -6,7 +6,19 @@ interface Message {
   text: string;
 }
 
+interface BotApiMessage {
+  text: string;
+  delay?: number;
+}
+
 export const BotChatTest: React.FC = () => {
+  const apiBaseUrl = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+  const botChatUrl = apiBaseUrl
+    ? `${apiBaseUrl}/bot/chat`
+    : import.meta.env.DEV
+      ? "http://localhost:3333/bot/chat"
+      : "/bot/chat";
+
   const [phone, setPhone] = useState("5511999999999");
   const [contactName, setContactName] = useState("Contato Teste");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -28,7 +40,7 @@ export const BotChatTest: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(process.env.BASE_URL + "/bot/chat", {
+      const response = await axios.post(botChatUrl, {
         phone,
         message: userMsg,
         contactName,
@@ -42,7 +54,7 @@ export const BotChatTest: React.FC = () => {
       }
 
       let accumulatedDelay = 0;
-      botMessages.forEach((m: any) => {
+      botMessages.forEach((m: BotApiMessage) => {
         const delay = typeof m.delay === "number" ? m.delay : 0;
         accumulatedDelay += delay;
         window.setTimeout(() => {
@@ -57,9 +69,6 @@ export const BotChatTest: React.FC = () => {
         ...prev,
         { role: "bot", text: "Erro ao comunicar com o backend." },
       ]);
-      setIsLoading(false);
-    } finally {
-      setInputMessage("");
       setIsLoading(false);
     }
   };
