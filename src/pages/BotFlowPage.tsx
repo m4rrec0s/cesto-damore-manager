@@ -1145,8 +1145,16 @@ export default function BotFlowPage() {
                                       key={product.id}
                                       className="bg-white border border-purple-100 rounded-md p-2 text-xs"
                                     >
-                                      <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-                                        {formatTestProductPreview(product)}
+                                      <div className="flex flex-col items-center gap-2">
+                                        <h3 className="font-semibold">
+                                          {product.name}
+                                          {" - R$ "}
+                                          <strong className="text-purple-500 font-bold">
+                                            {product.price
+                                              .toFixed(2)
+                                              .replace(".", ",")}
+                                          </strong>{" "}
+                                        </h3>
                                       </div>
                                     </div>
                                   ))}
