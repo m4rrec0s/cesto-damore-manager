@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   TrendingUp,
   TrendingDown,
@@ -11,6 +12,9 @@ import {
   BotMessageSquare,
   RefreshCw,
   User as UserIcon,
+  FlaskConical,
+  SlidersHorizontal,
+  ArrowRight,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useApi } from "../services/api";
@@ -241,15 +245,50 @@ export function Dashboard() {
     "#9ca3af",
   ];
 
+  const deprecatedConfigs = [
+    {
+      title: "Atendimento (Legado)",
+      description:
+        "Tela de atendimento da LLM anterior com sessões históricas e fluxos antigos.",
+      href: "/service",
+      icon: BotMessageSquare,
+      cta: "Abrir atendimento",
+    },
+    {
+      title: "Teste da LLM Antiga",
+      description:
+        "Sessões de atendimento legadas baseadas no fluxo anterior com histórico n8n.",
+      href: "/llm-test",
+      icon: FlaskConical,
+      cta: "Abrir teste",
+    },
+    {
+      title: "Prompt Prioritário (Legado)",
+      description:
+        "Gerenciamento de prompts temporários/permanentes da orquestração anterior.",
+      href: "/llm-prompt-priority",
+      icon: SlidersHorizontal,
+      cta: "Abrir configuração",
+    },
+  ];
+
   return (
     <div className="space-y-8 p-6 max-w-400 mx-auto flex flex-col gap-6">
-      <div>
-        <h2 className="text-3xl font-semibold text-neutral-950 mb-1">
-          Visão Geral
-        </h2>
-        <p className="text-neutral-500">
-          Acompanhe as métricas e insights da sua loja.
-        </p>
+      <div className="rounded-[2rem] border border-neutral-200 bg-gradient-to-r from-neutral-900 via-neutral-800 to-neutral-700 text-white p-6 shadow-sm relative overflow-hidden">
+        <div className="absolute -top-12 -right-8 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
+        <div className="absolute -bottom-16 left-1/3 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+        <div className="relative z-10">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/90">
+            Painel Operacional
+          </div>
+          <h2 className="text-3xl font-semibold text-white mt-3 mb-1">
+            Visão Geral
+          </h2>
+          <p className="text-white/75 max-w-3xl">
+            Acompanhe métricas da operação e acesse configurações estratégicas
+            em um único lugar.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-8">
@@ -697,6 +736,50 @@ export function Dashboard() {
               </Table>
             </div>
           </div>
+        </div>
+      </div>
+      <div className="rounded-[2rem] border border-neutral-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-lg font-bold text-neutral-900">
+              Configurações decadêntes
+            </h3>
+            <p className="text-sm text-neutral-500 mt-1">
+              Ferramentas legadas mantidas para compatibilidade e consulta
+              histórica.
+            </p>
+          </div>
+          <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-3 py-1">
+            Legado
+          </span>
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {deprecatedConfigs.map((item) => (
+            <Link
+              key={item.href}
+              to={item.href}
+              className="group rounded-2xl border border-neutral-200 bg-neutral-50 hover:bg-white hover:shadow-sm transition-all p-4"
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-xl bg-neutral-900 text-white flex items-center justify-center shrink-0">
+                  <item.icon size={18} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-neutral-900 leading-tight">
+                    {item.title}
+                  </p>
+                  <p className="text-sm text-neutral-500 mt-1 leading-relaxed">
+                    {item.description}
+                  </p>
+                  <div className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-neutral-700 group-hover:text-neutral-950">
+                    {item.cta}
+                    <ArrowRight size={14} />
+                  </div>
+                </div>
+              </div>
+            </Link>
+          ))}
         </div>
       </div>
     </div>
