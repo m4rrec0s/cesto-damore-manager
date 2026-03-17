@@ -38,6 +38,20 @@ export function FollowUp() {
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
 
+  const formatFollowUpInterval = (value: number) => {
+    const minutes = Math.max(0, Number(value) || 0);
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+
+    if (hours > 0 && remainingMinutes > 0) {
+      return `${hours}h ${remainingMinutes}min`;
+    }
+    if (hours > 0) {
+      return `${hours}h`;
+    }
+    return `${remainingMinutes}min`;
+  };
+
   useEffect(() => {
     loadData();
   }, []);
@@ -191,7 +205,7 @@ export function FollowUp() {
                       {h.customer?.name || h.cliente_number}
                     </p>
                     <p className="text-xs text-neutral-500">
-                      {h.horas_followup}h follow-up enviado em{" "}
+                      {formatFollowUpInterval(h.horas_followup)} follow-up enviado em{" "}
                       {format(new Date(h.enviado_em), "dd/MM 'às' HH:mm", {
                         locale: ptBR,
                       })}

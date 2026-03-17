@@ -26,6 +26,7 @@ import MessageNode from "./customNodes/MessageNode";
 import MenuNode from "./customNodes/MenuNode";
 import SearchNode from "./customNodes/SearchNode";
 import HandoffNode from "./customNodes/HandoffNode";
+import FollowUpNode from "./customNodes/FollowUpNode";
 import DeletableEdge from "./customEdges/DeletableEdge";
 
 const nodeTypes = {
@@ -34,6 +35,7 @@ const nodeTypes = {
   menuNode: MenuNode,
   productSearchNode: SearchNode,
   handoffNode: HandoffNode,
+  followUpNode: FollowUpNode,
 };
 
 const edgeTypes = {
@@ -78,6 +80,24 @@ export default function BotFlowPage() {
 
   // Use explicit state for node selection instead of relying completely on React Flow's selected property
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+
+  const resolveFollowUpInactivityMinutes = (nodeData: Record<string, any>) => {
+    if (
+      typeof nodeData?.inactivityMinutes === "number" &&
+      Number.isFinite(nodeData.inactivityMinutes)
+    ) {
+      return Math.max(1, Math.round(nodeData.inactivityMinutes));
+    }
+
+    if (
+      typeof nodeData?.inactivityHours === "number" &&
+      Number.isFinite(nodeData.inactivityHours)
+    ) {
+      return Math.max(1, Math.round(nodeData.inactivityHours * 60));
+    }
+
+    return 24 * 60;
+  };
 
   useEffect(() => {
     fetchFlow();
@@ -129,6 +149,7 @@ export default function BotFlowPage() {
 
   const validateFlow = () => {
     const nodeById = new Map(nodes.map((node) => [node.id, node]));
+    const followUpHoursSeen = new Set<number>();
 
     for (const edge of edges) {
       if (!nodeById.has(edge.source) || !nodeById.has(edge.target)) {
@@ -139,7 +160,7 @@ export default function BotFlowPage() {
     for (const node of nodes) {
       const outEdges = edges.filter((edge) => edge.source === node.id);
 
-      if (node.type === "menuNode") {
+      if (node.type === "menuNode" || node.type === "followUpNode") {
         const options = Array.isArray(node.data?.options)
           ? node.data.options
           : [];
@@ -158,6 +179,20 @@ export default function BotFlowPage() {
           if (matches.length > 1) {
             return `Menu com opção ${index + 1} apontando para múltiplos destinos.`;
           }
+        }
+
+        if (node.type === "followUpNode") {
+          const configuredMinutes = resolveFollowUpInactivityMinutes(
+            (node.data || {}) as Record<string, any>,
+          );
+          if (!Number.isFinite(configuredMinutes) || configuredMinutes <= 0) {
+            return "Follow Up precisa de tempo de inatividade maior que 0 minuto.";
+          }
+
+          if (followUpHoursSeen.has(Math.round(configuredMinutes))) {
+            return "Não é permitido ter dois nós Follow Up com o mesmo tempo configurado.";
+          }
+          followUpHoursSeen.add(Math.round(configuredMinutes));
         }
       }
 
@@ -223,7 +258,8 @@ export default function BotFlowPage() {
           : String(params.sourceHandle);
       const requiresHandle =
         sourceNode?.type === "menuNode" ||
-        sourceNode?.type === "productSearchNode";
+        sourceNode?.type === "productSearchNode" ||
+        sourceNode?.type === "followUpNode";
 
       if (requiresHandle && !sourceHandle) {
         toast.error("Use um conector de saída válido deste bloco.");
@@ -276,8 +312,16 @@ export default function BotFlowPage() {
         message:
           type === "handoffNode"
             ? "Transferindo para atendente..."
+            : type === "followUpNode"
+              ? "Percebemos que você ficou ausente. Posso te ajudar com algo?"
             : "Nova mensagem",
-        options: type === "menuNode" ? [] : undefined,
+        title:
+          type === "followUpNode"
+            ? "Ainda posso te ajudar por aqui 💛"
+            : undefined,
+        inactivityMinutes: type === "followUpNode" ? 24 * 60 : undefined,
+        options:
+          type === "menuNode" || type === "followUpNode" ? [] : undefined,
         searchQuery: "",
         categoryId: "",
         typeId: "",
@@ -457,6 +501,8 @@ export default function BotFlowPage() {
         return "Busca";
       case "handoffNode":
         return "Atendente";
+      case "followUpNode":
+        return "Follow Up";
       default:
         return "Nó";
     }
@@ -467,6 +513,19 @@ export default function BotFlowPage() {
     if (node.type === "menuNode") {
       const options = Array.isArray(data.options) ? data.options : [];
       return options.length > 0 ? `Opções: ${options.length}` : "Sem opções";
+    }
+    if (node.type === "followUpNode") {
+      const options = Array.isArray(data.options) ? data.options : [];
+      const totalMinutes = resolveFollowUpInactivityMinutes(data);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = totalMinutes % 60;
+      const timeLabel =
+        hours > 0 && minutes > 0
+          ? `${hours}h ${minutes}min`
+          : hours > 0
+            ? `${hours}h`
+            : `${minutes}min`;
+      return `${timeLabel} • ${options.length} opção(ões)`;
     }
     if (node.type === "productSearchNode") {
       const searchTerm = data.searchQuery || data.searchPrefix;
@@ -536,7 +595,12 @@ export default function BotFlowPage() {
   const isDirty = JSON.stringify({ nodes, edges }) !== (initialSnapshot || "");
 
   const addMenuOption = () => {
-    if (!selectedNode || selectedNode.type !== "menuNode") return;
+    if (
+      !selectedNode ||
+      (selectedNode.type !== "menuNode" &&
+        selectedNode.type !== "followUpNode")
+    )
+      return;
     const currentOptions = Array.isArray(selectedNode.data.options)
       ? selectedNode.data.options
       : [];
@@ -546,7 +610,12 @@ export default function BotFlowPage() {
   };
 
   const updateMenuOption = (index: number, value: string) => {
-    if (!selectedNode || selectedNode.type !== "menuNode") return;
+    if (
+      !selectedNode ||
+      (selectedNode.type !== "menuNode" &&
+        selectedNode.type !== "followUpNode")
+    )
+      return;
     const currentOptions = Array.isArray(selectedNode.data.options)
       ? [...selectedNode.data.options]
       : [];
@@ -555,7 +624,12 @@ export default function BotFlowPage() {
   };
 
   const removeMenuOption = (index: number) => {
-    if (!selectedNode || selectedNode.type !== "menuNode") return;
+    if (
+      !selectedNode ||
+      (selectedNode.type !== "menuNode" &&
+        selectedNode.type !== "followUpNode")
+    )
+      return;
     const currentOptions = Array.isArray(selectedNode.data.options)
       ? [...selectedNode.data.options]
       : [];
@@ -673,6 +747,15 @@ export default function BotFlowPage() {
                 >
                   <Plus size={14} />
                   Atendente
+                </Button>
+                <Button
+                  onClick={() => addNode("followUpNode")}
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start border-amber-200 text-amber-700 bg-amber-50 hover:bg-amber-100"
+                >
+                  <Plus size={14} />
+                  Follow Up
                 </Button>
               </div>
 
@@ -875,6 +958,160 @@ export default function BotFlowPage() {
                                   updateMenuOption(i, e.target.value)
                                 }
                                 className="flex-1 bg-transparent border-b border-gray-300 focus:border-blue-500 focus:outline-none px-1 py-1 text-sm text-gray-800"
+                                placeholder={`Opção ${i + 1}`}
+                              />
+                              <button
+                                onClick={() => removeMenuOption(i)}
+                                className="text-red-400 hover:text-red-600 p-1 rounded-md hover:bg-red-50"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ),
+                        )}
+                      {(!Array.isArray(selectedNode.data.options) ||
+                        selectedNode.data.options.length === 0) && (
+                        <p className="text-xs text-gray-500 italic text-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                          Nenhuma opção cadastrada.
+                          <br />
+                          Clique em "Adicionar".
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {selectedNode.type === "followUpNode" && (
+                  <>
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-2">
+                        Tempo desde a última mensagem
+                      </label>
+                      {(() => {
+                        const totalMinutes = resolveFollowUpInactivityMinutes(
+                          selectedNode.data as Record<string, any>,
+                        );
+                        const currentHours = Math.floor(totalMinutes / 60);
+                        const currentMinutes = totalMinutes % 60;
+
+                        return (
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs text-gray-500 block mb-1">
+                                Horas
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-amber-500 bg-gray-50"
+                                value={currentHours}
+                                onChange={(e) => {
+                                  const nextHours =
+                                    e.target.value === ""
+                                      ? 0
+                                      : Math.max(0, Number(e.target.value));
+                                  const nextTotalMinutes =
+                                    nextHours * 60 + currentMinutes;
+                                  updateNodeData(selectedNode.id, {
+                                    inactivityMinutes: Math.max(
+                                      1,
+                                      Math.round(nextTotalMinutes),
+                                    ),
+                                  });
+                                }}
+                                placeholder="Ex: 0"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-gray-500 block mb-1">
+                                Minutos
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-amber-500 bg-gray-50"
+                                value={currentMinutes}
+                                onChange={(e) => {
+                                  const rawMinutes =
+                                    e.target.value === ""
+                                      ? 0
+                                      : Math.max(0, Number(e.target.value));
+                                  const extraHours = Math.floor(rawMinutes / 60);
+                                  const normalizedMinutes = rawMinutes % 60;
+                                  const normalizedHours =
+                                    currentHours + extraHours;
+                                  const nextTotalMinutes =
+                                    normalizedHours * 60 + normalizedMinutes;
+                                  updateNodeData(selectedNode.id, {
+                                    inactivityMinutes: Math.max(
+                                      1,
+                                      Math.round(nextTotalMinutes),
+                                    ),
+                                  });
+                                }}
+                                placeholder="Ex: 30"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    <div>
+                      <label className="font-bold text-gray-700 block mb-2">
+                        Título do Follow Up
+                      </label>
+                      <textarea
+                        className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-amber-500 bg-gray-50"
+                        value={
+                          (selectedNode.data.title as string) ||
+                          (selectedNode.data.message as string) ||
+                          ""
+                        }
+                        onChange={(e) =>
+                          updateNodeData(selectedNode.id, {
+                            title: e.target.value,
+                            message: e.target.value,
+                          })
+                        }
+                        rows={3}
+                        placeholder="Ex: Ainda posso te ajudar por aqui 💛"
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <label className="font-bold text-gray-700 block">
+                          Opções
+                        </label>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-xs py-0 gap-1"
+                          onClick={addMenuOption}
+                        >
+                          <PlusCircle size={14} /> Adicionar
+                        </Button>
+                      </div>
+
+                      {Array.isArray(selectedNode.data.options) &&
+                        selectedNode.data.options.map(
+                          (opt: string, i: number) => (
+                            <div
+                              key={i}
+                              className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-200"
+                            >
+                              <span className="text-gray-400 font-bold text-xs">
+                                {i + 1}.
+                              </span>
+                              <input
+                                value={opt}
+                                onChange={(e) =>
+                                  updateMenuOption(i, e.target.value)
+                                }
+                                className="flex-1 bg-transparent border-b border-gray-300 focus:border-amber-500 focus:outline-none px-1 py-1 text-sm text-gray-800"
                                 placeholder={`Opção ${i + 1}`}
                               />
                               <button
