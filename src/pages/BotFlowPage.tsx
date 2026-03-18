@@ -20,6 +20,7 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  Lock,
 } from "lucide-react";
 import StartNode from "./customNodes/StartNode";
 import MessageNode from "./customNodes/MessageNode";
@@ -27,6 +28,7 @@ import MenuNode from "./customNodes/MenuNode";
 import SearchNode from "./customNodes/SearchNode";
 import HandoffNode from "./customNodes/HandoffNode";
 import FollowUpNode from "./customNodes/FollowUpNode";
+import BlockNode from "./customNodes/BlockNode";
 import DeletableEdge from "./customEdges/DeletableEdge";
 
 const nodeTypes = {
@@ -36,6 +38,7 @@ const nodeTypes = {
   productSearchNode: SearchNode,
   handoffNode: HandoffNode,
   followUpNode: FollowUpNode,
+  blockNode: BlockNode,
 };
 
 const edgeTypes = {
@@ -314,6 +317,8 @@ export default function BotFlowPage() {
             ? "Transferindo para atendente..."
             : type === "followUpNode"
               ? "Percebemos que você ficou ausente. Posso te ajudar com algo?"
+              : type === "blockNode"
+                ? ""
             : "Nova mensagem",
         title:
           type === "followUpNode"
@@ -503,6 +508,8 @@ export default function BotFlowPage() {
         return "Atendente";
       case "followUpNode":
         return "Follow Up";
+      case "blockNode":
+        return "Bloqueio";
       default:
         return "Nó";
     }
@@ -757,6 +764,15 @@ export default function BotFlowPage() {
                   <Plus size={14} />
                   Follow Up
                 </Button>
+                <Button
+                  onClick={() => addNode("blockNode")}
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start border-slate-200 text-slate-700 bg-slate-50 hover:bg-slate-100"
+                >
+                  <Lock size={14} />
+                  Bloqueio
+                </Button>
               </div>
 
               <div className="flex-1 overflow-y-auto p-2 space-y-2">
@@ -905,6 +921,34 @@ export default function BotFlowPage() {
                       Após enviar esta mensagem, o bot será{" "}
                       <b className="font-bold">pausado</b> e passará o controle
                       para você no painel de atendimento.
+                    </div>
+                  </div>
+                )}
+
+                {selectedNode.type === "blockNode" && (
+                  <div>
+                    <label className="font-bold text-gray-700 block mb-2">
+                      Conteúdo opcional
+                    </label>
+                    <textarea
+                      className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-slate-500 bg-gray-50"
+                      value={
+                        (selectedNode.data.message as string) ||
+                        (selectedNode.data.content as string) ||
+                        ""
+                      }
+                      onChange={(e) =>
+                        updateNodeData(selectedNode.id, {
+                          message: e.target.value,
+                          content: e.target.value,
+                        })
+                      }
+                      rows={3}
+                      placeholder="Opcional: mensagem final antes de bloquear o bot para humano"
+                    />
+                    <div className="bg-slate-50 text-slate-700 text-xs p-3 rounded mt-2 border border-slate-200">
+                      Este nó ativa <b>is_human=true</b> na sessão e não envia
+                      notificação de equipe.
                     </div>
                   </div>
                 )}
