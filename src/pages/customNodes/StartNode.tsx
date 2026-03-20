@@ -1,6 +1,7 @@
 import { Handle, Position } from "@xyflow/react";
 
 export default function StartNode({ data }: { data?: any }) {
+  const title = String(data?.title || "").trim();
   const delayMs =
     typeof data?.delayMs === "number"
       ? data.delayMs
@@ -10,7 +11,7 @@ export default function StartNode({ data }: { data?: any }) {
 
   return (
     <div className="bg-green-50 border-2 border-green-600 rounded p-3 text-center text-sm font-bold shadow-md min-w-[150px]">
-      <div className="text-green-800">START (Obrigatório)</div>
+      <div className="text-green-800">{title || "START (Obrigatório)"}</div>
       {delayMs > 0 && (
         <div className="text-[10px] text-green-700 font-semibold mt-1">
           Delay: {delayMs} ms

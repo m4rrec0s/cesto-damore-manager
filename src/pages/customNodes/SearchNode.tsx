@@ -1,6 +1,7 @@
 import { Handle, Position } from "@xyflow/react";
 
 export default function SearchNode({ data }: { data: any }) {
+  const title = String(data?.title || "").trim();
   const searchTerm = data.searchQuery || data.searchPrefix || "*";
   const delayMs =
     typeof data?.delayMs === "number"
@@ -24,7 +25,7 @@ export default function SearchNode({ data }: { data: any }) {
         className="w-3 h-3 bg-purple-500"
       />
       <div className="p-2 bg-purple-500 font-bold border-b text-sm text-white">
-        Busca de Produto
+        {title || "Busca de Produto"}
       </div>
       {delayMs > 0 && (
         <div className="px-3 pt-2 text-[10px] text-purple-700 bg-white">

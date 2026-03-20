@@ -9,6 +9,7 @@ export default function MenuNode({ data, id }: { data: any, id: string }) {
       : typeof data?.delaySeconds === "number"
         ? Math.round(data.delaySeconds * 1000)
         : 1500;
+  const menuHeader = String(data?.menu_title || data?.message || "Selecione uma opção:").trim();
 
   return (
     <div className="bg-blue-50 border-2 border-blue-500 rounded-xl min-w-[250px] shadow-sm overflow-hidden">
@@ -22,7 +23,7 @@ export default function MenuNode({ data, id }: { data: any, id: string }) {
         </div>
       )}
       <div className="p-3 text-xs text-blue-900 border-b border-blue-100 bg-white">
-        {data.message || 'Selecione uma opção:'}
+        {menuHeader}
       </div>
       
       <div className="flex flex-col gap-2 p-3 bg-blue-50/50">

@@ -1,6 +1,7 @@
 import { Handle, Position } from "@xyflow/react";
 
 export default function HandoffNode({ data }: { data: any }) {
+  const title = String(data?.title || "").trim();
   const delayMs =
     typeof data?.delayMs === "number"
       ? data.delayMs
@@ -12,7 +13,7 @@ export default function HandoffNode({ data }: { data: any }) {
     <div className="bg-red-50 border-2 border-red-500 rounded min-w-[200px] shadow-sm">
       <Handle type="target" position={Position.Left} className="w-3 h-3 bg-red-500" />
       <div className="p-2 bg-red-500 text-white font-bold border-b text-sm">
-        Atendimento Humano
+        {title || "Atendimento Humano"}
       </div>
       <div className="p-3">
         {delayMs > 0 && (

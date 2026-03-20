@@ -102,6 +102,24 @@ export default function BotFlowPage() {
     return 24 * 60;
   };
 
+  const parseListInput = (value: string) =>
+    value
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  const parseCommaListInput = (value: string) =>
+    value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+  const listToMultiline = (value: unknown) =>
+    Array.isArray(value) ? value.map((item) => String(item || "")).join("\n") : "";
+
+  const listToComma = (value: unknown) =>
+    Array.isArray(value) ? value.map((item) => String(item || "")).join(", ") : "";
+
   useEffect(() => {
     fetchFlow();
   }, []);
@@ -132,6 +150,12 @@ export default function BotFlowPage() {
           data: {
             delayMs: 1500,
             ...(node.data || {}),
+            menu_title:
+              node.type === "menuNode"
+                ? (node.data as Record<string, any>)?.menu_title ||
+                  (node.data as Record<string, any>)?.message ||
+                  ""
+                : (node.data as Record<string, any>)?.menu_title,
           },
         }));
         setNodes(normalizedNodes);
@@ -310,20 +334,31 @@ export default function BotFlowPage() {
       id: `${type}-${Date.now()}`,
       type,
       position,
-      data: {
-        ...baseData,
-        message:
-          type === "handoffNode"
-            ? "Transferindo para atendente..."
-            : type === "followUpNode"
-              ? "Percebemos que você ficou ausente. Posso te ajudar com algo?"
-              : type === "blockNode"
-                ? ""
-            : "Nova mensagem",
-        title:
-          type === "followUpNode"
-            ? "Ainda posso te ajudar por aqui 💛"
-            : undefined,
+        data: {
+          ...baseData,
+          message:
+            type === "handoffNode"
+              ? "Transferindo para atendente..."
+              : type === "followUpNode"
+                ? "Percebemos que você ficou ausente. Posso te ajudar com algo?"
+                : type === "blockNode"
+                  ? ""
+                  : "Nova mensagem",
+          menu_title: type === "menuNode" ? "Escolha uma opção:" : undefined,
+          title:
+            type === "followUpNode"
+              ? "Follow-up de inatividade"
+              : type === "startNode"
+                ? "Início do atendimento"
+                : type === "menuNode"
+                  ? "Menu de opções"
+                  : type === "handoffNode"
+                    ? "Transferência para humano"
+                    : type === "blockNode"
+                      ? "Encerramento silencioso"
+                      : type === "productSearchNode"
+                        ? "Busca de produtos"
+                        : "Mensagem",
         inactivityMinutes: type === "followUpNode" ? 24 * 60 : undefined,
         options:
           type === "menuNode" || type === "followUpNode" ? [] : undefined,
@@ -517,6 +552,8 @@ export default function BotFlowPage() {
 
   const nodePreview = (node: Node) => {
     const data = (node.data || {}) as BotNodeData;
+    const title = String(data?.title || "").trim();
+    if (title) return title;
     if (node.type === "menuNode") {
       const options = Array.isArray(data.options) ? data.options : [];
       return options.length > 0 ? `Opções: ${options.length}` : "Sem opções";
@@ -850,7 +887,210 @@ export default function BotFlowPage() {
                 </span>
               </div>
 
-              <div className="flex flex-col gap-5 text-sm flex-1">
+                <div className="flex flex-col gap-5 text-sm flex-1">
+                {selectedNode && (
+                  <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 space-y-3">
+                    <div>
+                      <label className="font-bold text-sky-800 block mb-2">
+                        Título do nó
+                      </label>
+                      <input
+                        className="w-full border-2 border-sky-200 p-3 rounded-lg focus:outline-none focus:border-sky-500 bg-white"
+                        value={String(selectedNode.data.title || "")}
+                        onChange={(e) =>
+                          updateNodeData(selectedNode.id, {
+                            title: e.target.value,
+                          })
+                        }
+                        placeholder="Nome curto para identificar a intenção do nó"
+                      />
+                    </div>
+
+                    <details className="bg-white border border-sky-100 rounded-md p-3">
+                      <summary className="cursor-pointer text-xs font-bold text-sky-700">
+                        Ficha de intenção (roteamento LLM)
+                      </summary>
+                      <div className="space-y-3 mt-3">
+                        <div>
+                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
+                            Summary
+                          </label>
+                          <textarea
+                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
+                            value={String(selectedNode.data.summary || "")}
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                summary: e.target.value,
+                              })
+                            }
+                            rows={2}
+                            placeholder="O que esse nó faz em 1 frase"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
+                            When to use
+                          </label>
+                          <textarea
+                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
+                            value={String(selectedNode.data.when_to_use || "")}
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                when_to_use: e.target.value,
+                              })
+                            }
+                            rows={2}
+                            placeholder="Em quais intenções esse nó deve ser escolhido"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
+                            Examples (1 por linha)
+                          </label>
+                          <textarea
+                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
+                            value={listToMultiline(selectedNode.data.examples)}
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                examples: parseListInput(e.target.value),
+                              })
+                            }
+                            rows={3}
+                            placeholder={"Cadê meu pedido?\nQuero falar com atendente"}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
+                            Keywords (separadas por vírgula)
+                          </label>
+                          <input
+                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
+                            value={listToComma(selectedNode.data.keywords)}
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                keywords: parseCommaListInput(e.target.value),
+                              })
+                            }
+                            placeholder="pedido, rastreio, entrega"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
+                            Expected user state
+                          </label>
+                          <input
+                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
+                            value={String(selectedNode.data.expected_user_state || "")}
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                expected_user_state: e.target.value,
+                              })
+                            }
+                            placeholder="neutral | waiting_order_id"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
+                            Next best nodes (ids separados por vírgula)
+                          </label>
+                          <input
+                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
+                            value={listToComma(selectedNode.data.next_best_nodes)}
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                next_best_nodes: parseCommaListInput(e.target.value),
+                              })
+                            }
+                            placeholder="node-123, node-456"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
+                            Requires slots (separados por vírgula)
+                          </label>
+                          <input
+                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
+                            value={listToComma(selectedNode.data.requires_slots)}
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                requires_slots: parseCommaListInput(e.target.value),
+                              })
+                            }
+                            placeholder="cidade, data, produto"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
+                            Bot voice template
+                          </label>
+                          <textarea
+                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
+                            value={String(selectedNode.data.bot_voice_template || "")}
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                bot_voice_template: e.target.value,
+                              })
+                            }
+                            rows={2}
+                            placeholder="Texto base opcional para resposta do fluxo"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
+                            Confidence rules
+                          </label>
+                          <textarea
+                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
+                            value={String(selectedNode.data.confidence_rules || "")}
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                confidence_rules: e.target.value,
+                              })
+                            }
+                            rows={2}
+                            placeholder="Regras para seleção automática deste nó"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
+                            Confidence threshold (0 a 1)
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={1}
+                            step={0.01}
+                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
+                            value={
+                              typeof selectedNode.data.confidence_threshold === "number"
+                                ? selectedNode.data.confidence_threshold
+                                : ""
+                            }
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                confidence_threshold:
+                                  e.target.value === ""
+                                    ? undefined
+                                    : Math.max(0, Math.min(1, Number(e.target.value))),
+                              })
+                            }
+                            placeholder="0.85"
+                          />
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                )}
+
                 {selectedNode && (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                     <label className="font-bold text-gray-700 block mb-2">
@@ -957,13 +1197,18 @@ export default function BotFlowPage() {
                   <>
                     <div>
                       <label className="font-bold text-gray-700 block mb-2">
-                        Mensagem/Título do Menu
+                        Título exibido do menu (cliente)
                       </label>
                       <textarea
                         className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-blue-500 bg-gray-50"
-                        value={(selectedNode.data.message as string) || ""}
+                        value={
+                          (selectedNode.data.menu_title as string) ||
+                          (selectedNode.data.message as string) ||
+                          ""
+                        }
                         onChange={(e) =>
                           updateNodeData(selectedNode.id, {
+                            menu_title: e.target.value,
                             message: e.target.value,
                           })
                         }
@@ -1105,18 +1350,16 @@ export default function BotFlowPage() {
 
                     <div>
                       <label className="font-bold text-gray-700 block mb-2">
-                        Título do Follow Up
+                        Mensagem do Follow Up (cliente)
                       </label>
                       <textarea
                         className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-amber-500 bg-gray-50"
                         value={
-                          (selectedNode.data.title as string) ||
                           (selectedNode.data.message as string) ||
                           ""
                         }
                         onChange={(e) =>
                           updateNodeData(selectedNode.id, {
-                            title: e.target.value,
                             message: e.target.value,
                           })
                         }

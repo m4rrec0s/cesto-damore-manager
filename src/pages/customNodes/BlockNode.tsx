@@ -1,6 +1,7 @@
 import { Handle, Position } from "@xyflow/react";
 
 export default function BlockNode({ data }: { data: any }) {
+  const title = String(data?.title || "").trim();
   const delayMs =
     typeof data?.delayMs === "number"
       ? data.delayMs
@@ -17,7 +18,7 @@ export default function BlockNode({ data }: { data: any }) {
         className="w-3 h-3 bg-slate-600"
       />
       <div className="p-2 bg-slate-600 text-white font-bold border-b text-sm">
-        Bloqueio (Sem notificação)
+        {title || "Bloqueio (Sem notificação)"}
       </div>
       <div className="p-3">
         {delayMs > 0 && (
