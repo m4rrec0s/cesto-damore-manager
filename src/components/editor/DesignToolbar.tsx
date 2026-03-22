@@ -11,10 +11,13 @@ import {
   Upload,
   Download,
   Eye,
+  Magnet,
+  Ruler,
 } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -32,6 +35,10 @@ interface DesignToolbarProps {
   onRedo: () => void;
   onSave: () => void;
   onExportHighQuality?: () => void;
+  snapEnabled: boolean;
+  onSnapEnabledChange: (value: boolean) => void;
+  rulersEnabled: boolean;
+  onRulersEnabledChange: (value: boolean) => void;
   saving: boolean;
   loading: boolean;
   user: any;
@@ -53,6 +60,10 @@ export const DesignToolbar = ({
   onRedo,
   onSave,
   onExportHighQuality,
+  snapEnabled,
+  onSnapEnabledChange,
+  rulersEnabled,
+  onRulersEnabledChange,
   saving,
   loading,
   user,
@@ -131,6 +142,32 @@ export const DesignToolbar = ({
                 </svg>
                 Quadro
               </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger className="flex gap-1 text-white text-sm font-semibold items-center mr-2">
+              <Ruler className="h-3 w-3" /> Visualização
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuLabel>Canvas</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuCheckboxItem
+                checked={rulersEnabled}
+                onCheckedChange={(checked) =>
+                  onRulersEnabledChange(Boolean(checked))
+                }
+              >
+                Réguas e guias manuais
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
+                checked={snapEnabled}
+                onCheckedChange={(checked) =>
+                  onSnapEnabledChange(Boolean(checked))
+                }
+              >
+                <Magnet className="h-3.5 w-3.5" />
+                Encaixe inteligente
+              </DropdownMenuCheckboxItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

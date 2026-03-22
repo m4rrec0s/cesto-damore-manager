@@ -12,6 +12,7 @@ import { DesignSidebar } from "@/components/editor/DesignSidebar";
 import { DesignToolbar } from "@/components/editor/DesignToolbar";
 import { ObjectToolbar } from "@/components/editor/ObjectToolbar";
 import { DesignPanels } from "@/components/editor/DesignPanels";
+import placeholderImg from "../assets/placeholder.png";
 import styles from "./DesignEditorPage.module.css";
 
 const CM_TO_PX = 37.795;
@@ -45,6 +46,30 @@ const CUSTOM_PROPS = [
   "imageSmoothing",
   "noScaleCache",
 ];
+
+const CLONE_PROPS = CUSTOM_PROPS.filter((prop) => prop !== "id");
+const RULER_SIZE = 24;
+const SNAP_THRESHOLD = 8;
+const GUIDE_DISPLAY_THRESHOLD = 64;
+const GUIDE_COLOR = "#ec4899";
+const MANUAL_GUIDE_COLOR = "#22c55e";
+
+type GuideOrientation = "vertical" | "horizontal";
+
+type GuideLine = {
+  id: string;
+  orientation: GuideOrientation;
+  position: number;
+  kind: "snap" | "manual" | "measure";
+  label?: string;
+};
+
+type GuideBadge = {
+  id: string;
+  orientation: GuideOrientation;
+  position: number;
+  label: string;
+};
 
 // Tipagem simplificada para evitar erros de linting "any"
 interface FabricCanvas {
@@ -161,6 +186,290 @@ const preloadFontsFromState = async (stateOrJson: any) => {
   }
 };
 
+const addFramePlaceholdersToExport = async (exportCanvas: FabricCanvas) => {
+  const { FabricImage } = await import("fabric");
+  const objects = exportCanvas.getObjects() as FabricObject[];
+  const frameObjects = objects.filter((obj) => obj.isFrame);
+
+  if (frameObjects.length === 0) return;
+
+  for (const frame of frameObjects) {
+    const hasLinkedImage = objects.some(
+      (obj) => obj.type === "image" && obj.linkedFrameId === frame.id,
+    );
+
+    if (hasLinkedImage) continue;
+
+    const placeholder = (await (FabricImage as any).fromURL(placeholderImg, {
+      crossOrigin: "anonymous",
+    })) as FabricObject;
+
+    const frameRect = frame.getBoundingRect();
+    const placeholderWidth = (placeholder as any).width || 1;
+    const placeholderHeight = (placeholder as any).height || 1;
+    const coverScale = Math.max(
+      frameRect.width / placeholderWidth,
+      frameRect.height / placeholderHeight,
+    );
+
+    placeholder.set({
+      left: frameRect.left + frameRect.width / 2,
+      top: frameRect.top + frameRect.height / 2,
+      originX: "center",
+      originY: "center",
+      scaleX: coverScale,
+      scaleY: coverScale,
+      angle: (frame as any).angle || 0,
+      flipX: (frame as any).flipX || false,
+      flipY: (frame as any).flipY || false,
+      skewX: (frame as any).skewX || 0,
+      skewY: (frame as any).skewY || 0,
+      opacity: frame.opacity ?? 1,
+      selectable: false,
+      evented: false,
+      objectCaching: false,
+    });
+
+    try {
+      const clipPath = await frame.clone();
+      (clipPath as any).absolutePositioned = true;
+      placeholder.clipPath = clipPath as any;
+    } catch (error) {
+      // Se o clone falhar, ainda exportamos o placeholder sem clipPath.
+    }
+
+    placeholder.set(
+      "name",
+      `preview-placeholder-${frame.id || frame.name || Date.now()}`,
+    );
+    const frameIndex = exportCanvas.getObjects().indexOf(frame);
+    if (frameIndex >= 0) {
+      (exportCanvas as any).insertAt?.(frameIndex, placeholder);
+    } else {
+      exportCanvas.add(placeholder);
+    }
+    exportCanvas.bringObjectToFront(frame);
+  }
+};
+
+const createDesignPreviewDataUrl = async (
+  sourceCanvas: FabricCanvas,
+  exportWidth: number,
+  exportHeight: number,
+  multiplier = 1,
+) => {
+  const { StaticCanvas } = await import("fabric");
+  const serialized = sourceCanvas.toObject(CUSTOM_PROPS);
+  const exportCanvas = new StaticCanvas(document.createElement("canvas"), {
+    preserveObjectStacking: true,
+    enableRetinaScaling: false,
+    imageSmoothingEnabled: true,
+  }) as unknown as FabricCanvas & { dispose?: () => void };
+
+  try {
+    await exportCanvas.loadFromJSON(serialized);
+    exportCanvas.setDimensions(
+      {
+        width: Math.round(exportWidth),
+        height: Math.round(exportHeight),
+      },
+      { cssOnly: false },
+    );
+    exportCanvas.set({
+      backgroundColor: sourceCanvas.backgroundColor,
+    });
+    exportCanvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    await addFramePlaceholdersToExport(exportCanvas);
+    exportCanvas.renderAll();
+
+    const dataUrl = exportCanvas.toDataURL({
+      format: "png",
+      multiplier,
+      enableRetinaScaling: false,
+    });
+
+    return dataUrl;
+  } finally {
+    exportCanvas.dispose?.();
+  }
+};
+
+const formatDistance = (px: number) => {
+  const safePx = Math.max(0, Math.round(px));
+  const cm = safePx / CM_TO_PX;
+  return `${safePx}px · ${cm.toFixed(safePx >= 100 ? 1 : 2)}cm`;
+};
+
+const clampToRange = (value: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, value));
+
+const getBoundingRectSafe = (obj: FabricObject) => {
+  const rect = obj.getBoundingRect();
+  const left = rect.left ?? obj.left ?? 0;
+  const top = rect.top ?? obj.top ?? 0;
+  const width = rect.width ?? obj.width ?? 0;
+  const height = rect.height ?? obj.height ?? 0;
+
+  return {
+    left,
+    top,
+    width,
+    height,
+    centerX: left + width / 2,
+    centerY: top + height / 2,
+    right: left + width,
+    bottom: top + height,
+  };
+};
+
+type AxisTarget = {
+  label: "start" | "center" | "end";
+  position: number;
+};
+
+type AxisCandidate = {
+  label: string;
+  position: number;
+  source?: string;
+};
+
+type AxisMatch = {
+  delta: number;
+  candidate: AxisCandidate;
+  target: AxisTarget;
+  abs: number;
+};
+
+type AxisEvaluation = {
+  bestSnap: AxisMatch | null;
+  bestDisplay: AxisMatch | null;
+};
+
+const evaluateAxis = (
+  target: AxisTarget[],
+  candidates: AxisCandidate[],
+  snapThreshold: number,
+  displayThreshold: number,
+): AxisEvaluation => {
+  let bestSnap: AxisMatch | null = null;
+  let bestDisplay: AxisMatch | null = null;
+
+  target.forEach((targetLine) => {
+    candidates.forEach((candidate) => {
+      const delta = candidate.position - targetLine.position;
+      const abs = Math.abs(delta);
+
+      if (abs <= displayThreshold) {
+        if (!bestDisplay || abs < bestDisplay.abs) {
+          bestDisplay = { delta, candidate, target: targetLine, abs };
+        }
+      }
+
+      if (abs <= snapThreshold) {
+        if (!bestSnap || abs < bestSnap.abs) {
+          bestSnap = { delta, candidate, target: targetLine, abs };
+        }
+      }
+    });
+  });
+
+  return { bestSnap, bestDisplay };
+};
+
+const buildAxisCandidates = (
+  rects: Array<{ left: number; top: number; width: number; height: number }>,
+  canvasSize: number,
+  orientation: GuideOrientation,
+  manualGuides: GuideLine[],
+) => {
+  const candidates: AxisCandidate[] = [];
+
+  if (orientation === "vertical") {
+    candidates.push(
+      { label: "canvas-left", position: 0, source: "canvas" },
+      { label: "canvas-center", position: canvasSize / 2, source: "canvas" },
+      { label: "canvas-right", position: canvasSize, source: "canvas" },
+    );
+    manualGuides
+      .filter((guide) => guide.orientation === "vertical")
+      .forEach((guide) =>
+        candidates.push({
+          label: guide.label || "guide",
+          position: guide.position,
+          source: "manual",
+        }),
+      );
+    rects.forEach((rect, index) => {
+      candidates.push(
+        { label: `obj-${index}-left`, position: rect.left, source: "object" },
+        {
+          label: `obj-${index}-center`,
+          position: rect.left + rect.width / 2,
+          source: "object",
+        },
+        {
+          label: `obj-${index}-right`,
+          position: rect.left + rect.width,
+          source: "object",
+        },
+      );
+    });
+  } else {
+    candidates.push(
+      { label: "canvas-top", position: 0, source: "canvas" },
+      { label: "canvas-center", position: canvasSize / 2, source: "canvas" },
+      { label: "canvas-bottom", position: canvasSize, source: "canvas" },
+    );
+    manualGuides
+      .filter((guide) => guide.orientation === "horizontal")
+      .forEach((guide) =>
+        candidates.push({
+          label: guide.label || "guide",
+          position: guide.position,
+          source: "manual",
+        }),
+      );
+    rects.forEach((rect, index) => {
+      candidates.push(
+        { label: `obj-${index}-top`, position: rect.top, source: "object" },
+        {
+          label: `obj-${index}-center`,
+          position: rect.top + rect.height / 2,
+          source: "object",
+        },
+        {
+          label: `obj-${index}-bottom`,
+          position: rect.top + rect.height,
+          source: "object",
+        },
+      );
+    });
+  }
+
+  return candidates;
+};
+
+const applySnapDelta = (
+  object: FabricObject,
+  rect: ReturnType<typeof getBoundingRectSafe>,
+  deltaX: number,
+  deltaY: number,
+) => {
+  if (deltaX) {
+    object.set("left", (object.left || 0) + deltaX);
+  }
+
+  if (deltaY) {
+    object.set("top", (object.top || 0) + deltaY);
+  }
+
+  object.setCoords();
+  return {
+    left: rect.left + deltaX,
+    top: rect.top + deltaY,
+  };
+};
+
 const DesignEditorPage = () => {
   const { layoutId } = useParams<{ layoutId: string }>();
   const navigate = useNavigate();
@@ -191,6 +500,15 @@ const DesignEditorPage = () => {
   >([]);
   const [workspaceZoom, setWorkspaceZoom] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
+  const [snapEnabled, setSnapEnabled] = useState(true);
+  const [rulersEnabled, setRulersEnabled] = useState(true);
+  const [manualGuides, setManualGuides] = useState<GuideLine[]>([]);
+  const [guides, setGuides] = useState<GuideLine[]>([]);
+  const [guideBadges, setGuideBadges] = useState<GuideBadge[]>([]);
+  const [guideDragState, setGuideDragState] = useState<{
+    orientation: GuideOrientation;
+    position: number;
+  } | null>(null);
 
   // Refs para gerenciar o estado sem disparar re-renders desnecessários
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -198,10 +516,18 @@ const DesignEditorPage = () => {
   const autoSaveTimeout = useRef<NodeJS.Timeout | null>(null);
   const namesSaveTimeout = useRef<NodeJS.Timeout | null>(null);
   const isInternalUpdate = useRef(false);
+  const manualGuidesRef = useRef<GuideLine[]>([]);
+  const snapEnabledRef = useRef(snapEnabled);
+  const rulersEnabledRef = useRef(rulersEnabled);
+  const guideDragRef = useRef<{
+    orientation: GuideOrientation;
+    position: number;
+  } | null>(null);
   // Track last pointer position (in canvas viewport coordinates) to center zoom on mouse
   const lastPointerRef = useRef<{ x: number; y: number } | null>(null);
   // Keep a ref for zoom to read inside event handlers without stale closures
   const workspaceZoomRef = useRef<number>(workspaceZoom);
+  const stageRef = useRef<HTMLDivElement>(null);
 
   const clamp = (v: number, a: number, b: number) =>
     Math.max(a, Math.min(b, v));
@@ -283,6 +609,244 @@ const DesignEditorPage = () => {
     },
     [workspaceZoom],
   );
+
+  useEffect(() => {
+    manualGuidesRef.current = manualGuides;
+  }, [manualGuides]);
+
+  useEffect(() => {
+    snapEnabledRef.current = snapEnabled;
+  }, [snapEnabled]);
+
+  useEffect(() => {
+    rulersEnabledRef.current = rulersEnabled;
+  }, [rulersEnabled]);
+
+  const clearGuideOverlay = useCallback(() => {
+    setGuides([]);
+    setGuideBadges([]);
+  }, []);
+
+  useEffect(() => {
+    if (!snapEnabled) {
+      clearGuideOverlay();
+    }
+  }, [clearGuideOverlay, snapEnabled]);
+
+  const updateGuideOverlay = useCallback(
+    (target: FabricObject) => {
+      if (!canvas) return;
+
+      const currentCanvas = canvas as FabricCanvas;
+      const targetRect = getBoundingRectSafe(target);
+      const manualGuides = rulersEnabledRef.current
+        ? manualGuidesRef.current
+        : [];
+
+      const otherRects = currentCanvas
+        .getObjects()
+        .filter((obj: FabricObject) => obj !== target)
+        .map((obj: FabricObject) => getBoundingRectSafe(obj));
+
+      const verticalCandidates = buildAxisCandidates(
+        otherRects,
+        dimensions.width,
+        "vertical",
+        manualGuides,
+      );
+      const horizontalCandidates = buildAxisCandidates(
+        otherRects,
+        dimensions.height,
+        "horizontal",
+        manualGuides,
+      );
+
+      const verticalTargets: AxisTarget[] = [
+        { label: "start", position: targetRect.left },
+        { label: "center", position: targetRect.centerX },
+        { label: "end", position: targetRect.right },
+      ];
+
+      const horizontalTargets: AxisTarget[] = [
+        { label: "start", position: targetRect.top },
+        { label: "center", position: targetRect.centerY },
+        { label: "end", position: targetRect.bottom },
+      ];
+
+      const verticalMatch = evaluateAxis(
+        verticalTargets,
+        verticalCandidates,
+        SNAP_THRESHOLD,
+        GUIDE_DISPLAY_THRESHOLD,
+      );
+      const horizontalMatch = evaluateAxis(
+        horizontalTargets,
+        horizontalCandidates,
+        SNAP_THRESHOLD,
+        GUIDE_DISPLAY_THRESHOLD,
+      );
+
+      const nextGuides: GuideLine[] = [];
+      const nextBadges: GuideBadge[] = [];
+
+      let deltaX = 0;
+      let deltaY = 0;
+
+      if (verticalMatch.bestDisplay) {
+        const linePos = verticalMatch.bestDisplay.candidate.position;
+        nextGuides.push({
+          id: `v-${linePos}-${verticalMatch.bestDisplay.target.label}`,
+          orientation: "vertical",
+          position: linePos,
+          kind: verticalMatch.bestSnap ? "snap" : "measure",
+        });
+        nextBadges.push({
+          id: `vb-${linePos}-${verticalMatch.bestDisplay.target.label}`,
+          orientation: "vertical",
+          position: linePos,
+          label: formatDistance(verticalMatch.bestDisplay.abs),
+        });
+      }
+
+      if (horizontalMatch.bestDisplay) {
+        const linePos = horizontalMatch.bestDisplay.candidate.position;
+        nextGuides.push({
+          id: `h-${linePos}-${horizontalMatch.bestDisplay.target.label}`,
+          orientation: "horizontal",
+          position: linePos,
+          kind: horizontalMatch.bestSnap ? "snap" : "measure",
+        });
+        nextBadges.push({
+          id: `hb-${linePos}-${horizontalMatch.bestDisplay.target.label}`,
+          orientation: "horizontal",
+          position: linePos,
+          label: formatDistance(horizontalMatch.bestDisplay.abs),
+        });
+      }
+
+      if (snapEnabledRef.current && verticalMatch.bestSnap) {
+        deltaX = verticalMatch.bestSnap.delta;
+      }
+
+      if (snapEnabledRef.current && horizontalMatch.bestSnap) {
+        deltaY = horizontalMatch.bestSnap.delta;
+      }
+
+      if (deltaX || deltaY) {
+        applySnapDelta(target, targetRect, deltaX, deltaY);
+      } else {
+        target.setCoords();
+      }
+
+      setGuides(nextGuides);
+      setGuideBadges(nextBadges);
+      currentCanvas.renderAll();
+    },
+    [canvas, dimensions.height, dimensions.width],
+  );
+
+  const getCanvasPointFromClient = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvasEl = canvasRef.current;
+      if (!canvasEl) return null;
+
+      const rect = canvasEl.getBoundingClientRect();
+      const zoom = workspaceZoomRef.current || 1;
+      return {
+        x: clampToRange((clientX - rect.left) / zoom, 0, dimensions.width),
+        y: clampToRange((clientY - rect.top) / zoom, 0, dimensions.height),
+      };
+    },
+    [dimensions.height, dimensions.width],
+  );
+
+  const addManualGuide = useCallback((guide: GuideLine) => {
+    setManualGuides((prev) => [
+      ...prev.filter((item) => item.id !== guide.id),
+      guide,
+    ]);
+  }, []);
+
+  const startGuideDrag = useCallback(
+    (orientation: GuideOrientation, event: React.MouseEvent) => {
+      if (!rulersEnabledRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      const point = getCanvasPointFromClient(event.clientX, event.clientY);
+      if (!point) return;
+
+      const position = orientation === "vertical" ? point.x : point.y;
+      const dragState = { orientation, position };
+      guideDragRef.current = dragState;
+      setGuideDragState(dragState);
+      setGuideBadges([]);
+      setGuides([
+        {
+          id: "guide-preview",
+          orientation,
+          position,
+          kind: "manual",
+          label: `${Math.round(position)}px`,
+        },
+      ]);
+    },
+    [getCanvasPointFromClient],
+  );
+
+  useEffect(() => {
+    if (!guideDragState) return;
+
+    const handleMove = (event: MouseEvent) => {
+      const point = getCanvasPointFromClient(event.clientX, event.clientY);
+      if (!point || !guideDragRef.current) return;
+
+      const nextPosition =
+        guideDragRef.current.orientation === "vertical" ? point.x : point.y;
+      guideDragRef.current = {
+        ...guideDragRef.current,
+        position: nextPosition,
+      };
+      setGuides([
+        {
+          id: "guide-preview",
+          orientation: guideDragRef.current.orientation,
+          position: nextPosition,
+          kind: "manual",
+          label: `${Math.round(nextPosition)}px`,
+        },
+      ]);
+    };
+
+    const handleUp = () => {
+      const dragState = guideDragRef.current;
+      if (dragState) {
+        addManualGuide({
+          id: `manual-${Date.now()}`,
+          orientation: dragState.orientation,
+          position: dragState.position,
+          kind: "manual",
+        });
+      }
+
+      guideDragRef.current = null;
+      setGuideDragState(null);
+      clearGuideOverlay();
+    };
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("mouseup", handleUp);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("mouseup", handleUp);
+    };
+  }, [
+    addManualGuide,
+    clearGuideOverlay,
+    getCanvasPointFromClient,
+    guideDragState,
+  ]);
 
   useEffect(() => {
     // Keep ref in sync to use in event handlers
@@ -574,14 +1138,28 @@ const DesignEditorPage = () => {
           }
         };
 
-        activeCanvas.on("object:modified", handleCanvasModified);
         activeCanvas.on("object:added", handleCanvasModified);
         activeCanvas.on("object:removed", handleCanvasModified);
         activeCanvas.on("path:created", handleCanvasModified);
+        activeCanvas.on("object:modified", () => {
+          clearGuideOverlay();
+          handleCanvasModified();
+        });
+        activeCanvas.on("object:scaling", (e: any) => {
+          const target = e?.target as FabricObject | undefined;
+          if (target) updateGuideOverlay(target);
+        });
+        activeCanvas.on("object:moving", (e: any) => {
+          const target = e?.target as FabricObject | undefined;
+          if (target) updateGuideOverlay(target);
+        });
 
         activeCanvas.on("selection:created", handleSelection);
         activeCanvas.on("selection:updated", handleSelection);
-        activeCanvas.on("selection:cleared", () => setSelectedObject(null));
+        activeCanvas.on("selection:cleared", () => {
+          setSelectedObject(null);
+          clearGuideOverlay();
+        });
 
         activeCanvas.on("mouse:dblclick", handleDoubleClick);
 
@@ -1146,32 +1724,12 @@ const DesignEditorPage = () => {
         let previewImageUrl: string | undefined;
         if (isManual) {
           try {
-            // Export direto do canvas ativo: evita timeouts de loadFromJSON e
-            // força viewport fixa para não herdar zoom da tela (causa preview pequeno no canto).
-            const originalTransform = [
-              ...((currentCanvas as any).viewportTransform || [1, 0, 0, 1, 0, 0]),
-            ];
-
-            try {
-              (currentCanvas as any).setViewportTransform([
-                INTERNAL_DPI_MULTIPLIER,
-                0,
-                0,
-                INTERNAL_DPI_MULTIPLIER,
-                0,
-                0,
-              ]);
-              currentCanvas.renderAll();
-
-              previewImageUrl = currentCanvas.toDataURL({
-                format: "png",
-                multiplier: 2 / INTERNAL_DPI_MULTIPLIER,
-                enableRetinaScaling: false,
-              });
-            } finally {
-              (currentCanvas as any).setViewportTransform(originalTransform);
-              currentCanvas.renderAll();
-            }
+            previewImageUrl = await createDesignPreviewDataUrl(
+              currentCanvas,
+              dimensions.width,
+              dimensions.height,
+              1,
+            );
           } catch (err) {
             console.warn("Falha ao gerar preview:", err);
           }
@@ -1316,16 +1874,12 @@ const DesignEditorPage = () => {
     if (!selectedObject || !canvas) return;
 
     try {
-      const cloned = await (selectedObject as FabricObject).clone(CUSTOM_PROPS);
+      const cloned = await (selectedObject as FabricObject).clone(CLONE_PROPS);
+      const newId = generateId();
       cloned.set("left", (selectedObject as FabricObject).left + 15);
       cloned.set("top", (selectedObject as FabricObject).top + 15);
-
-      // Ensure custom props are preserved
-      CUSTOM_PROPS.forEach((prop) => {
-        if ((selectedObject as FabricObject)[prop] !== undefined) {
-          cloned[prop] = (selectedObject as FabricObject)[prop];
-        }
-      });
+      cloned.set("id", newId);
+      (cloned as any).objectId = newId;
 
       const c = canvas as FabricCanvas;
       c.add(cloned);
@@ -1370,35 +1924,12 @@ const DesignEditorPage = () => {
 
     const toastId = toast.loading("Gerando imagem em alta qualidade...");
     try {
-      // Forçar fundo branco para evitar transparência
-      const originalBg = currentCanvas.backgroundColor;
-      currentCanvas.set("backgroundColor", "#ffffff");
-      currentCanvas.renderAll();
-
-      // Exportar com máxima qualidade
-      const originalTransform = [...(currentCanvas as any).viewportTransform];
-      (currentCanvas as any).setViewportTransform([
-        INTERNAL_DPI_MULTIPLIER,
-        0,
-        0,
-        INTERNAL_DPI_MULTIPLIER,
-        0,
-        0,
-      ]);
-
-      // Multiplier 5 relativo à escala base.
-      // Como o canvas já está em 2x, multiplier deve ser 5 / 2 = 2.5
-      const highQualityImage = currentCanvas.toDataURL({
-        format: "png",
-        multiplier: 5 / INTERNAL_DPI_MULTIPLIER,
-        enableRetinaScaling: false,
-      });
-
-      (currentCanvas as any).setViewportTransform(originalTransform);
-
-      // Restaurar fundo original
-      currentCanvas.set("backgroundColor", originalBg);
-      currentCanvas.renderAll();
+      const highQualityImage = await createDesignPreviewDataUrl(
+        currentCanvas,
+        dimensions.width,
+        dimensions.height,
+        5,
+      );
 
       const link = document.createElement("a");
       link.href = highQualityImage;
@@ -1625,6 +2156,15 @@ const DesignEditorPage = () => {
     }, 0);
   };
 
+  const canvasCssWidth = Math.round(dimensions.width * workspaceZoom);
+  const canvasCssHeight = Math.round(dimensions.height * workspaceZoom);
+  const rulerOffset = rulersEnabled ? RULER_SIZE : 0;
+  const stageWidth = canvasCssWidth + rulerOffset;
+  const stageHeight = canvasCssHeight + rulerOffset;
+  const visibleGuides = rulersEnabled
+    ? [...manualGuides, ...guides]
+    : [...guides];
+
   if (loading) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-[#0d1216] text-white">
@@ -1650,6 +2190,10 @@ const DesignEditorPage = () => {
         onRedo={handleRedo}
         onSave={() => handleSave(true)}
         onExportHighQuality={handleExportHighQuality}
+        snapEnabled={snapEnabled}
+        onSnapEnabledChange={setSnapEnabled}
+        rulersEnabled={rulersEnabled}
+        onRulersEnabledChange={setRulersEnabled}
         saving={saving}
         loading={loading}
         user={user}
@@ -1760,19 +2304,195 @@ const DesignEditorPage = () => {
           }}
         >
           <div
-            className={styles.designCanvas}
-            style={
-              {
-                "--design-width": `${Math.round(dimensions.width * workspaceZoom)}px`,
-                "--design-height": `${Math.round(dimensions.height * workspaceZoom)}px`,
-                transform: "none",
-                transformOrigin: "center center",
-                transition: "none",
-              } as unknown as React.CSSProperties
-            }
+            ref={stageRef}
+            className="relative shrink-0"
+            style={{
+              width: `${stageWidth}px`,
+              height: `${stageHeight}px`,
+            }}
           >
-            <canvas ref={canvasRef} />
+            {rulersEnabled && (
+              <>
+                <div
+                  className="absolute left-0 top-0 z-30 flex h-6 w-full select-none overflow-hidden border-b border-r border-neutral-700 bg-neutral-950/95 text-[9px] text-neutral-400"
+                  onMouseDown={(e) => startGuideDrag("vertical", e)}
+                >
+                  <div
+                    className="relative h-full shrink-0 border-r border-neutral-700 bg-neutral-950/95"
+                    style={{ width: `${RULER_SIZE}px` }}
+                  />
+                  <div className="relative h-full flex-1">
+                    {Array.from({
+                      length: Math.ceil(dimensions.width / 10) + 1,
+                    }).map((_, idx) => {
+                      const step = idx * 10;
+                      const isMajor = step % 50 === 0;
+                      const label =
+                        step % 100 === 0 ? `${Math.round(step)}px` : "";
+                      return (
+                        <div
+                          key={`top-tick-${step}`}
+                          className="absolute bottom-0 flex flex-col items-center"
+                          style={{
+                            left: `${step * workspaceZoom}px`,
+                          }}
+                        >
+                          <span
+                            className={`w-px bg-neutral-500 ${
+                              isMajor ? "h-4" : "h-2"
+                            }`}
+                          />
+                          {label && (
+                            <span className="mb-0.5 translate-y-0.5 whitespace-nowrap text-[8px] text-neutral-500">
+                              {label}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div
+                  className="absolute left-0 top-0 z-30 flex h-full w-6 select-none flex-col overflow-hidden border-r border-neutral-700 bg-neutral-950/95 text-[9px] text-neutral-400"
+                  style={{ top: `${RULER_SIZE}px` }}
+                  onMouseDown={(e) => startGuideDrag("horizontal", e)}
+                >
+                  {Array.from({
+                    length: Math.ceil(dimensions.height / 10) + 1,
+                  }).map((_, idx) => {
+                    const step = idx * 10;
+                    const isMajor = step % 50 === 0;
+                    const label =
+                      step % 100 === 0 ? `${Math.round(step)}px` : "";
+                    return (
+                      <div
+                        key={`left-tick-${step}`}
+                        className="absolute left-0 flex items-center"
+                        style={{
+                          top: `${step * workspaceZoom}px`,
+                        }}
+                      >
+                        <span
+                          className={`h-px bg-neutral-500 ${
+                            isMajor ? "w-4" : "w-2"
+                          }`}
+                        />
+                        {label && (
+                          <span className="ml-0.5 -translate-y-0.5 whitespace-nowrap text-[8px] text-neutral-500">
+                            {label}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            <div
+              className={styles.designCanvas}
+              style={
+                {
+                  "--design-width": `${canvasCssWidth}px`,
+                  "--design-height": `${canvasCssHeight}px`,
+                  transform: "none",
+                  transformOrigin: "center center",
+                  transition: "none",
+                  marginLeft: `${rulerOffset}px`,
+                  marginTop: `${rulerOffset}px`,
+                } as unknown as React.CSSProperties
+              }
+            >
+              <canvas ref={canvasRef} />
+            </div>
+
+            <div className="pointer-events-none absolute inset-0 z-20">
+              {visibleGuides.map((guide) => {
+                const isVertical = guide.orientation === "vertical";
+                const color =
+                  guide.kind === "manual" ? MANUAL_GUIDE_COLOR : GUIDE_COLOR;
+                const linePos = rulerOffset + guide.position * workspaceZoom;
+
+                return (
+                  <div key={guide.id}>
+                    <div
+                      className="absolute"
+                      style={
+                        isVertical
+                          ? {
+                              left: `${linePos}px`,
+                              top: `${rulerOffset}px`,
+                              height: `${canvasCssHeight}px`,
+                              borderLeft: `2px dashed ${color}`,
+                            }
+                          : {
+                              left: `${rulerOffset}px`,
+                              top: `${linePos}px`,
+                              width: `${canvasCssWidth}px`,
+                              borderTop: `2px dashed ${color}`,
+                            }
+                      }
+                    />
+                    {guide.label && (
+                      <div
+                        className="absolute rounded-full border px-2 py-0.5 text-[10px] font-semibold shadow-lg backdrop-blur-sm"
+                        style={
+                          isVertical
+                            ? {
+                                left: `${linePos}px`,
+                                top: `${rulerOffset + 6}px`,
+                                transform: "translateX(-50%)",
+                                backgroundColor: "rgba(17, 24, 39, 0.92)",
+                                borderColor: color,
+                                color: "#fff",
+                              }
+                            : {
+                                left: `${rulerOffset + 6}px`,
+                                top: `${linePos}px`,
+                                transform: "translateY(-50%)",
+                                backgroundColor: "rgba(17, 24, 39, 0.92)",
+                                borderColor: color,
+                                color: "#fff",
+                              }
+                        }
+                      >
+                        {guide.label}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {guideBadges.map((badge) => {
+                const isVertical = badge.orientation === "vertical";
+                const linePos = rulerOffset + badge.position * workspaceZoom;
+
+                return (
+                  <div
+                    key={badge.id}
+                    className="absolute rounded-full border border-pink-300 bg-pink-500/90 px-2 py-0.5 text-[10px] font-bold text-white shadow-lg"
+                    style={
+                      isVertical
+                        ? {
+                            left: `${linePos}px`,
+                            top: `${rulerOffset + 26}px`,
+                            transform: "translateX(-50%)",
+                          }
+                        : {
+                            left: `${rulerOffset + 26}px`,
+                            top: `${linePos}px`,
+                            transform: "translateY(-50%)",
+                          }
+                    }
+                  >
+                    {badge.label}
+                  </div>
+                );
+              })}
+            </div>
           </div>
+
           <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-neutral-900/80 px-3 py-1.5 rounded-full backdrop-blur-sm border border-neutral-700 text-[10px] text-neutral-300">
             <span>
               {Math.round((dimensions.width / CM_TO_PX) * 10) / 10} x{" "}
