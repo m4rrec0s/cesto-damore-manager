@@ -1,9 +1,19 @@
 import axios from "axios";
 
 const API_BASE = import.meta.env.VITE_API_URL as string;
+const API_KEY = import.meta.env.VITE_API_KEY || import.meta.env.VITE_AI_AGENT_API_KEY;
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
+});
+
+api.interceptors.request.use((config) => {
+  if (API_KEY) {
+    config.headers = config.headers || {};
+    (config.headers as Record<string, string>)["x-api-key"] = API_KEY;
+  }
+
+  return config;
 });
 
 /**

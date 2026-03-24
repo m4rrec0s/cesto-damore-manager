@@ -6,6 +6,9 @@ import { EditorProvider } from "./contexts/EditorContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import App from "./App";
 import "./index.css";
+import { installApiKeyFetchInterceptor } from "./lib/api-key-fetch";
+
+installApiKeyFetchInterceptor();
 
 const root = document.getElementById("root");
 if (!root) {
