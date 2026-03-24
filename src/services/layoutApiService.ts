@@ -1,7 +1,10 @@
 import axios from "axios";
 
 const API_BASE = import.meta.env.VITE_API_URL as string;
-const API_KEY = import.meta.env.VITE_API_KEY || import.meta.env.VITE_AI_AGENT_API_KEY;
+const API_KEY =
+  import.meta.env.VITE_API_KEY ||
+  import.meta.env.VITE_AI_AGENT_API_KEY ||
+  import.meta.env.VITE_AI_API_KEY;
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,

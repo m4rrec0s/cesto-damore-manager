@@ -1,6 +1,9 @@
 const API_BASE_URL = (import.meta.env.VITE_API_URL || "").replace(/\/+$/, "");
 const API_KEY =
-  import.meta.env.VITE_API_KEY || import.meta.env.VITE_AI_AGENT_API_KEY || "";
+  import.meta.env.VITE_API_KEY ||
+  import.meta.env.VITE_AI_AGENT_API_KEY ||
+  import.meta.env.VITE_AI_API_KEY ||
+  "";
 
 let installed = false;
 

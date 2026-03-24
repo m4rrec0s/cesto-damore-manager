@@ -326,7 +326,10 @@ class ApiService {
       const token =
         localStorage.getItem("token") || localStorage.getItem("appToken");
 
-      const apiKey = import.meta.env.VITE_API_KEY || import.meta.env.VITE_AI_AGENT_API_KEY;
+      const apiKey =
+        import.meta.env.VITE_API_KEY ||
+        import.meta.env.VITE_AI_AGENT_API_KEY ||
+        import.meta.env.VITE_AI_API_KEY;
       if (apiKey) {
         config.headers = config.headers || {};
         (config.headers as Record<string, string>)["x-api-key"] = apiKey;
