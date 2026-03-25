@@ -187,7 +187,7 @@ export default function BotFlowPage() {
     for (const node of nodes) {
       const outEdges = edges.filter((edge) => edge.source === node.id);
 
-      if (node.type === "menuNode" || node.type === "followUpNode") {
+      if (node.type === "menuNode") {
         const options = Array.isArray(node.data?.options)
           ? node.data.options
           : [];
@@ -207,20 +207,42 @@ export default function BotFlowPage() {
             return `Menu com opção ${index + 1} apontando para múltiplos destinos.`;
           }
         }
+      }
 
-        if (node.type === "followUpNode") {
-          const configuredMinutes = resolveFollowUpInactivityMinutes(
-            (node.data || {}) as Record<string, any>,
-          );
-          if (!Number.isFinite(configuredMinutes) || configuredMinutes <= 0) {
-            return "Follow Up precisa de tempo de inatividade maior que 0 minuto.";
-          }
+      if (node.type === "followUpNode") {
+        const options = Array.isArray(node.data?.options)
+          ? node.data.options
+          : [];
+        const message = String(node.data?.message || "").trim();
 
-          if (followUpHoursSeen.has(Math.round(configuredMinutes))) {
-            return "Não é permitido ter dois nós Follow Up com o mesmo tempo configurado.";
+        if (options.length > 0) {
+          for (let index = 0; index < options.length; index++) {
+            const matches = outEdges.filter((edge) => {
+              const handle = String(edge.sourceHandle ?? "");
+              return handle === String(index) || handle === `option-${index}`;
+            });
+            if (matches.length === 0) {
+              return `Follow Up com opção ${index + 1} sem conexão de saída.`;
+            }
+            if (matches.length > 1) {
+              return `Follow Up com opção ${index + 1} apontando para múltiplos destinos.`;
+            }
           }
-          followUpHoursSeen.add(Math.round(configuredMinutes));
+        } else if (!message) {
+          return "Follow Up sem opções precisa ter a mensagem configurada.";
         }
+
+        const configuredMinutes = resolveFollowUpInactivityMinutes(
+          (node.data || {}) as Record<string, any>,
+        );
+        if (!Number.isFinite(configuredMinutes) || configuredMinutes <= 0) {
+          return "Follow Up precisa de tempo de inatividade maior que 0 minuto.";
+        }
+
+        if (followUpHoursSeen.has(Math.round(configuredMinutes))) {
+          return "Não é permitido ter dois nós Follow Up com o mesmo tempo configurado.";
+        }
+        followUpHoursSeen.add(Math.round(configuredMinutes));
       }
 
       if (node.type === "productSearchNode") {
@@ -569,7 +591,9 @@ export default function BotFlowPage() {
           : hours > 0
             ? `${hours}h`
             : `${minutes}min`;
-      return `${timeLabel} • ${options.length} opção(ões)`;
+      return options.length > 0
+        ? `${timeLabel} • ${options.length} opção(ões)`
+        : `${timeLabel} • sem opções`;
     }
     if (node.type === "productSearchNode") {
       const searchTerm = data.searchQuery || data.searchPrefix;

@@ -50,30 +50,33 @@ export default function FollowUpNode({ data }: { data: any }) {
       </div>
 
       <div className="flex flex-col gap-2 p-3 bg-amber-50/50">
-        {options.map((opt: any, index: number) => {
-          const label =
-            typeof opt === "string" ? opt : (opt?.label ?? `Opção ${index + 1}`);
-          return (
-            <div
-              key={index}
-              className="relative bg-white border border-amber-200 p-2 rounded-lg text-xs shadow-sm flex items-center group hover:bg-amber-50 transition-colors"
-            >
-              <span className="font-semibold text-gray-700 w-full truncate pr-4">
-                {label}
-              </span>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={String(index)}
-                className="w-3.5 h-3.5 bg-amber-500 border-2 border-white"
-                style={{ top: "50%", right: -6 }}
-              />
-            </div>
-          );
-        })}
-        {options.length === 0 && (
+        {options.length > 0 ? (
+          options.map((opt: any, index: number) => {
+            const label =
+              typeof opt === "string"
+                ? opt
+                : (opt?.label ?? `Opção ${index + 1}`);
+            return (
+              <div
+                key={index}
+                className="relative bg-white border border-amber-200 p-2 rounded-lg text-xs shadow-sm flex items-center group hover:bg-amber-50 transition-colors"
+              >
+                <span className="font-semibold text-gray-700 w-full truncate pr-4">
+                  {label}
+                </span>
+                <Handle
+                  type="source"
+                  position={Position.Right}
+                  id={String(index)}
+                  className="w-3.5 h-3.5 bg-amber-500 border-2 border-white"
+                  style={{ top: "50%", right: -6 }}
+                />
+              </div>
+            );
+          })
+        ) : (
           <div className="text-xs text-gray-400 italic text-center py-2 bg-white/50 rounded-lg border border-dashed border-gray-300">
-            Nenhuma opção
+            Sem opções. A mensagem configurada será enviada.
           </div>
         )}
       </div>
