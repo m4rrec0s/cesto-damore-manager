@@ -19,6 +19,11 @@ export const BotChatTest: React.FC = () => {
       ? "http://localhost:3333/bot/chat"
       : "/bot/chat";
 
+  const apiKey =
+    import.meta.env.VITE_API_KEY ||
+    import.meta.env.VITE_AI_AGENT_API_KEY ||
+    import.meta.env.VITE_AI_API_KEY;
+
   const [phone, setPhone] = useState("5511999999999");
   const [contactName, setContactName] = useState("Contato Teste");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -34,17 +39,37 @@ export const BotChatTest: React.FC = () => {
   const sendMessage = async () => {
     if (!inputMessage.trim() || isLoading) return;
 
+    if (!apiKey) {
+      console.error("❌ API Key não configurada. Configure VITE_API_KEY no .env");
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "bot",
+          text: "❌ Erro: API Key não configurada. Configure VITE_API_KEY no arquivo .env do manager.",
+        },
+      ]);
+      return;
+    }
+
     const userMsg = inputMessage;
     setMessages((prev) => [...prev, { role: "user", text: userMsg }]);
     setInputMessage("");
     setIsLoading(true);
 
     try {
-      const response = await axios.post(botChatUrl, {
-        phone,
-        message: userMsg,
-        contactName,
-      });
+      const response = await axios.post(
+        botChatUrl,
+        {
+          phone,
+          message: userMsg,
+          contactName,
+        },
+        {
+          headers: {
+            "x-api-key": apiKey,
+          },
+        },
+      );
 
       const botMessages =
         response.data.responses || response.data.messages || [];
@@ -65,9 +90,13 @@ export const BotChatTest: React.FC = () => {
       window.setTimeout(() => setIsLoading(false), accumulatedDelay);
     } catch (error) {
       console.error("Error sending message:", error);
+      const errorMessage =
+        axios.isAxiosError(error) && error.response?.data?.error
+          ? error.response.data.error
+          : "Erro ao comunicar com o backend.";
       setMessages((prev) => [
         ...prev,
-        { role: "bot", text: "Erro ao comunicar com o backend." },
+        { role: "bot", text: `❌ ${errorMessage}` },
       ]);
       setIsLoading(false);
     }
@@ -83,6 +112,12 @@ export const BotChatTest: React.FC = () => {
     <div className="flex flex-col h-screen p-4 bg-gray-50">
       <div className="mb-4">
         <h2 className="text-2xl font-bold">Teste do Bot</h2>
+        {!apiKey && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mt-2">
+            ⚠️ API Key não configurada. Configure VITE_API_KEY no arquivo .env
+            do manager.
+          </div>
+        )}
         <div className="flex gap-2 mt-2">
           <input
             type="text"
