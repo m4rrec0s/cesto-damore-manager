@@ -79,6 +79,43 @@ export function ProductsTab() {
   const [additionals, setAdditionals] = useState<
     { item_id: string; custom_price: number }[]
   >([]);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState("");
+
+  const getNumericValue = (value: string, fallback = 0) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  };
+
+  const validateProductForm = () => {
+    const errors: Record<string, string> = {};
+
+    if (!formData.name.trim()) {
+      errors.name = "Informe o nome do produto.";
+    }
+
+    if (!Number.isFinite(formData.price) || formData.price <= 0) {
+      errors.price = "Informe um preço maior que zero.";
+    }
+
+    if (!formData.type_id) {
+      errors.type_id = "Selecione um tipo de produto.";
+    }
+
+    if (formData.categories.length === 0) {
+      errors.categories = "Selecione ao menos uma categoria.";
+    }
+
+    if (
+      !Number.isFinite(formData.production_time) ||
+      formData.production_time <= 0
+    ) {
+      errors.production_time = "Informe o tempo de produção em horas.";
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const fetchInitialData = useCallback(async () => {
     setLoading(true);
@@ -127,6 +164,9 @@ export function ProductsTab() {
   }, [fetchProducts]);
 
   const handleOpenModal = async (product?: Product) => {
+    setFormErrors({});
+    setSubmitError("");
+
     if (product) {
       setLoadingProduct(true);
       setIsModalOpen(true);
@@ -157,7 +197,9 @@ export function ProductsTab() {
           })) || [],
         );
       } catch (e) {
-        toast.error("Erro ao carregar detalhes do produto");
+        toast.error(
+          extractErrorMessage(e, "Erro ao carregar detalhes do produto"),
+        );
         setIsModalOpen(false);
       } finally {
         setLoadingProduct(false);
@@ -184,10 +226,17 @@ export function ProductsTab() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError("");
+
+    if (!validateProductForm()) {
+      setSubmitError("Corrija os campos obrigatórios para continuar.");
+      return;
+    }
+
     setLoading(true);
     try {
       const payload: Partial<ProductInput> = {
-        name: formData.name,
+        name: formData.name.trim(),
         description: formData.description,
         price: formData.price,
         discount: formData.discount,
@@ -214,7 +263,9 @@ export function ProductsTab() {
       setIsModalOpen(false);
       fetchProducts();
     } catch (e) {
-      toast.error(extractErrorMessage(e, "Erro ao salvar produto"));
+      const message = extractErrorMessage(e, "Erro ao salvar produto");
+      setSubmitError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -447,7 +498,7 @@ export function ProductsTab() {
               initial={{ opacity: 0, scale: 0.95, y: 30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 30 }}
-              className="relative w-full max-w-5xl bg-white rounded-[2.5rem] shadow-2xl border border-neutral-100 overflow-hidden flex flex-col max-h-[90vh]"
+              className="relative w-full max-w-5xl bg-white rounded-lg shadow-xl border border-neutral-300 overflow-hidden flex flex-col max-h-[90vh]"
             >
               {loadingProduct ? (
                 <div className="h-96 flex items-center justify-center">
@@ -458,17 +509,17 @@ export function ProductsTab() {
                 </div>
               ) : (
                 <>
-                  <div className="p-8 border-b border-neutral-100 flex justify-between items-center bg-white sticky top-0 z-10">
+                  <div className="p-4 sm:p-6 border-b border-neutral-200 flex justify-between items-center bg-white sticky top-0 z-10">
                     <div>
                       <div className="flex items-center gap-3">
-                        <div className="p-3 bg-neutral-950 text-white rounded-2xl">
+                        <div className="p-2 bg-neutral-900 text-white rounded">
                           <Box size={20} />
                         </div>
                         <div>
-                          <h3 className="text-2xl font-black text-neutral-950 tracking-tight">
+                          <h3 className="text-xl font-bold text-neutral-950">
                             {editingProduct ? "Editar Produto" : "Novo Produto"}
                           </h3>
-                          <p className="text-neutral-400 text-[10px] font-black uppercase tracking-widest mt-0.5">
+                          <p className="text-neutral-500 text-xs mt-0.5">
                             Gestão de catálogo • {formData.name || "Sem nome"}
                           </p>
                         </div>
@@ -484,7 +535,7 @@ export function ProductsTab() {
                           })
                         }
                         className={clsx(
-                          "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border flex items-center gap-2",
+                          "px-3 py-2 rounded text-xs font-semibold transition-all border flex items-center gap-2",
                           formData.is_active
                             ? "bg-emerald-50 text-emerald-600 border-emerald-100"
                             : "bg-red-50 text-red-600 border-red-100",
@@ -502,7 +553,7 @@ export function ProductsTab() {
                       </Button>
                       <Button
                         onClick={() => setIsModalOpen(false)}
-                        className="p-3 hover:bg-neutral-100 rounded-2xl text-neutral-400 transition-colors"
+                        className="p-2 hover:bg-neutral-100 rounded text-neutral-500 transition-colors"
                       >
                         <X size={24} />
                       </Button>
@@ -511,17 +562,25 @@ export function ProductsTab() {
 
                   <form
                     onSubmit={handleSave}
-                    className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-neutral-50/30"
+                    className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar bg-white"
                   >
+                    <div className="mb-4 text-sm text-neutral-600">
+                      Campos obrigatórios <span className="text-red-600">*</span>
+                    </div>
+                    {submitError && (
+                      <div className="mb-4 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+                        {submitError}
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                       {/* Left Column: Basic Info & Image */}
                       <div className="lg:col-span-5 space-y-6">
-                        <section className="bg-white p-6 rounded-[2.5rem] border border-neutral-100 shadow-sm space-y-6">
+                        <section className="bg-white p-4 sm:p-5 rounded-lg border border-neutral-200 space-y-5">
                           <div>
-                            <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] mb-3 px-1">
+                            <label className="block text-sm font-medium text-neutral-700 mb-2">
                               Capa do Produto
                             </label>
-                            <div className="aspect-[4/3] relative rounded-[2rem] bg-neutral-50 border-2 border-dashed border-neutral-200 flex flex-col items-center justify-center cursor-pointer hover:bg-neutral-100/50 transition-all group overflow-hidden">
+                            <div className="aspect-[4/3] relative rounded-md bg-neutral-50 border border-dashed border-neutral-300 flex flex-col items-center justify-center cursor-pointer hover:bg-neutral-100/50 transition-all group overflow-hidden">
                               {imagePreview ? (
                                 <>
                                   <img
@@ -562,50 +621,84 @@ export function ProductsTab() {
 
                           <div className="space-y-4">
                             <div>
-                              <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] mb-2 px-1">
-                                Nome do Produto
+                              <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                Nome do Produto{" "}
+                                <span className="text-red-600">*</span>
                               </label>
                               <Input
                                 type="text"
                                 value={formData.name}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                   setFormData({
                                     ...formData,
                                     name: e.target.value,
-                                  })
-                                }
-                                className="w-full px-5 py-4 bg-neutral-50/50 border-neutral-100 rounded-2xl text-neutral-950 font-bold focus:ring-neutral-950/5 transition-all"
+                                  });
+                                  if (formErrors.name) {
+                                    setFormErrors((prev) => ({
+                                      ...prev,
+                                      name: "",
+                                    }));
+                                  }
+                                }}
+                                className={clsx(
+                                  "w-full border rounded-md px-3 py-2 text-sm",
+                                  formErrors.name
+                                    ? "border-red-500"
+                                    : "border-neutral-300",
+                                )}
                                 placeholder="Ex: Cesta Romântica Premium"
                                 required
                               />
+                              {formErrors.name && (
+                                <p className="mt-1 text-xs text-red-600">
+                                  {formErrors.name}
+                                </p>
+                              )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                               <div>
-                                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] mb-2 px-1">
-                                  Preço de Venda
+                                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                  Preço de Venda{" "}
+                                  <span className="text-red-600">*</span>
                                 </label>
                                 <div className="relative">
-                                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-black text-neutral-400">
+                                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-neutral-500">
                                     R$
                                   </span>
                                   <Input
                                     type="number"
                                     step="0.01"
                                     value={formData.price}
-                                    onChange={(e) =>
+                                    onChange={(e) => {
                                       setFormData({
                                         ...formData,
-                                        price: parseFloat(e.target.value),
-                                      })
-                                    }
-                                    className="w-full pl-10 pr-5 py-4 bg-neutral-50/50 border-neutral-100 rounded-2xl text-neutral-950 font-black focus:ring-neutral-950/5 transition-all"
+                                        price: getNumericValue(e.target.value),
+                                      });
+                                      if (formErrors.price) {
+                                        setFormErrors((prev) => ({
+                                          ...prev,
+                                          price: "",
+                                        }));
+                                      }
+                                    }}
+                                    className={clsx(
+                                      "w-full pl-9 pr-3 py-2 border rounded-md text-sm",
+                                      formErrors.price
+                                        ? "border-red-500"
+                                        : "border-neutral-300",
+                                    )}
                                     required
                                   />
                                 </div>
+                                {formErrors.price && (
+                                  <p className="mt-1 text-xs text-red-600">
+                                    {formErrors.price}
+                                  </p>
+                                )}
                               </div>
                               <div>
-                                <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] mb-2 px-1">
+                                <label className="block text-sm font-medium text-neutral-700 mb-1">
                                   Desconto
                                 </label>
                                 <div className="relative">
@@ -615,12 +708,15 @@ export function ProductsTab() {
                                     onChange={(e) =>
                                       setFormData({
                                         ...formData,
-                                        discount: parseInt(e.target.value),
+                                        discount: getNumericValue(
+                                          e.target.value,
+                                          0,
+                                        ),
                                       })
                                     }
-                                    className="w-full px-5 py-4 bg-neutral-50/50 border-neutral-100 rounded-2xl text-neutral-950 font-black focus:ring-neutral-950/5 transition-all"
+                                    className="w-full px-3 py-2 border border-neutral-300 rounded-md text-sm"
                                   />
-                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-neutral-400">
+                                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-neutral-500">
                                     %
                                   </span>
                                 </div>
@@ -628,7 +724,7 @@ export function ProductsTab() {
                             </div>
 
                             <div>
-                              <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] mb-2 px-1">
+                              <label className="block text-sm font-medium text-neutral-700 mb-1">
                                 Descrição Curta
                               </label>
                               <textarea
@@ -639,60 +735,98 @@ export function ProductsTab() {
                                     description: e.target.value,
                                   })
                                 }
-                                className="w-full px-5 py-4 bg-neutral-50/50 border border-neutral-100 rounded-2xl text-neutral-950 font-medium focus:outline-none focus:ring-4 focus:ring-neutral-500/10 transition-all min-h-[120px] resize-none"
+                                className="w-full px-3 py-2 border border-neutral-300 rounded-md text-sm min-h-[120px] resize-none"
                                 placeholder="Descreva os principais diferenciais do produto..."
                               />
                             </div>
                           </div>
                         </section>
 
-                        <section className="bg-white p-6 rounded-[2.5rem] border border-neutral-100 shadow-sm space-y-4">
-                          <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
+                        <section className="bg-white p-4 sm:p-5 rounded-lg border border-neutral-200 space-y-4">
+                          <label className="block text-sm font-medium text-neutral-700 px-1 flex items-center gap-2">
                             <Tag size={12} /> Classificação e Logística
                           </label>
                           <div className="grid grid-cols-1 gap-4">
                             <div>
-                              <label className="block text-[10px] font-black text-neutral-400/60 uppercase tracking-widest mb-2 px-1">
-                                Tipo de Produto
+                              <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                Tipo de Produto{" "}
+                                <span className="text-red-600">*</span>
                               </label>
                               <select
                                 title="Selecione um tipo"
                                 value={formData.type_id}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                   setFormData({
                                     ...formData,
                                     type_id: e.target.value,
-                                  })
-                                }
-                                className="w-full px-4 py-4 bg-neutral-50/50 border border-neutral-100 rounded-2xl text-neutral-950 font-bold focus:outline-none focus:ring-4 focus:ring-neutral-500/10 transition-all appearance-none cursor-pointer"
+                                  });
+                                  if (formErrors.type_id) {
+                                    setFormErrors((prev) => ({
+                                      ...prev,
+                                      type_id: "",
+                                    }));
+                                  }
+                                }}
+                                className={clsx(
+                                  "w-full px-3 py-2 border rounded-md text-sm bg-white",
+                                  formErrors.type_id
+                                    ? "border-red-500"
+                                    : "border-neutral-300",
+                                )}
                               >
+                                <option value="">Selecione...</option>
                                 {types.map((t) => (
                                   <option key={t.id} value={t.id}>
                                     {t.name}
                                   </option>
                                 ))}
                               </select>
+                              {formErrors.type_id && (
+                                <p className="mt-1 text-xs text-red-600">
+                                  {formErrors.type_id}
+                                </p>
+                              )}
                             </div>
                             <div>
-                              <label className="block text-[10px] font-black text-neutral-400/60 uppercase tracking-widest mb-2 px-1">
-                                Tempo de Produção
+                              <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                Tempo de Produção{" "}
+                                <span className="text-red-600">*</span>
                               </label>
                               <div className="relative">
                                 <Input
                                   type="number"
                                   value={formData.production_time}
-                                  onChange={(e) =>
+                                  onChange={(e) => {
                                     setFormData({
                                       ...formData,
-                                      production_time: parseInt(e.target.value),
-                                    })
-                                  }
-                                  className="w-full px-5 py-4 bg-neutral-50/50 border-neutral-100 rounded-2xl text-neutral-950 font-bold focus:ring-neutral-950/5 transition-all"
+                                      production_time: getNumericValue(
+                                        e.target.value,
+                                        0,
+                                      ),
+                                    });
+                                    if (formErrors.production_time) {
+                                      setFormErrors((prev) => ({
+                                        ...prev,
+                                        production_time: "",
+                                      }));
+                                    }
+                                  }}
+                                  className={clsx(
+                                    "w-full px-3 py-2 border rounded-md text-sm",
+                                    formErrors.production_time
+                                      ? "border-red-500"
+                                      : "border-neutral-300",
+                                  )}
                                 />
-                                <span className="absolute right-5 top-1/2 -translate-y-1/2 text-[10px] font-black text-neutral-400 uppercase">
+                                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-medium text-neutral-500 uppercase">
                                   Horas
                                 </span>
                               </div>
+                              {formErrors.production_time && (
+                                <p className="mt-1 text-xs text-red-600">
+                                  {formErrors.production_time}
+                                </p>
+                              )}
                             </div>
                           </div>
                         </section>
@@ -700,9 +834,17 @@ export function ProductsTab() {
 
                       {/* Right Column: Categories, Components & Additionals */}
                       <div className="lg:col-span-7 space-y-6">
-                        <section className="bg-white p-6 rounded-[2.5rem] border border-neutral-100 shadow-sm">
-                          <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] mb-4 px-1 flex items-center gap-2">
+                        <section
+                          className={clsx(
+                            "bg-white p-4 sm:p-5 rounded-lg border",
+                            formErrors.categories
+                              ? "border-red-400"
+                              : "border-neutral-200",
+                          )}
+                        >
+                          <label className="block text-sm font-medium text-neutral-700 mb-3 px-1 flex items-center gap-2">
                             <Layers size={12} /> Categorias Vinculadas
+                            <span className="text-red-600">*</span>
                           </label>
                           <div className="flex flex-wrap gap-2">
                             {categories.map((cat) => (
@@ -721,23 +863,34 @@ export function ProductsTab() {
                                         )
                                       : [...formData.categories, cat.id],
                                   });
+                                  if (formErrors.categories) {
+                                    setFormErrors((prev) => ({
+                                      ...prev,
+                                      categories: "",
+                                    }));
+                                  }
                                 }}
                                 className={clsx(
-                                  "px-4 py-2 rounded-xl text-xs font-bold transition-all border",
+                                  "px-3 py-2 rounded text-xs font-medium transition-all border",
                                   formData.categories.includes(cat.id)
-                                    ? "bg-neutral-950 text-white border-neutral-950"
-                                    : "bg-white text-neutral-400 border-neutral-100 hover:border-neutral-200",
+                                    ? "bg-neutral-900 text-white border-neutral-900"
+                                    : "bg-white text-neutral-600 border-neutral-300 hover:border-neutral-400",
                                 )}
                               >
                                 {cat.name}
                               </Button>
                             ))}
                           </div>
+                          {formErrors.categories && (
+                            <p className="mt-2 text-xs text-red-600">
+                              {formErrors.categories}
+                            </p>
+                          )}
                         </section>
 
-                        <section className="bg-white p-6 rounded-[2.5rem] border border-neutral-100 shadow-sm">
+                        <section className="bg-white p-4 sm:p-5 rounded-lg border border-neutral-200">
                           <div className="flex justify-between items-center mb-4">
-                            <label className="text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
+                            <label className="text-sm font-medium text-neutral-700 px-1 flex items-center gap-2">
                               <Box size={12} /> Composição do Produto
                             </label>
                             <Button
@@ -755,8 +908,8 @@ export function ProductsTab() {
                           </div>
                           <div className="space-y-3 max-h-[280px] overflow-y-auto custom-scrollbar pr-2">
                             {components.length === 0 ? (
-                              <div className="py-10 text-center border-2 border-dashed border-neutral-50 rounded-[2rem]">
-                                <p className="text-[10px] text-neutral-300 font-black uppercase tracking-widest">
+                              <div className="py-10 text-center border border-dashed border-neutral-300 rounded-md">
+                                <p className="text-xs text-neutral-500">
                                   Nenhum item na composição
                                 </p>
                               </div>
@@ -768,7 +921,7 @@ export function ProductsTab() {
                                 return (
                                   <div
                                     key={idx}
-                                    className="flex gap-3 items-center bg-neutral-50/50 p-3 rounded-2xl border border-neutral-100 group"
+                                    className="flex gap-3 items-center bg-neutral-50 p-3 rounded-md border border-neutral-200 group"
                                   >
                                     <div className="flex-1 relative">
                                       <select
@@ -779,7 +932,7 @@ export function ProductsTab() {
                                           newComp[idx].item_id = e.target.value;
                                           setComponents(newComp);
                                         }}
-                                        className="w-full px-4 py-2 bg-white border border-neutral-200 rounded-xl text-xs font-bold text-neutral-950 appearance-none cursor-pointer focus:ring-2 ring-neutral-950/5 outline-none"
+                                        className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-md text-sm text-neutral-950 appearance-none cursor-pointer focus:ring-2 ring-neutral-950/5 outline-none"
                                       >
                                         <option value="">
                                           {comp.item_id
@@ -808,7 +961,7 @@ export function ProductsTab() {
                                           );
                                           setComponents(newComp);
                                         }}
-                                        className="w-full px-3 py-2 bg-white border-neutral-200 rounded-xl text-xs font-black text-center"
+                                        className="w-full px-3 py-2 bg-white border-neutral-300 rounded-md text-sm text-center"
                                       />
                                     </div>
                                     <Button
@@ -831,9 +984,9 @@ export function ProductsTab() {
                           </div>
                         </section>
 
-                        <section className="bg-white p-6 rounded-[2.5rem] border border-neutral-100 shadow-sm">
+                        <section className="bg-white p-4 sm:p-5 rounded-lg border border-neutral-200">
                           <div className="flex justify-between items-center mb-4">
-                            <label className="text-[10px] font-black text-neutral-400 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
+                            <label className="text-sm font-medium text-neutral-700 px-1 flex items-center gap-2">
                               <Plus size={12} /> Sugestões de Upsell
                             </label>
                             <Button
@@ -851,8 +1004,8 @@ export function ProductsTab() {
                           </div>
                           <div className="grid grid-cols-1 gap-3 max-h-[280px] overflow-y-auto custom-scrollbar pr-2">
                             {additionals.length === 0 ? (
-                              <div className="py-10 text-center border-2 border-dashed border-neutral-50 rounded-[2rem]">
-                                <p className="text-[10px] text-neutral-300 font-black uppercase tracking-widest">
+                              <div className="py-10 text-center border border-dashed border-neutral-300 rounded-md">
+                                <p className="text-xs text-neutral-500">
                                   Nenhum adicional sugerido
                                 </p>
                               </div>
@@ -864,7 +1017,7 @@ export function ProductsTab() {
                                 return (
                                   <div
                                     key={idx}
-                                    className="flex gap-3 items-center bg-neutral-50/50 p-3 rounded-2xl border border-neutral-100"
+                                    className="flex gap-3 items-center bg-neutral-50 p-3 rounded-md border border-neutral-200"
                                   >
                                     <div className="flex-1 relative">
                                       <select
@@ -875,7 +1028,7 @@ export function ProductsTab() {
                                           newAdd[idx].item_id = e.target.value;
                                           setAdditionals(newAdd);
                                         }}
-                                        className="w-full px-4 py-2 bg-white border border-neutral-200 rounded-xl text-xs font-bold text-neutral-950 appearance-none cursor-pointer focus:ring-2 ring-neutral-950/5 outline-none"
+                                        className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-md text-sm text-neutral-950 appearance-none cursor-pointer focus:ring-2 ring-neutral-950/5 outline-none"
                                       >
                                         <option value="">
                                           {add.item_id
@@ -893,7 +1046,7 @@ export function ProductsTab() {
                                       </div>
                                     </div>
                                     <div className="w-32 relative">
-                                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-neutral-400">
+                                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-neutral-500">
                                         R$
                                       </span>
                                       <Input
@@ -907,7 +1060,7 @@ export function ProductsTab() {
                                           );
                                           setAdditionals(newAdd);
                                         }}
-                                        className="w-full pl-8 pr-3 py-2 bg-white border-neutral-200 rounded-xl text-xs font-black text-center"
+                                        className="w-full pl-8 pr-3 py-2 bg-white border-neutral-300 rounded-md text-sm text-center"
                                       />
                                     </div>
                                     <Button
@@ -932,21 +1085,21 @@ export function ProductsTab() {
                       </div>
                     </div>
 
-                    <div className="flex gap-4 pt-8 sticky bottom-0 bg-neutral-50/0 pointer-events-none">
+                    <div className="flex gap-4 pt-6 sticky bottom-0 bg-white pointer-events-none">
                       <div className="flex-1" />
-                      <div className="flex gap-4 p-2 bg-white/80 backdrop-blur-md border border-neutral-200 rounded-[2rem] shadow-2xl pointer-events-auto">
+                      <div className="flex gap-3 p-2 bg-white border border-neutral-200 rounded-md shadow pointer-events-auto">
                         <Button
                           type="button"
                           onClick={() => setIsModalOpen(false)}
                           variant={"secondary"}
-                          className="px-8 py-4 text-neutral-500 font-black text-xs uppercase tracking-widest hover:bg-neutral-50 rounded-[1.5rem] transition-all"
+                          className="px-4 py-2 text-neutral-700 text-sm hover:bg-neutral-50 rounded"
                         >
                           Descartar
                         </Button>
                         <Button
                           type="submit"
                           disabled={loading}
-                          className="px-10 py-4 bg-neutral-950 text-white font-black text-xs uppercase tracking-widest rounded-[1.5rem] shadow-xl shadow-neutral-950/20 hover:bg-neutral-800 transition-all disabled:opacity-50 flex items-center gap-3"
+                          className="px-5 py-2 bg-neutral-900 text-white text-sm rounded hover:bg-neutral-800 transition-all disabled:opacity-50 flex items-center gap-2"
                         >
                           {loading ? (
                             <Loader2 className="animate-spin" size={18} />

@@ -28,10 +28,49 @@ export const onlyDigits = (value?: string | null) => {
 };
 
 export const extractErrorMessage = (error: unknown, fallback: string) => {
+    const isGenericServerMessage = (message?: string) => {
+        if (!message) return false;
+        const normalized = message.toLowerCase();
+        return (
+            normalized.includes("erro interno do servidor") ||
+            normalized.includes("internal server error") ||
+            normalized.includes("request failed with status code")
+        );
+    };
+
     if (typeof error === "object" && error !== null && "response" in error) {
         const response = (error as any).response;
-        const message = response?.data?.error || response?.data?.message;
+        const payload = response?.data;
+
+        const detailsMessage =
+            payload?.details ||
+            payload?.detail ||
+            payload?.reason ||
+            payload?.cause;
+
+        const errorsList = Array.isArray(payload?.errors)
+            ? payload.errors
+                .map((item: any) => {
+                    if (typeof item === "string") return item;
+                    if (item?.message) return String(item.message);
+                    if (item?.msg) return String(item.msg);
+                    if (item?.error) return String(item.error);
+                    return "";
+                })
+                .filter(Boolean)
+                .join(" | ")
+            : "";
+
+        const message =
+            payload?.error ||
+            payload?.message ||
+            errorsList ||
+            detailsMessage;
+
         if (typeof message === "string" && message.trim().length > 0) {
+            if (isGenericServerMessage(message) && detailsMessage) {
+                return String(detailsMessage);
+            }
             return message;
         }
     }
