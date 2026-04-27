@@ -30,6 +30,7 @@ import HandoffNode from "./customNodes/HandoffNode";
 import FollowUpNode from "./customNodes/FollowUpNode";
 import BlockNode from "./customNodes/BlockNode";
 import DeletableEdge from "./customEdges/DeletableEdge";
+import { Input } from "@/components/ui/input";
 
 const nodeTypes = {
   startNode: StartNode,
@@ -80,6 +81,7 @@ export default function BotFlowPage() {
   const [initialSnapshot, setInitialSnapshot] = useState<string>(
     JSON.stringify({ nodes: [], edges: [] }),
   );
+  const [productsFound, setProductsFound] = useState<Product[]>([]);
 
   // Use explicit state for node selection instead of relying completely on React Flow's selected property
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -120,16 +122,18 @@ export default function BotFlowPage() {
       .filter(Boolean);
 
   const listToMultiline = (value: unknown) =>
-    Array.isArray(value) ? value.map((item) => String(item || "")).join("\n") : "";
+    Array.isArray(value)
+      ? value.map((item) => String(item || "")).join("\n")
+      : "";
 
   const listToComma = (value: unknown) =>
-    Array.isArray(value) ? value.map((item) => String(item || "")).join(", ") : "";
+    Array.isArray(value)
+      ? value.map((item) => String(item || "")).join(", ")
+      : "";
 
   const normalizeStringList = (value: unknown) => {
     if (Array.isArray(value)) {
-      return value
-        .map((item) => String(item || "").trim())
-        .filter(Boolean);
+      return value.map((item) => String(item || "").trim()).filter(Boolean);
     }
     if (typeof value === "string") {
       return value
@@ -139,6 +143,196 @@ export default function BotFlowPage() {
     }
     return [];
   };
+
+  function PinnedProductSearch({
+    pinnedIds,
+    onAdd,
+    onRemove,
+  }: {
+    pinnedIds: string[];
+    onAdd: (id: string) => void;
+    onRemove: (id: string) => void;
+  }) {
+    const api = useApi();
+    const [query, setQuery] = useState("");
+    const [results, setResults] = useState<Product[]>([]);
+    const [isSearching, setIsSearching] = useState(false);
+    const [open, setOpen] = useState(false);
+    const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const wrapRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+      const handler = (e: MouseEvent) => {
+        if (
+          wrapRef.current &&
+          !wrapRef.current.contains(e.target as HTMLElement)
+        ) {
+          setOpen(false);
+        }
+      };
+      document.addEventListener("mousedown", handler);
+      return () => document.removeEventListener("mousedown", handler);
+    }, []);
+
+    const search = (q: string) => {
+      setQuery(q);
+      if (!q.trim()) {
+        setResults([]);
+        setOpen(false);
+        return;
+      }
+      setIsSearching(true);
+      setOpen(true);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(async () => {
+        try {
+          const res = await api.getProducts({
+            page: 1,
+            perPage: 20,
+            search: q,
+          });
+          setResults(res.products || []);
+        } catch {
+          setResults([]);
+        } finally {
+          setIsSearching(false);
+        }
+      }, 350);
+    };
+
+    const handleAdd = (product: Product) => {
+      if (!pinnedIds.includes(String(product.id))) {
+        onAdd(String(product.id));
+      }
+      setQuery("");
+      setResults([]);
+      setOpen(false);
+    };
+
+    // Fetch name of pinned products for display
+    const [pinnedProducts, setPinnedProducts] = useState<Product[]>([]);
+    useEffect(() => {
+      if (!pinnedIds.length) {
+        setPinnedProducts([]);
+        return;
+      }
+      api
+        .getProducts({ page: 1, perPage: 1000 })
+        .then((res) => {
+          const byId = new Map(
+            (res.products || []).map((p: Product) => [String(p.id), p]),
+          );
+          setPinnedProducts(
+            pinnedIds.map((id) => byId.get(id)).filter(Boolean) as Product[],
+          );
+        })
+        .catch(() => {});
+    }, [pinnedIds.join(",")]);
+
+    return (
+      <div>
+        <label className="font-bold text-gray-700 block mb-2">
+          Produtos fixos
+        </label>
+
+        {/* Input com dropdown */}
+        <div className="relative" ref={wrapRef}>
+          <input
+            className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-purple-500 bg-gray-50 text-sm"
+            placeholder="Buscar produto por nome..."
+            value={query}
+            onChange={(e) => search(e.target.value)}
+            onFocus={() => {
+              if (results.length) setOpen(true);
+            }}
+            autoComplete="off"
+          />
+
+          {open && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 max-h-52 overflow-y-auto">
+              {isSearching && (
+                <div className="px-3 py-2 text-xs text-gray-400">
+                  Buscando...
+                </div>
+              )}
+              {!isSearching && results.length === 0 && (
+                <div className="px-3 py-2 text-xs text-gray-400">
+                  Nenhum produto encontrado.
+                </div>
+              )}
+              {!isSearching &&
+                results.map((product) => {
+                  const already = pinnedIds.includes(String(product.id));
+                  return (
+                    <button
+                      key={product.id}
+                      type="button"
+                      disabled={already}
+                      onClick={() => handleAdd(product)}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left border-b border-gray-100 last:border-none transition-colors ${
+                        already
+                          ? "opacity-50 cursor-default bg-gray-50"
+                          : "hover:bg-purple-50 cursor-pointer"
+                      }`}
+                    >
+                      <span className="text-sm text-gray-800 font-medium flex-1">
+                        {product.name}
+                      </span>
+                      <span className="text-xs text-gray-500 shrink-0">
+                        R${" "}
+                        {product.price?.toFixed(2).replace(".", ",") ?? "0,00"}
+                      </span>
+                      {already ? (
+                        <span className="text-[10px] text-gray-400 italic shrink-0">
+                          já fixado
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 rounded px-1.5 py-0.5 shrink-0">
+                          + fixar
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+
+        {/* Lista de produtos fixados */}
+        <div className="mt-2 flex flex-col gap-1.5">
+          {pinnedIds.length === 0 ? (
+            <p className="text-xs text-gray-400 italic text-center p-3 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+              Nenhum produto fixo selecionado.
+            </p>
+          ) : (
+            pinnedIds.map((id, i) => {
+              const product = pinnedProducts.find((p) => String(p.id) === id);
+              return (
+                <div
+                  key={id}
+                  className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2"
+                >
+                  <span className="text-xs font-bold text-gray-400 w-5 text-right shrink-0">
+                    {i + 1}.
+                  </span>
+                  <span className="text-[10px] max-w-25 text-gray-400 truncate font-mono shrink-0">
+                    #{id}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onRemove(id)}
+                    className="text-red-400 hover:text-red-600 hover:bg-red-50 rounded p-0.5 shrink-0"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    );
+  }
 
   useEffect(() => {
     fetchFlow();
@@ -427,31 +621,31 @@ export default function BotFlowPage() {
       id: `${type}-${Date.now()}`,
       type,
       position,
-        data: {
-          ...baseData,
-          message:
-            type === "handoffNode"
-              ? "Transferindo para atendente..."
-              : type === "followUpNode"
-                ? "Percebemos que você ficou ausente. Posso te ajudar com algo?"
-                : type === "blockNode"
-                  ? ""
-                  : "Nova mensagem",
-          menu_title: type === "menuNode" ? "Escolha uma opção:" : undefined,
-          title:
-            type === "followUpNode"
-              ? "Follow-up de inatividade"
-              : type === "startNode"
-                ? "Início do atendimento"
-                : type === "menuNode"
-                  ? "Menu de opções"
-                  : type === "handoffNode"
-                    ? "Transferência para humano"
-                    : type === "blockNode"
-                      ? "Encerramento silencioso"
-                      : type === "productSearchNode"
-                        ? "Busca de produtos"
-                        : "Mensagem",
+      data: {
+        ...baseData,
+        message:
+          type === "handoffNode"
+            ? "Transferindo para atendente..."
+            : type === "followUpNode"
+              ? "Percebemos que você ficou ausente. Posso te ajudar com algo?"
+              : type === "blockNode"
+                ? ""
+                : "Nova mensagem",
+        menu_title: type === "menuNode" ? "Escolha uma opção:" : undefined,
+        title:
+          type === "followUpNode"
+            ? "Follow-up de inatividade"
+            : type === "startNode"
+              ? "Início do atendimento"
+              : type === "menuNode"
+                ? "Menu de opções"
+                : type === "handoffNode"
+                  ? "Transferência para humano"
+                  : type === "blockNode"
+                    ? "Encerramento silencioso"
+                    : type === "productSearchNode"
+                      ? "Busca de produtos"
+                      : "Mensagem",
         inactivityMinutes: type === "followUpNode" ? 24 * 60 : undefined,
         options:
           type === "menuNode" || type === "followUpNode" ? [] : undefined,
@@ -528,13 +722,19 @@ export default function BotFlowPage() {
           search: shouldUsePinnedProducts
             ? undefined
             : data.searchQuery || data.searchPrefix || undefined,
-          category_id: shouldUsePinnedProducts ? undefined : data.categoryId || undefined,
-          type_id: shouldUsePinnedProducts ? undefined : data.typeId || undefined,
+          category_id: shouldUsePinnedProducts
+            ? undefined
+            : data.categoryId || undefined,
+          type_id: shouldUsePinnedProducts
+            ? undefined
+            : data.typeId || undefined,
         });
 
         let results = response.products || [];
         if (shouldUsePinnedProducts) {
-          const byId = new Map(results.map((product) => [String(product.id), product]));
+          const byId = new Map(
+            results.map((product) => [String(product.id), product]),
+          );
           results = pinnedProductIds
             .map((id) => byId.get(String(id)))
             .filter(Boolean) as Product[];
@@ -754,8 +954,7 @@ export default function BotFlowPage() {
   const addMenuOption = () => {
     if (
       !selectedNode ||
-      (selectedNode.type !== "menuNode" &&
-        selectedNode.type !== "followUpNode")
+      (selectedNode.type !== "menuNode" && selectedNode.type !== "followUpNode")
     )
       return;
     const currentOptions = Array.isArray(selectedNode.data.options)
@@ -769,8 +968,7 @@ export default function BotFlowPage() {
   const updateMenuOption = (index: number, value: string) => {
     if (
       !selectedNode ||
-      (selectedNode.type !== "menuNode" &&
-        selectedNode.type !== "followUpNode")
+      (selectedNode.type !== "menuNode" && selectedNode.type !== "followUpNode")
     )
       return;
     const currentOptions = Array.isArray(selectedNode.data.options)
@@ -783,8 +981,7 @@ export default function BotFlowPage() {
   const removeMenuOption = (index: number) => {
     if (
       !selectedNode ||
-      (selectedNode.type !== "menuNode" &&
-        selectedNode.type !== "followUpNode")
+      (selectedNode.type !== "menuNode" && selectedNode.type !== "followUpNode")
     )
       return;
     const currentOptions = Array.isArray(selectedNode.data.options)
@@ -796,7 +993,9 @@ export default function BotFlowPage() {
 
   const addSearchExtraOption = () => {
     if (!selectedNode || selectedNode.type !== "productSearchNode") return;
-    const currentOptions = normalizeStringList(selectedNode.data.searchExtraOptions);
+    const currentOptions = normalizeStringList(
+      selectedNode.data.searchExtraOptions,
+    );
     updateNodeData(selectedNode.id, {
       searchExtraOptions: [...currentOptions, "Nova opção"],
     });
@@ -804,14 +1003,18 @@ export default function BotFlowPage() {
 
   const updateSearchExtraOption = (index: number, value: string) => {
     if (!selectedNode || selectedNode.type !== "productSearchNode") return;
-    const currentOptions = normalizeStringList(selectedNode.data.searchExtraOptions);
+    const currentOptions = normalizeStringList(
+      selectedNode.data.searchExtraOptions,
+    );
     currentOptions[index] = value;
     updateNodeData(selectedNode.id, { searchExtraOptions: currentOptions });
   };
 
   const removeSearchExtraOption = (index: number) => {
     if (!selectedNode || selectedNode.type !== "productSearchNode") return;
-    const currentOptions = normalizeStringList(selectedNode.data.searchExtraOptions);
+    const currentOptions = normalizeStringList(
+      selectedNode.data.searchExtraOptions,
+    );
     currentOptions.splice(index, 1);
     updateNodeData(selectedNode.id, { searchExtraOptions: currentOptions });
   };
@@ -1022,7 +1225,7 @@ export default function BotFlowPage() {
                 </span>
               </div>
 
-                <div className="flex flex-col gap-5 text-sm flex-1">
+              <div className="flex flex-col gap-5 text-sm flex-1">
                 {selectedNode && (
                   <div className="bg-sky-50 border border-sky-200 rounded-lg p-4 space-y-3">
                     <div>
@@ -1040,189 +1243,6 @@ export default function BotFlowPage() {
                         placeholder="Nome curto para identificar a intenção do nó"
                       />
                     </div>
-
-                    <details className="bg-white border border-sky-100 rounded-md p-3">
-                      <summary className="cursor-pointer text-xs font-bold text-sky-700">
-                        Ficha de intenção (roteamento LLM)
-                      </summary>
-                      <div className="space-y-3 mt-3">
-                        <div>
-                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
-                            Summary
-                          </label>
-                          <textarea
-                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
-                            value={String(selectedNode.data.summary || "")}
-                            onChange={(e) =>
-                              updateNodeData(selectedNode.id, {
-                                summary: e.target.value,
-                              })
-                            }
-                            rows={2}
-                            placeholder="O que esse nó faz em 1 frase"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
-                            When to use
-                          </label>
-                          <textarea
-                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
-                            value={String(selectedNode.data.when_to_use || "")}
-                            onChange={(e) =>
-                              updateNodeData(selectedNode.id, {
-                                when_to_use: e.target.value,
-                              })
-                            }
-                            rows={2}
-                            placeholder="Em quais intenções esse nó deve ser escolhido"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
-                            Examples (1 por linha)
-                          </label>
-                          <textarea
-                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
-                            value={listToMultiline(selectedNode.data.examples)}
-                            onChange={(e) =>
-                              updateNodeData(selectedNode.id, {
-                                examples: parseListInput(e.target.value),
-                              })
-                            }
-                            rows={3}
-                            placeholder={"Cadê meu pedido?\nQuero falar com atendente"}
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
-                            Keywords (separadas por vírgula)
-                          </label>
-                          <input
-                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
-                            value={listToComma(selectedNode.data.keywords)}
-                            onChange={(e) =>
-                              updateNodeData(selectedNode.id, {
-                                keywords: parseCommaListInput(e.target.value),
-                              })
-                            }
-                            placeholder="pedido, rastreio, entrega"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
-                            Expected user state
-                          </label>
-                          <input
-                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
-                            value={String(selectedNode.data.expected_user_state || "")}
-                            onChange={(e) =>
-                              updateNodeData(selectedNode.id, {
-                                expected_user_state: e.target.value,
-                              })
-                            }
-                            placeholder="neutral | waiting_order_id"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
-                            Next best nodes (ids separados por vírgula)
-                          </label>
-                          <input
-                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
-                            value={listToComma(selectedNode.data.next_best_nodes)}
-                            onChange={(e) =>
-                              updateNodeData(selectedNode.id, {
-                                next_best_nodes: parseCommaListInput(e.target.value),
-                              })
-                            }
-                            placeholder="node-123, node-456"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
-                            Requires slots (separados por vírgula)
-                          </label>
-                          <input
-                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
-                            value={listToComma(selectedNode.data.requires_slots)}
-                            onChange={(e) =>
-                              updateNodeData(selectedNode.id, {
-                                requires_slots: parseCommaListInput(e.target.value),
-                              })
-                            }
-                            placeholder="cidade, data, produto"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
-                            Bot voice template
-                          </label>
-                          <textarea
-                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
-                            value={String(selectedNode.data.bot_voice_template || "")}
-                            onChange={(e) =>
-                              updateNodeData(selectedNode.id, {
-                                bot_voice_template: e.target.value,
-                              })
-                            }
-                            rows={2}
-                            placeholder="Texto base opcional para resposta do fluxo"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
-                            Confidence rules
-                          </label>
-                          <textarea
-                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
-                            value={String(selectedNode.data.confidence_rules || "")}
-                            onChange={(e) =>
-                              updateNodeData(selectedNode.id, {
-                                confidence_rules: e.target.value,
-                              })
-                            }
-                            rows={2}
-                            placeholder="Regras para seleção automática deste nó"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="font-semibold text-gray-700 block mb-1 text-xs">
-                            Confidence threshold (0 a 1)
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            max={1}
-                            step={0.01}
-                            className="w-full border border-gray-200 p-2 rounded-md focus:outline-none focus:border-sky-500 bg-gray-50 text-xs"
-                            value={
-                              typeof selectedNode.data.confidence_threshold === "number"
-                                ? selectedNode.data.confidence_threshold
-                                : ""
-                            }
-                            onChange={(e) =>
-                              updateNodeData(selectedNode.id, {
-                                confidence_threshold:
-                                  e.target.value === ""
-                                    ? undefined
-                                    : Math.max(0, Math.min(1, Number(e.target.value))),
-                              })
-                            }
-                            placeholder="0.85"
-                          />
-                        </div>
-                      </div>
-                    </details>
                   </div>
                 )}
 
@@ -1462,7 +1482,9 @@ export default function BotFlowPage() {
                                     e.target.value === ""
                                       ? 0
                                       : Math.max(0, Number(e.target.value));
-                                  const extraHours = Math.floor(rawMinutes / 60);
+                                  const extraHours = Math.floor(
+                                    rawMinutes / 60,
+                                  );
                                   const normalizedMinutes = rawMinutes % 60;
                                   const normalizedHours =
                                     currentHours + extraHours;
@@ -1489,10 +1511,7 @@ export default function BotFlowPage() {
                       </label>
                       <textarea
                         className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-amber-500 bg-gray-50"
-                        value={
-                          (selectedNode.data.message as string) ||
-                          ""
-                        }
+                        value={(selectedNode.data.message as string) || ""}
                         onChange={(e) =>
                           updateNodeData(selectedNode.id, {
                             message: e.target.value,
@@ -1576,30 +1595,30 @@ export default function BotFlowPage() {
                       }
                       placeholder="Ex: buquê, rosas, presente"
                     />
-                    <p className="text-xs text-gray-500 mt-2">
-                      Se a mensagem do usuário bater com estes termos, este nó
-                      será acionado para sugerir produtos.
-                    </p>
 
                     <div className="mt-4">
-                      <label className="font-bold text-gray-700 block mb-2">
-                        IDs de produtos fixos (um por linha)
-                      </label>
-                      <textarea
-                        className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-purple-500 bg-gray-50 text-sm"
-                        value={listToMultiline(selectedNode.data.productIds)}
-                        onChange={(e) =>
-                          updateNodeData(selectedNode.id, {
-                            productIds: parseUniqueListInput(e.target.value),
-                          })
-                        }
-                        rows={3}
-                        placeholder={"Ex:\n9f4d3c12-...\n5a6b7c8d-..."}
-                      />
-                      <p className="text-xs text-gray-500 mt-2">
-                        Quando preenchido, o nó exibe primeiro estes produtos
-                        definidos manualmente (na ordem informada).
-                      </p>
+                      {/* Produtos fixos — busca com autocomplete */}
+                      {(() => {
+                        const pinnedIds = normalizeStringList(
+                          selectedNode.data.productIds,
+                        );
+
+                        return (
+                          <PinnedProductSearch
+                            pinnedIds={pinnedIds}
+                            onAdd={(id) =>
+                              updateNodeData(selectedNode.id, {
+                                productIds: [...pinnedIds, id],
+                              })
+                            }
+                            onRemove={(id) =>
+                              updateNodeData(selectedNode.id, {
+                                productIds: pinnedIds.filter((x) => x !== id),
+                              })
+                            }
+                          />
+                        );
+                      })()}
                     </div>
 
                     <div className="mt-4 space-y-3">
@@ -1613,7 +1632,10 @@ export default function BotFlowPage() {
                         </label>
                         <input
                           className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-purple-500 bg-gray-50 text-sm"
-                          value={selectedNode.data.searchMenuTitle || "Escolha uma opção:"}
+                          value={
+                            selectedNode.data.searchMenuTitle ||
+                            "Escolha uma opção:"
+                          }
                           onChange={(e) =>
                             updateNodeData(selectedNode.id, {
                               searchMenuTitle: e.target.value,
@@ -1696,34 +1718,34 @@ export default function BotFlowPage() {
                         </Button>
                       </div>
 
-                      {normalizeStringList(selectedNode.data.searchExtraOptions).map(
-                        (opt: string, i: number) => (
-                          <div
-                            key={i}
-                            className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-200"
+                      {normalizeStringList(
+                        selectedNode.data.searchExtraOptions,
+                      ).map((opt: string, i: number) => (
+                        <div
+                          key={i}
+                          className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-200"
+                        >
+                          <span className="text-gray-400 font-bold text-xs">
+                            {i + 1}.
+                          </span>
+                          <input
+                            value={opt}
+                            onChange={(e) =>
+                              updateSearchExtraOption(i, e.target.value)
+                            }
+                            className="flex-1 bg-transparent border-b border-gray-300 focus:border-purple-500 focus:outline-none px-1 py-1 text-sm text-gray-800"
+                            placeholder={`Opção extra ${i + 1}`}
+                          />
+                          <button
+                            onClick={() => removeSearchExtraOption(i)}
+                            className="text-red-400 hover:text-red-600 p-1 rounded-md hover:bg-red-50"
                           >
-                            <span className="text-gray-400 font-bold text-xs">
-                              {i + 1}.
-                            </span>
-                            <input
-                              value={opt}
-                              onChange={(e) =>
-                                updateSearchExtraOption(i, e.target.value)
-                              }
-                              className="flex-1 bg-transparent border-b border-gray-300 focus:border-purple-500 focus:outline-none px-1 py-1 text-sm text-gray-800"
-                              placeholder={`Opção extra ${i + 1}`}
-                            />
-                            <button
-                              onClick={() => removeSearchExtraOption(i)}
-                              className="text-red-400 hover:text-red-600 p-1 rounded-md hover:bg-red-50"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        ),
-                      )}
-                      {normalizeStringList(selectedNode.data.searchExtraOptions).length ===
-                        0 && (
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))}
+                      {normalizeStringList(selectedNode.data.searchExtraOptions)
+                        .length === 0 && (
                         <p className="text-xs text-gray-500 italic text-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
                           Nenhuma opção extra cadastrada.
                           <br />
@@ -1732,7 +1754,8 @@ export default function BotFlowPage() {
                       )}
                       <p className="text-xs text-gray-500">
                         Cada opção extra cria um conector próprio no nó
-                        (&quot;Opção extra 1&quot;, &quot;Opção extra 2&quot;...).
+                        (&quot;Opção extra 1&quot;, &quot;Opção extra
+                        2&quot;...).
                       </p>
                     </div>
 
