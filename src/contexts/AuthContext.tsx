@@ -32,8 +32,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (storedUser && storedAppToken) {
         try {
           const userData = JSON.parse(storedUser);
-          // ⚠️ SEGURANÇA: Aceitar dados do localStorage mas NUNCA confiar no role
-          // O role será sempre validado com o servidor
           setUser(userData);
           setAppToken(storedAppToken);
         } catch (e) {
@@ -57,9 +55,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(userData);
     localStorage.setItem("appToken", token);
 
-    // ⚠️ SEGURANÇA: NÃO salvar informações sensíveis como role no localStorage
-    // O role será sempre validado com o servidor via useAdminCheck()
-    // Apenas armazenar ID e informações públicas do usuário
     const safeUserData = {
       id: userData.id,
       name: userData.name,

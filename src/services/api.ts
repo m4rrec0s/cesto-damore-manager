@@ -410,13 +410,14 @@ class ApiService {
       const token =
         localStorage.getItem("token") || localStorage.getItem("appToken");
 
-      const apiKey =
-        import.meta.env.VITE_API_KEY ||
-        import.meta.env.VITE_AI_AGENT_API_KEY ||
-        import.meta.env.VITE_AI_API_KEY;
+      const apiKey = import.meta.env.VITE_API_KEY;
       if (apiKey) {
         config.headers = config.headers || {};
         (config.headers as Record<string, string>)["x-api-key"] = apiKey;
+      } else {
+        console.warn(
+          "⚠️ VITE_API_KEY não configurada - certifique-se de definir a variável de ambiente",
+        );
       }
 
       if (token) {
@@ -1206,17 +1207,13 @@ class ApiService {
   ): Promise<{ messages: LabMessage[] }> =>
     (await this.get(`/admin/ai/lab/sessions/${sessionId}/messages`)).data;
 
-  getLabSessionMemory = async (
-    sessionId: string,
-  ): Promise<LabMemorySnapshot> =>
+  getLabSessionMemory = async (sessionId: string): Promise<LabMemorySnapshot> =>
     (await this.get(`/admin/ai/lab/sessions/${sessionId}/memory`)).data;
 
   deleteLabSession = async (sessionId: string): Promise<{ success: boolean }> =>
     (await this.delete(`/admin/ai/lab/sessions/${sessionId}`)).data;
 
-  getLabLinkPreview = async (
-    targetUrl: string,
-  ): Promise<LinkPreviewPayload> =>
+  getLabLinkPreview = async (targetUrl: string): Promise<LinkPreviewPayload> =>
     (
       await this.get("/admin/ai/lab/link-preview", {
         params: { url: targetUrl },
@@ -1256,7 +1253,10 @@ class ApiService {
     };
   }> =>
     (
-      await this.post(`/admin/ai/lab/knowledge/documents/${documentId}/reindex`, {})
+      await this.post(
+        `/admin/ai/lab/knowledge/documents/${documentId}/reindex`,
+        {},
+      )
     ).data;
 
   getLabStreamConfig = () => {
