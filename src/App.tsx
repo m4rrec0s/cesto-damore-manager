@@ -17,6 +17,7 @@ import { NewDesignPage } from "./pages/NewDesignPage";
 import DesignTestPage from "./pages/DesignTestPage";
 import { LlmTestSessionPage } from "./pages/LlmTestSessionPage";
 import { LlmPromptPriorityPage } from "./pages/LlmPromptPriorityPage";
+import { LlmKnowledgeDocsPage } from "./pages/LlmKnowledgeDocsPage";
 import BotFlowPage from "./pages/BotFlowPage";
 import { BotChatTest } from "./pages/BotChatTest";
 import { UIProvider } from "./contexts/UIContext";
@@ -143,6 +144,14 @@ export default function App() {
           element={
             <AdminRoute>
               <LlmPromptPriorityPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/llm-knowledge"
+          element={
+            <AdminRoute>
+              <LlmKnowledgeDocsPage />
             </AdminRoute>
           }
         />

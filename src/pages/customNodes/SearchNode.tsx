@@ -3,6 +3,25 @@ import { Handle, Position } from "@xyflow/react";
 export default function SearchNode({ data }: { data: any }) {
   const title = String(data?.title || "").trim();
   const searchTerm = data.searchQuery || data.searchPrefix || "*";
+  const productIds = Array.isArray(data?.productIds)
+    ? data.productIds.map((id: unknown) => String(id || "").trim()).filter(Boolean)
+    : [];
+  const searchMenuTitle =
+    String(data?.searchMenuTitle || data?.optionsMenuTitle || "").trim() ||
+    "Escolha uma opção:";
+  const searchOptionMoreLabel =
+    String(data?.searchOptionMoreLabel || "").trim() ||
+    "Ver mais opções dessa sessão";
+  const searchOptionDoneLabel =
+    String(data?.searchOptionDoneLabel || "").trim() ||
+    "Já escolhi - Falar com atendente";
+  const searchOptionBackLabel =
+    String(data?.searchOptionBackLabel || "").trim() || "Voltar ao menu";
+  const searchExtraOptions = Array.isArray(data?.searchExtraOptions)
+    ? data.searchExtraOptions
+        .map((option: unknown) => String(option || "").trim())
+        .filter(Boolean)
+    : [];
   const delayMs =
     typeof data?.delayMs === "number"
       ? data.delayMs
@@ -79,6 +98,11 @@ export default function SearchNode({ data }: { data: any }) {
             )}
           </div>
         )}
+        {productIds.length > 0 && (
+          <div className="mt-2 text-[10px] text-purple-700">
+            Produtos fixos: <span className="font-semibold">{productIds.length}</span>
+          </div>
+        )}
       </div>
 
       <div className="px-3 pb-3 bg-white">
@@ -106,7 +130,7 @@ export default function SearchNode({ data }: { data: any }) {
 
       <div className="flex flex-col border-t border-purple-200">
         <div className="relative p-2 bg-purple-100/50 text-xs text-left font-semibold text-purple-800 border-b border-purple-200">
-          Se encontrar produtos...
+          {searchOptionDoneLabel}
           <Handle
             type="source"
             position={Position.Right}
@@ -126,7 +150,7 @@ export default function SearchNode({ data }: { data: any }) {
           />
         </div>
         <div className="relative p-2 bg-amber-50 text-xs text-left font-semibold text-amber-700">
-          Voltar ao menu
+          {searchOptionBackLabel}
           <Handle
             type="source"
             position={Position.Right}
@@ -134,6 +158,26 @@ export default function SearchNode({ data }: { data: any }) {
             className="w-3 h-3 bg-amber-500"
             style={{ top: "50%", right: -6 }}
           />
+        </div>
+        {searchExtraOptions.map((option: string, index: number) => (
+          <div
+            key={`search-extra-option-${index}`}
+            className="relative p-2 bg-violet-50 text-xs text-left font-semibold text-violet-700 border-t border-violet-100"
+          >
+            {option}
+            <Handle
+              type="source"
+              position={Position.Right}
+              id={`option-${index}`}
+              className="w-3 h-3 bg-violet-500"
+              style={{ top: "50%", right: -6 }}
+            />
+          </div>
+        ))}
+        <div className="p-2 bg-purple-50 text-[10px] text-purple-600 border-t border-purple-200">
+          {searchMenuTitle}
+          <br />
+          1) {searchOptionMoreLabel}
         </div>
       </div>
     </div>

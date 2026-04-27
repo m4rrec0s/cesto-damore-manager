@@ -255,9 +255,9 @@ export function Dashboard() {
       cta: "Abrir atendimento",
     },
     {
-      title: "Teste da LLM Antiga",
+      title: "LLM Lab (Chat Profissional)",
       description:
-        "Sessões de atendimento legadas baseadas no fluxo anterior com histórico n8n.",
+        "Chat estilo ChatGPT/Claude para testar a LLM com streaming, tools, pensamento e sessões salvas por usuário.",
       href: "/llm-test",
       icon: FlaskConical,
       cta: "Abrir teste",

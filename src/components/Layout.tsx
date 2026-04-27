@@ -15,6 +15,8 @@ import {
   Calendar,
   RefreshCw,
   TestTube2,
+  Sparkles,
+  BookOpenText,
 } from "lucide-react";
 import { useAuth } from "../contexts/useAuth";
 import { useUI } from "../contexts/UIContext";
@@ -38,6 +40,8 @@ const navItems = [
   },
   { name: "Feed", href: "/feed", icon: PackageCheck },
   { name: "CestoBot", href: "/bot-flow", icon: BotMessageSquare },
+  { name: "LLM Lab", href: "/llm-test", icon: Sparkles },
+  { name: "LLM Knowledge", href: "/llm-knowledge", icon: BookOpenText },
   { name: "Teste do Bot", href: "/bot-test", icon: TestTube2 },
   { name: "Feriados", href: "/holidays", icon: Calendar },
   { name: "Follow-up", href: "/follow-up", icon: RefreshCw },

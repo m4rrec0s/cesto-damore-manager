@@ -108,6 +108,11 @@ export default function BotFlowPage() {
       .map((item) => item.trim())
       .filter(Boolean);
 
+  const parseUniqueListInput = (value: string) => {
+    const parsed = parseListInput(value);
+    return parsed.filter((item, index) => parsed.indexOf(item) === index);
+  };
+
   const parseCommaListInput = (value: string) =>
     value
       .split(",")
@@ -119,6 +124,21 @@ export default function BotFlowPage() {
 
   const listToComma = (value: unknown) =>
     Array.isArray(value) ? value.map((item) => String(item || "")).join(", ") : "";
+
+  const normalizeStringList = (value: unknown) => {
+    if (Array.isArray(value)) {
+      return value
+        .map((item) => String(item || "").trim())
+        .filter(Boolean);
+    }
+    if (typeof value === "string") {
+      return value
+        .split(/[\n,]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+    return [];
+  };
 
   useEffect(() => {
     fetchFlow();
@@ -156,6 +176,41 @@ export default function BotFlowPage() {
                   (node.data as Record<string, any>)?.message ||
                   ""
                 : (node.data as Record<string, any>)?.menu_title,
+            searchMenuTitle:
+              node.type === "productSearchNode"
+                ? (node.data as Record<string, any>)?.searchMenuTitle ||
+                  (node.data as Record<string, any>)?.optionsMenuTitle ||
+                  "Escolha uma opção:"
+                : (node.data as Record<string, any>)?.searchMenuTitle,
+            searchOptionMoreLabel:
+              node.type === "productSearchNode"
+                ? (node.data as Record<string, any>)?.searchOptionMoreLabel ||
+                  "Ver mais opções dessa sessão"
+                : (node.data as Record<string, any>)?.searchOptionMoreLabel,
+            searchOptionDoneLabel:
+              node.type === "productSearchNode"
+                ? (node.data as Record<string, any>)?.searchOptionDoneLabel ||
+                  "Já escolhi - Falar com atendente"
+                : (node.data as Record<string, any>)?.searchOptionDoneLabel,
+            searchOptionBackLabel:
+              node.type === "productSearchNode"
+                ? (node.data as Record<string, any>)?.searchOptionBackLabel ||
+                  "Voltar ao menu"
+                : (node.data as Record<string, any>)?.searchOptionBackLabel,
+            searchExtraOptions:
+              node.type === "productSearchNode"
+                ? normalizeStringList(
+                    (node.data as Record<string, any>)?.searchExtraOptions,
+                  )
+                : (node.data as Record<string, any>)?.searchExtraOptions,
+            productIds:
+              node.type === "productSearchNode"
+                ? normalizeStringList(
+                    (node.data as Record<string, any>)?.productIds ||
+                      (node.data as Record<string, any>)?.pinnedProductIds ||
+                      (node.data as Record<string, any>)?.specificProductIds,
+                  )
+                : (node.data as Record<string, any>)?.productIds,
           },
         }));
         setNodes(normalizedNodes);
@@ -268,6 +323,22 @@ export default function BotFlowPage() {
 
         if (notFound[0].target === backToMenu[0].target) {
           return "As saídas 'Se nao encontrar' e 'Voltar ao menu' da busca devem apontar para nós diferentes.";
+        }
+
+        const extraOptions = normalizeStringList(
+          (node.data as Record<string, any>)?.searchExtraOptions,
+        );
+        for (let index = 0; index < extraOptions.length; index++) {
+          const optionMatches = outEdges.filter((edge) => {
+            const handle = String(edge.sourceHandle ?? "");
+            return handle === `option-${index}` || handle === String(index);
+          });
+          if (optionMatches.length === 0) {
+            return `Busca com opção extra ${index + 1} sem conexão de saída.`;
+          }
+          if (optionMatches.length > 1) {
+            return `Busca com opção extra ${index + 1} apontando para múltiplos destinos.`;
+          }
         }
       }
     }
@@ -385,6 +456,12 @@ export default function BotFlowPage() {
         options:
           type === "menuNode" || type === "followUpNode" ? [] : undefined,
         searchQuery: "",
+        searchMenuTitle: "Escolha uma opção:",
+        searchOptionMoreLabel: "Ver mais opções dessa sessão",
+        searchOptionDoneLabel: "Já escolhi - Falar com atendente",
+        searchOptionBackLabel: "Voltar ao menu",
+        searchExtraOptions: [],
+        productIds: [],
         categoryId: "",
         typeId: "",
         minPrice: undefined,
@@ -441,22 +518,34 @@ export default function BotFlowPage() {
       }));
 
       try {
+        const pinnedProductIds = normalizeStringList(
+          data.productIds || data.pinnedProductIds || data.specificProductIds,
+        );
+        const shouldUsePinnedProducts = pinnedProductIds.length > 0;
         const response = await api.getProducts({
           page: 1,
           perPage: 1000,
-          search: data.searchQuery || data.searchPrefix || undefined,
-          category_id: data.categoryId || undefined,
-          type_id: data.typeId || undefined,
+          search: shouldUsePinnedProducts
+            ? undefined
+            : data.searchQuery || data.searchPrefix || undefined,
+          category_id: shouldUsePinnedProducts ? undefined : data.categoryId || undefined,
+          type_id: shouldUsePinnedProducts ? undefined : data.typeId || undefined,
         });
 
         let results = response.products || [];
-        if (typeof data.minPrice === "number") {
+        if (shouldUsePinnedProducts) {
+          const byId = new Map(results.map((product) => [String(product.id), product]));
+          results = pinnedProductIds
+            .map((id) => byId.get(String(id)))
+            .filter(Boolean) as Product[];
+        }
+        if (!shouldUsePinnedProducts && typeof data.minPrice === "number") {
           results = results.filter((p) => (p.price ?? 0) >= data.minPrice);
         }
-        if (typeof data.maxPrice === "number") {
+        if (!shouldUsePinnedProducts && typeof data.maxPrice === "number") {
           results = results.filter((p) => (p.price ?? 0) <= data.maxPrice);
         }
-        if (data.onlyActive) {
+        if (!shouldUsePinnedProducts && data.onlyActive) {
           results = results.filter((p) => p.is_active !== false);
         }
         if (typeof data.maxResults === "number") {
@@ -703,6 +792,28 @@ export default function BotFlowPage() {
       : [];
     currentOptions.splice(index, 1);
     updateNodeData(selectedNode.id, { options: currentOptions });
+  };
+
+  const addSearchExtraOption = () => {
+    if (!selectedNode || selectedNode.type !== "productSearchNode") return;
+    const currentOptions = normalizeStringList(selectedNode.data.searchExtraOptions);
+    updateNodeData(selectedNode.id, {
+      searchExtraOptions: [...currentOptions, "Nova opção"],
+    });
+  };
+
+  const updateSearchExtraOption = (index: number, value: string) => {
+    if (!selectedNode || selectedNode.type !== "productSearchNode") return;
+    const currentOptions = normalizeStringList(selectedNode.data.searchExtraOptions);
+    currentOptions[index] = value;
+    updateNodeData(selectedNode.id, { searchExtraOptions: currentOptions });
+  };
+
+  const removeSearchExtraOption = (index: number) => {
+    if (!selectedNode || selectedNode.type !== "productSearchNode") return;
+    const currentOptions = normalizeStringList(selectedNode.data.searchExtraOptions);
+    currentOptions.splice(index, 1);
+    updateNodeData(selectedNode.id, { searchExtraOptions: currentOptions });
   };
 
   const removeSelectedNode = () => {
@@ -1469,6 +1580,161 @@ export default function BotFlowPage() {
                       Se a mensagem do usuário bater com estes termos, este nó
                       será acionado para sugerir produtos.
                     </p>
+
+                    <div className="mt-4">
+                      <label className="font-bold text-gray-700 block mb-2">
+                        IDs de produtos fixos (um por linha)
+                      </label>
+                      <textarea
+                        className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-purple-500 bg-gray-50 text-sm"
+                        value={listToMultiline(selectedNode.data.productIds)}
+                        onChange={(e) =>
+                          updateNodeData(selectedNode.id, {
+                            productIds: parseUniqueListInput(e.target.value),
+                          })
+                        }
+                        rows={3}
+                        placeholder={"Ex:\n9f4d3c12-...\n5a6b7c8d-..."}
+                      />
+                      <p className="text-xs text-gray-500 mt-2">
+                        Quando preenchido, o nó exibe primeiro estes produtos
+                        definidos manualmente (na ordem informada).
+                      </p>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      <label className="font-bold text-gray-700 block">
+                        Mensagens das opções internas
+                      </label>
+
+                      <div>
+                        <label className="text-xs text-gray-500 block mb-1">
+                          Título do menu de opções
+                        </label>
+                        <input
+                          className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-purple-500 bg-gray-50 text-sm"
+                          value={selectedNode.data.searchMenuTitle || "Escolha uma opção:"}
+                          onChange={(e) =>
+                            updateNodeData(selectedNode.id, {
+                              searchMenuTitle: e.target.value,
+                            })
+                          }
+                          placeholder="Escolha uma opção:"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3">
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">
+                            Ver mais opções
+                          </label>
+                          <input
+                            className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-purple-500 bg-gray-50 text-sm"
+                            value={
+                              selectedNode.data.searchOptionMoreLabel ||
+                              "Ver mais opções dessa sessão"
+                            }
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                searchOptionMoreLabel: e.target.value,
+                              })
+                            }
+                            placeholder="Ver mais opções dessa sessão"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">
+                            Já escolhi / falar com atendente
+                          </label>
+                          <input
+                            className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-purple-500 bg-gray-50 text-sm"
+                            value={
+                              selectedNode.data.searchOptionDoneLabel ||
+                              "Já escolhi - Falar com atendente"
+                            }
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                searchOptionDoneLabel: e.target.value,
+                              })
+                            }
+                            placeholder="Já escolhi - Falar com atendente"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-gray-500 block mb-1">
+                            Voltar ao menu
+                          </label>
+                          <input
+                            className="w-full border-2 border-gray-200 p-3 rounded-lg focus:outline-none focus:border-purple-500 bg-gray-50 text-sm"
+                            value={
+                              selectedNode.data.searchOptionBackLabel ||
+                              "Voltar ao menu"
+                            }
+                            onChange={(e) =>
+                              updateNodeData(selectedNode.id, {
+                                searchOptionBackLabel: e.target.value,
+                              })
+                            }
+                            placeholder="Voltar ao menu"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <label className="font-bold text-gray-700 block">
+                          Opções extras do nó
+                        </label>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 px-2 text-xs py-0 gap-1"
+                          onClick={addSearchExtraOption}
+                        >
+                          <PlusCircle size={14} /> Adicionar
+                        </Button>
+                      </div>
+
+                      {normalizeStringList(selectedNode.data.searchExtraOptions).map(
+                        (opt: string, i: number) => (
+                          <div
+                            key={i}
+                            className="flex gap-2 items-center bg-gray-50 p-2 rounded-lg border border-gray-200"
+                          >
+                            <span className="text-gray-400 font-bold text-xs">
+                              {i + 1}.
+                            </span>
+                            <input
+                              value={opt}
+                              onChange={(e) =>
+                                updateSearchExtraOption(i, e.target.value)
+                              }
+                              className="flex-1 bg-transparent border-b border-gray-300 focus:border-purple-500 focus:outline-none px-1 py-1 text-sm text-gray-800"
+                              placeholder={`Opção extra ${i + 1}`}
+                            />
+                            <button
+                              onClick={() => removeSearchExtraOption(i)}
+                              className="text-red-400 hover:text-red-600 p-1 rounded-md hover:bg-red-50"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        ),
+                      )}
+                      {normalizeStringList(selectedNode.data.searchExtraOptions).length ===
+                        0 && (
+                        <p className="text-xs text-gray-500 italic text-center p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                          Nenhuma opção extra cadastrada.
+                          <br />
+                          Clique em "Adicionar".
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-500">
+                        Cada opção extra cria um conector próprio no nó
+                        (&quot;Opção extra 1&quot;, &quot;Opção extra 2&quot;...).
+                      </p>
+                    </div>
 
                     <div className="grid grid-cols-2 gap-3 mt-4">
                       <div>

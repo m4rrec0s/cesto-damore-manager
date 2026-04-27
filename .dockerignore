@@ -6,6 +6,8 @@ dist
 Dockerfile
 .dockerignore
 .env.local
+.env
+.env.*
 .vscode
 npm-debug.log
 yarn-error.log

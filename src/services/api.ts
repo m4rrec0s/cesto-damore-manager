@@ -87,6 +87,90 @@ export interface PromptInjectionMetadata {
   dynamic_rule: string;
 }
 
+export interface LabSessionSummary {
+  id: string;
+  created_at: string;
+  expires_at: string;
+  is_blocked: boolean;
+  totalMessages: number;
+  lastMessage: {
+    id: string;
+    role: string;
+    content: string;
+    created_at: string;
+  } | null;
+}
+
+export interface LabMessage {
+  id: string;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+export interface LinkPreviewPayload {
+  url: string;
+  title: string;
+  description?: string;
+  image?: string;
+  host: string;
+}
+
+export interface LabMemorySnapshot {
+  session: {
+    id: string;
+    markdown: string;
+    compact: string;
+    updated_at?: string | null;
+    phase?: {
+      current: "DISCOVERY" | "CURATION" | "CUSTOMIZATION" | "CHECKOUT";
+      agent: "Ana" | "Bianca" | "Lucas" | "Alice";
+      transition_reason?: string | null;
+      executive_summary?: string | null;
+      checklist?: {
+        discoveryQualified: boolean;
+        productSelected: boolean;
+        customizationDecided: boolean;
+        checkoutDataCollected: boolean;
+      };
+      checkout_data?: {
+        dateTime: boolean;
+        address: boolean;
+        payment: boolean;
+        confirmed: boolean;
+      };
+      customization_decision?: "pending" | "with_addons" | "without_addons";
+    };
+    completeness?: {
+      has_name: boolean;
+      has_city: boolean;
+      has_budget: boolean;
+      has_occasion: boolean;
+      has_audience: boolean;
+    };
+  };
+  customer: null | {
+    customer_phone: string;
+    markdown: string;
+    compact: string;
+    db_summary: string | null;
+    db_expires_at: string | null;
+  };
+}
+
+export interface KnowledgeDocumentSummary {
+  id: string;
+  title: string;
+  sourceFilename: string;
+  mimeType: string;
+  status: string;
+  version: number;
+  totalChunks: number;
+  uploadedBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ===== Product Types =====
 export interface ProductComponent {
   id: string;
@@ -1109,6 +1193,85 @@ class ApiService {
   getServiceSessionStreamUrl = (sessionId: string) => {
     const apiKey = encodeURIComponent(import.meta.env.VITE_AI_API_KEY || "");
     return `${API_URL}/ai/agent/messages/stream/${encodeURIComponent(sessionId)}?x_ai_api_key=${apiKey}`;
+  };
+
+  createLabSession = async (): Promise<{ session: { id: string } }> =>
+    (await this.post("/admin/ai/lab/sessions", {})).data;
+
+  getLabSessions = async (): Promise<{ sessions: LabSessionSummary[] }> =>
+    (await this.get("/admin/ai/lab/sessions")).data;
+
+  getLabSessionMessages = async (
+    sessionId: string,
+  ): Promise<{ messages: LabMessage[] }> =>
+    (await this.get(`/admin/ai/lab/sessions/${sessionId}/messages`)).data;
+
+  getLabSessionMemory = async (
+    sessionId: string,
+  ): Promise<LabMemorySnapshot> =>
+    (await this.get(`/admin/ai/lab/sessions/${sessionId}/memory`)).data;
+
+  deleteLabSession = async (sessionId: string): Promise<{ success: boolean }> =>
+    (await this.delete(`/admin/ai/lab/sessions/${sessionId}`)).data;
+
+  getLabLinkPreview = async (
+    targetUrl: string,
+  ): Promise<LinkPreviewPayload> =>
+    (
+      await this.get("/admin/ai/lab/link-preview", {
+        params: { url: targetUrl },
+      })
+    ).data;
+
+  uploadLabKnowledgeDocument = async (
+    file: File,
+  ): Promise<{ document: KnowledgeDocumentSummary }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return (
+      await this.client.post("/admin/ai/lab/knowledge/upload", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      })
+    ).data;
+  };
+
+  getLabKnowledgeDocuments = async (): Promise<{
+    documents: KnowledgeDocumentSummary[];
+  }> => (await this.get("/admin/ai/lab/knowledge/documents")).data;
+
+  deleteLabKnowledgeDocument = async (
+    documentId: string,
+  ): Promise<{ success: boolean }> =>
+    (await this.delete(`/admin/ai/lab/knowledge/documents/${documentId}`)).data;
+
+  reindexLabKnowledgeDocument = async (
+    documentId: string,
+  ): Promise<{
+    result: {
+      id: string;
+      totalChunks: number;
+      reindexedAt: string;
+    };
+  }> =>
+    (
+      await this.post(`/admin/ai/lab/knowledge/documents/${documentId}/reindex`, {})
+    ).data;
+
+  getLabStreamConfig = () => {
+    const token =
+      localStorage.getItem("token") || localStorage.getItem("appToken") || "";
+    const apiKey =
+      import.meta.env.VITE_API_KEY ||
+      import.meta.env.VITE_AI_AGENT_API_KEY ||
+      import.meta.env.VITE_AI_API_KEY ||
+      "";
+    return {
+      url: `${API_URL}/admin/ai/lab/chat/stream`,
+      token,
+      apiKey,
+    };
   };
 
   listPromptPriorityOverrides = async (): Promise<{
