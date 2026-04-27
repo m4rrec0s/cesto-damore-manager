@@ -410,13 +410,16 @@ class ApiService {
       const token =
         localStorage.getItem("token") || localStorage.getItem("appToken");
 
-      const apiKey = import.meta.env.VITE_API_KEY;
+      const apiKey =
+        import.meta.env.VITE_API_KEY ||
+        import.meta.env.VITE_AI_AGENT_API_KEY ||
+        import.meta.env.VITE_AI_API_KEY;
       if (apiKey) {
         config.headers = config.headers || {};
         (config.headers as Record<string, string>)["x-api-key"] = apiKey;
       } else {
         console.warn(
-          "⚠️ VITE_API_KEY não configurada - certifique-se de definir a variável de ambiente",
+          "⚠️ API key não configurada (VITE_API_KEY / VITE_AI_AGENT_API_KEY / VITE_AI_API_KEY)",
         );
       }
 
