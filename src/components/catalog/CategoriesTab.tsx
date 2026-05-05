@@ -19,20 +19,24 @@ export function CategoriesTab() {
   const api = useApi();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloading, setReloading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [name, setName] = useState("");
 
-  const fetchCategories = async () => {
-    setLoading(true);
+  const fetchCategories = async (isReload = false) => {
+    if (isReload) setReloading(true);
+    else setLoading(true);
     try {
       const data = await api.getCategories();
-      setCategories(data);
+      setCategories(data || []);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao carregar categorias"));
     } finally {
       setLoading(false);
+      setReloading(false);
     }
   };
 
@@ -40,11 +44,21 @@ export function CategoriesTab() {
     fetchCategories();
   }, []);
 
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        fetchCategories(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
-    setLoading(true);
+    setSubmitting(true);
     try {
       if (editingCategory) {
         await api.updateCategory(editingCategory.id, { name });
@@ -56,22 +70,24 @@ export function CategoriesTab() {
       setName("");
       setEditingCategory(null);
       setIsModalOpen(false);
-      fetchCategories();
+      await fetchCategories(true);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao salvar categoria"));
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Tem certeza que deseja excluir esta categoria?")) return;
+    setReloading(true);
     try {
       await api.deleteCategory(id);
       toast.success("Categoria excluída!");
-      fetchCategories();
+      await fetchCategories(true);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao excluir categoria"));
+      setReloading(false);
     }
   };
 
@@ -111,6 +127,11 @@ export function CategoriesTab() {
       {loading && categories.length === 0 ? (
         <div className="flex justify-center py-20">
           <Loader2 className="animate-spin text-neutral-500" size={40} />
+        </div>
+      ) : (reloading || loading) ? (
+        <div className="flex items-center justify-center gap-3 py-20 bg-neutral-50/50 rounded-3xl border border-dashed border-neutral-100">
+          <Loader2 className="animate-spin text-neutral-500" size={32} />
+          <span className="text-sm font-medium text-neutral-400">Atualizando...</span>
         </div>
       ) : (
         <div className="bg-white rounded-[2rem] border border-neutral-100 shadow-sm overflow-hidden">
@@ -220,10 +241,10 @@ export function CategoriesTab() {
                   </Button>
                   <Button
                     type="submit"
-                    disabled={loading || !name.trim()}
+                    disabled={submitting || !name.trim()}
                     className="flex-1 py-3 bg-neutral-600 text-white font-bold rounded-2xl shadow-lg shadow-neutral-200 hover:bg-neutral-700 transition-all disabled:opacity-50"
                   >
-                    {loading ? "Salvando..." : "Salvar"}
+                    {submitting ? "Salvando..." : "Salvar"}
                   </Button>
                 </div>
               </form>

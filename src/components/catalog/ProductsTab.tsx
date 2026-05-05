@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   Plus,
   Search,
@@ -51,6 +51,8 @@ export function ProductsTab() {
   const [types, setTypes] = useState<Type[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloading, setReloading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({ totalPages: 1, total: 0 });
@@ -117,8 +119,9 @@ export function ProductsTab() {
     return Object.keys(errors).length === 0;
   };
 
-  const fetchInitialData = useCallback(async () => {
-    setLoading(true);
+  const fetchInitialData = async (isReload = false) => {
+    if (isReload) setReloading(true);
+    else setLoading(true);
     try {
       const [categoriesData, typesData, itemsResponse] = await Promise.all([
         api.getCategories(),
@@ -132,11 +135,13 @@ export function ProductsTab() {
       toast.error(extractErrorMessage(e, "Erro ao carregar dados iniciais"));
     } finally {
       setLoading(false);
+      setReloading(false);
     }
-  }, []);
+  };
 
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
+  const fetchProducts = async (isReload = false) => {
+    if (isReload) setReloading(true);
+    else setLoading(true);
     try {
       const data = await api.getProducts({
         page: currentPage,
@@ -152,16 +157,28 @@ export function ProductsTab() {
       toast.error(extractErrorMessage(e, "Erro ao carregar produtos"));
     } finally {
       setLoading(false);
+      setReloading(false);
     }
-  }, [currentPage, searchTerm]);
+  };
 
   useEffect(() => {
     fetchInitialData();
-  }, [fetchInitialData]);
+  }, []);
 
   useEffect(() => {
     fetchProducts();
-  }, [fetchProducts]);
+  }, [currentPage, searchTerm]);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        fetchProducts(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () =>
+      document.removeEventListener("visibilitychange", handleVisibility);
+  }, [currentPage, searchTerm]);
 
   const handleOpenModal = async (product?: Product) => {
     setFormErrors({});
@@ -233,7 +250,7 @@ export function ProductsTab() {
       return;
     }
 
-    setLoading(true);
+    setSubmitting(true);
     try {
       const payload: Partial<ProductInput> = {
         name: formData.name.trim(),
@@ -261,17 +278,18 @@ export function ProductsTab() {
       }
 
       setIsModalOpen(false);
-      fetchProducts();
+      await fetchProducts(true);
     } catch (e) {
       const message = extractErrorMessage(e, "Erro ao salvar produto");
       setSubmitError(message);
       toast.error(message);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   const handleToggleStatus = async (product: Product) => {
+    setReloading(true);
     try {
       await api.updateProduct(product.id, {
         is_active: !product.is_active,
@@ -279,19 +297,22 @@ export function ProductsTab() {
       toast.success(
         `Produto ${product.is_active ? "desativado" : "ativado"} com sucesso!`,
       );
-      fetchProducts();
+      await fetchProducts(true);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao alterar status do produto"));
+      setReloading(false);
     }
   };
 
   const handleDelete = async (id: string) => {
+    setReloading(true);
     try {
       await api.deleteProduct(id);
       toast.success("Produto excluído!");
-      fetchProducts();
+      await fetchProducts(true);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao excluir produto"));
+      setReloading(false);
     }
   };
 
@@ -323,6 +344,13 @@ export function ProductsTab() {
       {loading && products.length === 0 ? (
         <div className="flex justify-center py-20">
           <Loader2 className="animate-spin text-neutral-500" size={40} />
+        </div>
+      ) : reloading ? (
+        <div className="flex items-center justify-center gap-3 py-20 bg-neutral-50/50 rounded-3xl border border-dashed border-neutral-100">
+          <Loader2 className="animate-spin text-neutral-500" size={32} />
+          <span className="text-sm font-medium text-neutral-400">
+            Atualizando...
+          </span>
         </div>
       ) : (
         <div className="bg-white rounded-[2rem] border border-neutral-100 shadow-sm overflow-hidden">
@@ -480,6 +508,41 @@ export function ProductsTab() {
               ))}
             </TableBody>
           </Table>
+
+          {pagination.totalPages > 1 && (
+            <div className="flex items-center justify-between p-4 border-t border-neutral-100 bg-neutral-50/50">
+              <span className="text-xs font-medium text-neutral-500">
+                Mostrando página {currentPage} de {pagination.totalPages}{" "}
+                (Total: {pagination.total})
+              </span>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1 || loading || reloading}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    setCurrentPage((p) =>
+                      Math.min(pagination.totalPages, p + 1),
+                    )
+                  }
+                  disabled={
+                    currentPage === pagination.totalPages ||
+                    loading ||
+                    reloading
+                  }
+                >
+                  Próximo
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -565,7 +628,8 @@ export function ProductsTab() {
                     className="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar bg-white"
                   >
                     <div className="mb-4 text-sm text-neutral-600">
-                      Campos obrigatórios <span className="text-red-600">*</span>
+                      Campos obrigatórios{" "}
+                      <span className="text-red-600">*</span>
                     </div>
                     {submitError && (
                       <div className="mb-4 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -1098,10 +1162,10 @@ export function ProductsTab() {
                         </Button>
                         <Button
                           type="submit"
-                          disabled={loading}
+                          disabled={submitting}
                           className="px-5 py-2 bg-neutral-900 text-white text-sm rounded hover:bg-neutral-800 transition-all disabled:opacity-50 flex items-center gap-2"
                         >
-                          {loading ? (
+                          {submitting ? (
                             <Loader2 className="animate-spin" size={18} />
                           ) : (
                             <>
@@ -1118,25 +1182,6 @@ export function ProductsTab() {
           </div>
         )}
       </AnimatePresence>
-
-      {pagination.totalPages > 1 && (
-        <div className="flex justify-center gap-2 mt-8">
-          {Array.from({ length: pagination.totalPages }).map((_, i) => (
-            <Button
-              key={i}
-              onClick={() => setCurrentPage(i + 1)}
-              className={clsx(
-                "w-10 h-10 rounded-xl font-bold transition-all",
-                currentPage === i + 1
-                  ? "bg-neutral-600 text-white shadow-lg"
-                  : "bg-white text-neutral-950 border border-neutral-100 hover:bg-neutral-50",
-              )}
-            >
-              {i + 1}
-            </Button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

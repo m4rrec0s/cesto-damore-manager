@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Search, Edit2, Trash2, Loader2, Tag, X } from "lucide-react";
 import { useApi } from "../../services/api";
 import type { Type } from "../../types";
@@ -20,13 +20,16 @@ export function TypesTab() {
   const api = useApi();
   const [types, setTypes] = useState<Type[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloading, setReloading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingType, setEditingType] = useState<Type | null>(null);
   const [formData, setFormData] = useState({ name: "" });
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = async (isReload = false) => {
+    if (isReload) setReloading(true);
+    else setLoading(true);
     try {
       const data = await api.getTypes();
       setTypes(data || []);
@@ -34,12 +37,23 @@ export function TypesTab() {
       toast.error(extractErrorMessage(e, "Erro ao carregar tipos"));
     } finally {
       setLoading(false);
+      setReloading(false);
     }
-  }, [api]);
+  };
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, []);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        fetchData(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   const handleOpenModal = (type?: Type) => {
     if (type) {
@@ -54,7 +68,7 @@ export function TypesTab() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setSubmitting(true);
     try {
       if (editingType) {
         await api.updateType(editingType.id, formData);
@@ -64,27 +78,29 @@ export function TypesTab() {
         toast.success("Tipo criado!");
       }
       setIsModalOpen(false);
-      fetchData();
+      await fetchData(true);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao salvar tipo"));
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Deseja excluir este tipo?")) return;
+    setReloading(true);
     try {
       await api.deleteType(id);
       toast.success("Tipo excluído!");
-      fetchData();
+      await fetchData(true);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao excluir tipo"));
+      setReloading(false);
     }
   };
 
   const filtered = types.filter((t) =>
-    t.name.toLowerCase().includes(searchTerm.toLowerCase())
+    t.name.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -115,6 +131,13 @@ export function TypesTab() {
       {loading && types.length === 0 ? (
         <div className="flex justify-center py-20">
           <Loader2 className="animate-spin text-neutral-500" size={40} />
+        </div>
+      ) : reloading || loading ? (
+        <div className="flex items-center justify-center gap-3 py-20 bg-neutral-50/50 rounded-3xl border border-dashed border-neutral-100">
+          <Loader2 className="animate-spin text-neutral-500" size={32} />
+          <span className="text-sm font-medium text-neutral-400">
+            Atualizando...
+          </span>
         </div>
       ) : (
         <div className="bg-white rounded-[2rem] border border-neutral-100 shadow-sm overflow-hidden">
@@ -223,9 +246,10 @@ export function TypesTab() {
                   </Button>
                   <Button
                     type="submit"
-                    className="flex-1 h-12 bg-neutral-600 hover:bg-neutral-700 text-white rounded-2xl font-bold transition-all active:scale-95 shadow-lg shadow-neutral-100"
+                    disabled={submitting || !formData.name.trim()}
+                    className="flex-1 h-12 bg-neutral-600 hover:bg-neutral-700 text-white rounded-2xl font-bold transition-all active:scale-95 shadow-lg shadow-neutral-100 disabled:opacity-50"
                   >
-                    {loading ? "Salvando..." : "Salvar Tipo"}
+                    {submitting ? "Salvando..." : "Salvar Tipo"}
                   </Button>
                 </div>
               </form>

@@ -7,7 +7,7 @@ import { Orders } from "./pages/Orders";
 import { Catalog } from "./pages/Catalog";
 import { Items } from "./pages/Items";
 import { Categories } from "./pages/Categories";
-// import { Types } from "./pages/Types";
+import { Types } from "./pages/Types";
 import { Feed } from "./pages/Feed";
 import { Service } from "./pages/Service";
 import { Holidays } from "./pages/Holidays";
@@ -18,6 +18,7 @@ import DesignTestPage from "./pages/DesignTestPage";
 import { LlmTestSessionPage } from "./pages/LlmTestSessionPage";
 import { LlmPromptPriorityPage } from "./pages/LlmPromptPriorityPage";
 import { LlmKnowledgeDocsPage } from "./pages/LlmKnowledgeDocsPage";
+import { ObsidianKnowledgePage } from "./pages/ObsidianKnowledgePage";
 import BotFlowPage from "./pages/BotFlowPage";
 import { BotChatTest } from "./pages/BotChatTest";
 import { UIProvider } from "./contexts/UIContext";
@@ -53,6 +54,10 @@ export default function App() {
         />
         <Route
           path="/catalog"
+          element={<Navigate to="/catalog/products" replace />}
+        />
+        <Route
+          path="/catalog/products"
           element={
             <AdminRoute>
               <Catalog />
@@ -60,15 +65,7 @@ export default function App() {
           }
         />
         <Route
-          path="/products"
-          element={
-            <AdminRoute>
-              <Catalog />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="/items"
+          path="/catalog/items"
           element={
             <AdminRoute>
               <Items />
@@ -76,10 +73,18 @@ export default function App() {
           }
         />
         <Route
-          path="/categories"
+          path="/catalog/categories"
           element={
             <AdminRoute>
               <Categories />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/catalog/types"
+          element={
+            <AdminRoute>
+              <Types />
             </AdminRoute>
           }
         />
@@ -144,6 +149,14 @@ export default function App() {
           element={
             <AdminRoute>
               <LlmPromptPriorityPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/obsidian-knowledge"
+          element={
+            <AdminRoute>
+              <ObsidianKnowledgePage />
             </AdminRoute>
           }
         />

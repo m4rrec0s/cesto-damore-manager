@@ -115,6 +115,8 @@ export function ItemsTab() {
   const [items, setItems] = useState<Item[]>([]);
   const [additionals, setAdditionals] = useState<Additional[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloading, setReloading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
@@ -172,7 +174,7 @@ export function ItemsTab() {
     [api],
   );
 
-  const fetchAvailableLayouts = useCallback(async () => {
+  const fetchAvailableLayouts = async () => {
     try {
       setLoadingLayouts(true);
       const data = await api.getDynamicLayouts();
@@ -188,10 +190,11 @@ export function ItemsTab() {
     } finally {
       setLoadingLayouts(false);
     }
-  }, [api]);
+  };
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = async (isReload = false) => {
+    if (isReload) setReloading(true);
+    else setLoading(true);
     try {
       const [itemsResponse, additionalsResponse] = await Promise.all([
         api.getItems(),
@@ -207,13 +210,24 @@ export function ItemsTab() {
       setAdditionals([]);
     } finally {
       setLoading(false);
+      setReloading(false);
     }
-  }, [api]);
+  };
 
   useEffect(() => {
     fetchData();
     fetchAvailableLayouts();
-  }, [fetchData, fetchAvailableLayouts]);
+  }, []);
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        fetchData(true);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   const handleOpenModal = (item?: Item) => {
     if (item) {
@@ -299,7 +313,7 @@ export function ItemsTab() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setSubmitting(true);
     try {
       if (editingItem) {
         await api.updateItem(
@@ -316,22 +330,24 @@ export function ItemsTab() {
         toast.success("Item criado!");
       }
       setIsModalOpen(false);
-      fetchData();
+      await fetchData(true);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao salvar item"));
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Deseja excluir este item?")) return;
+    setReloading(true);
     try {
       await api.deleteItem(id);
       toast.success("Item excluído!");
-      fetchData();
+      await fetchData(true);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao excluir item"));
+      setReloading(false);
     }
   };
 
@@ -369,6 +385,11 @@ export function ItemsTab() {
       {loading && items.length === 0 ? (
         <div className="flex justify-center py-20">
           <Loader2 className="animate-spin text-neutral-500" size={40} />
+        </div>
+      ) : reloading ? (
+        <div className="flex items-center justify-center gap-3 py-20 bg-neutral-50/50 rounded-3xl border border-dashed border-neutral-100">
+          <Loader2 className="animate-spin text-neutral-500" size={32} />
+          <span className="text-sm font-medium text-neutral-400">Atualizando...</span>
         </div>
       ) : (
         <div className="bg-white rounded-[2rem] border border-neutral-100 shadow-sm overflow-hidden">
@@ -858,10 +879,10 @@ export function ItemsTab() {
                   </Button>
                   <Button
                     type="submit"
-                    disabled={loading}
+                    disabled={submitting}
                     className="flex-1 py-4 bg-neutral-600 text-white font-bold rounded-2xl shadow-xl shadow-neutral-200 hover:bg-neutral-700 transition-all active:scale-95 disabled:opacity-50"
                   >
-                    {loading ? "Salvando..." : "Salvar Alterações"}
+                    {submitting ? "Salvando..." : "Salvar Alterações"}
                   </Button>
                 </div>
               </form>
