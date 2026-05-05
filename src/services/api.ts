@@ -87,6 +87,49 @@ export interface PromptInjectionMetadata {
   dynamic_rule: string;
 }
 
+export interface KBKnowledgeDocument {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  phases: string[];
+  tags: string[];
+  pattern_type: string | null;
+  created_by: string;
+  approved_by: string | null;
+  approval_status: "draft" | "approved" | "archived";
+  version: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface KBVersion {
+  id: string;
+  document_id: string;
+  version: number;
+  content: string;
+  changed_by: string;
+  change_reason: string | null;
+  created_at: string;
+}
+
+export interface KBHybridSearchResult {
+  documentId: string;
+  title: string;
+  content: string;
+  category: string;
+  phases: string[];
+  score: number;
+  source: "vector" | "keyword";
+}
+
+export interface KBAnalytics {
+  total: number;
+  byCategory: Record<string, number>;
+  byStatus: Record<string, number>;
+}
+
+
 export interface LabSessionSummary {
   id: string;
   created_at: string;
@@ -611,14 +654,17 @@ class ApiService {
     (await this.get(`/categories/${id}`)).data;
 
   createCategory = async (payload: Partial<Category>) => {
+    this.clearCache("categories");
     return (await this.post("/categories", payload)).data;
   };
 
   updateCategory = async (id: string, payload: Partial<Category>) => {
+    this.clearCache("categories");
     return (await this.put(`/categories/${id}`, payload)).data;
   };
 
   deleteCategory = async (id: string) => {
+    this.clearCache("categories");
     return (await this.delete(`/categories/${id}`)).data;
   };
 
@@ -633,14 +679,17 @@ class ApiService {
   getType = async (id: string) => (await this.get(`/types/${id}`)).data;
 
   createType = async (payload: Partial<Type>) => {
+    this.clearCache("types");
     return (await this.post("/types", payload)).data;
   };
 
   updateType = async (id: string, payload: Partial<Type>) => {
+    this.clearCache("types");
     return (await this.put(`/types/${id}`, payload)).data;
   };
 
   deleteType = async (id: string) => {
+    this.clearCache("types");
     return (await this.delete(`/types/${id}`)).data;
   };
 
@@ -663,6 +712,7 @@ class ApiService {
     payload: Partial<Item>,
     imageFile?: File,
   ): Promise<Item> => {
+    this.clearCache("items");
     if (!imageFile) {
       return (await this.post("/items", payload)).data;
     }
@@ -693,6 +743,7 @@ class ApiService {
     payload: Partial<Item>,
     imageFile?: File,
   ): Promise<Item> => {
+    this.clearCache("items");
     if (!imageFile) {
       return (await this.put(`/items/${id}`, payload)).data;
     }
@@ -719,6 +770,7 @@ class ApiService {
   };
 
   deleteItem = async (id: string) => {
+    this.clearCache("items");
     return (await this.delete(`/items/${id}`)).data;
   };
 
@@ -739,6 +791,7 @@ class ApiService {
     },
     imageFile?: File,
   ): Promise<Additional> => {
+    this.clearCache("items");
     if (!imageFile) {
       return (await this.post("/additional", payload)).data;
     }
@@ -767,6 +820,7 @@ class ApiService {
     payload: Partial<Additional>,
     imageFile?: File,
   ): Promise<Additional> => {
+    this.clearCache("items");
     if (!imageFile) {
       return (await this.put(`/additional/${id}`, payload)).data;
     }
@@ -787,6 +841,7 @@ class ApiService {
   };
 
   deleteAdditional = async (id: string) => {
+    this.clearCache("items");
     return (await this.delete(`/additional/${id}`)).data;
   };
 
@@ -810,6 +865,7 @@ class ApiService {
     payload: Partial<ProductInput>,
     imageFile?: File,
   ): Promise<Product> => {
+    this.clearCache("products");
     if (!imageFile) {
       return (await this.post("/products", payload)).data;
     }
@@ -838,6 +894,7 @@ class ApiService {
     payload: Partial<ProductInput>,
     imageFile?: File,
   ): Promise<Product> => {
+    this.clearCache("products");
     if (!imageFile) {
       return (await this.put(`/products/${id}`, payload)).data;
     }
@@ -862,6 +919,7 @@ class ApiService {
   };
 
   deleteProduct = async (id: string) => {
+    this.clearCache("products");
     return (await this.delete(`/products/${id}`)).data;
   };
 
@@ -873,6 +931,7 @@ class ApiService {
     (await this.get(`/customizations/${id}`)).data;
 
   createCustomization = async (payload: Record<string, unknown>) => {
+    this.clearCache("customizations");
     return (await this.post("/customizations", payload)).data;
   };
 
@@ -880,10 +939,12 @@ class ApiService {
     id: string,
     payload: Record<string, unknown>,
   ) => {
+    this.clearCache("customizations");
     return (await this.put(`/customizations/${id}`, payload)).data;
   };
 
   deleteCustomization = async (id: string) => {
+    this.clearCache("customizations");
     return (await this.delete(`/customizations/${id}`)).data;
   };
 
@@ -1348,6 +1409,55 @@ class ApiService {
 
   triggerFollowUp = async () =>
     (await this.post("/admin/followup/trigger", {})).data;
+
+  // ===== Knowledge Base (Obsidian-style) =====
+  createKBDocument = async (payload: {
+    title: string;
+    content: string;
+    category: string;
+    phases: string[];
+    tags?: string[];
+    patternType?: string;
+  }) => (await this.post("/kb/documents", payload)).data;
+
+  getKBDocuments = async (params?: {
+    category?: string;
+    phase?: string;
+    approvalStatus?: string;
+    tags?: string;
+    search?: string;
+  }) => (await this.get("/kb/documents", { params })).data;
+
+  getKBDocument = async (id: string) => (await this.get(`/kb/documents/${id}`)).data;
+
+  updateKBDocument = async (id: string, payload: {
+    title?: string;
+    content?: string;
+    category?: string;
+    phases?: string[];
+    tags?: string[];
+    patternType?: string;
+  }) => (await this.put(`/kb/documents/${id}`, payload)).data;
+
+  deleteKBDocument = async (id: string) =>
+    (await this.delete(`/kb/documents/${id}`)).data;
+
+  approveKBDocument = async (id: string) =>
+    (await this.post(`/kb/documents/${id}/approve`, {})).data;
+
+  searchKB = async (payload: { query: string; topK?: number; phase?: string }) =>
+    (await this.post("/kb/search", payload)).data;
+
+  getKBDocumentsByPhase = async (phase: string) =>
+    (await this.get(`/kb/documents/by-phase/${phase}`)).data;
+
+  getKBDocumentVersions = async (id: string) =>
+    (await this.get(`/kb/documents/${id}/versions`)).data;
+
+  revertKBDocument = async (id: string, version: number) =>
+    (await this.post(`/kb/documents/${id}/revert/${version}`, {})).data;
+
+  getKBAnalytics = async () => (await this.get("/kb/analytics")).data;
 }
 
 export function useApi(): ApiService & {
