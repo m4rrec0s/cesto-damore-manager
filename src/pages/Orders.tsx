@@ -14,6 +14,12 @@ import {
   MessageCircle,
   Edit3,
   Image as ImageIcon,
+  User,
+  ZapIcon,
+  ArrowUpRight,
+  Trash,
+  Download,
+  Handbag,
 } from "lucide-react";
 import { useApi } from "../services/api";
 import type { Order, OrderStatus } from "../types";
@@ -30,6 +36,26 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Separator } from "@/components/ui/separator";
 
 type OrderSummary = Order & {
   items_count?: number;
@@ -45,7 +71,7 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
 };
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
-  PENDING: "bg-amber-100 text-amber-700 border-amber-200",
+  PENDING: "bg-amber-100 text-amber-600 border-amber-200",
   PAID: "bg-emerald-100 text-emerald-700 border-emerald-200",
   SHIPPED: "bg-blue-100 text-blue-700 border-blue-200",
   DELIVERED: "bg-neutral-100 text-neutral-700 border-neutral-200",
@@ -73,7 +99,9 @@ const getCustomizationSummary = (customization: {
       );
     case "IMAGES": {
       const photos = Array.isArray(data.photos) ? data.photos : [];
-      return photos.length > 0 ? `${photos.length} foto(s)` : "Sem fotos anexadas";
+      return photos.length > 0
+        ? `${photos.length} foto(s)`
+        : "Sem fotos anexadas";
     }
     case "DYNAMIC_LAYOUT":
       return (
@@ -99,20 +127,50 @@ const resolveClientPhone = (order?: Order | null) => {
   return onlyDigits(order.user?.phone || order.recipient_phone || "");
 };
 
+const formatPhone = (raw?: string | null) => {
+  const digits = onlyDigits(raw || "");
+  if (digits.length < 10) return raw || "";
+
+  const d = digits.length > 11 ? digits.slice(-11) : digits;
+
+  if (d.length === 11) {
+    const ddd = d.slice(0, 2);
+    const first = d.slice(2, 3);
+    const middle = d.slice(3, 7);
+    const last = d.slice(7, 11);
+    return `(${ddd}) ${first} ${middle}-${last}`;
+  }
+
+  const ddd = d.slice(0, 2);
+  const first = d.slice(2, 6);
+  const last = d.slice(6, 10);
+  return `(${ddd}) ${first}-${last}`;
+};
+
 export function Orders() {
   const api = useApi();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [orderDetails, setOrderDetails] = useState<Record<string, Order>>({});
-  const [detailsLoadingMap, setDetailsLoadingMap] = useState<Record<string, boolean>>({});
+  const [detailsLoadingMap, setDetailsLoadingMap] = useState<
+    Record<string, boolean>
+  >({});
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    orderId: string;
+    newStatus: OrderStatus;
+    currentStatus: OrderStatus;
+  } | null>(null);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
-      const params = filter === "all" ? { summary: true } : { status: filter, summary: true };
+      const params =
+        filter === "all"
+          ? { summary: true }
+          : { status: filter, summary: true };
       const response = await api.getOrders(params);
       setOrders(response.data.data || []);
     } catch (e) {
@@ -135,7 +193,9 @@ export function Orders() {
         const details = await api.getOrder(orderId);
         setOrderDetails((prev) => ({ ...prev, [orderId]: details }));
       } catch (e) {
-        toast.error(extractErrorMessage(e, "Erro ao carregar detalhes do pedido"));
+        toast.error(
+          extractErrorMessage(e, "Erro ao carregar detalhes do pedido"),
+        );
       } finally {
         setDetailsLoadingMap((prev) => ({ ...prev, [orderId]: false }));
       }
@@ -174,12 +234,7 @@ export function Orders() {
     <div className="space-y-8 p-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-neutral-950">
-            Gerenciamento de Pedidos
-          </h2>
-          <p className="text-neutral-600/70 font-medium">
-            Lista rápida com detalhes carregados apenas quando necessário.
-          </p>
+          <h2 className="text-3xl font-bold text-neutral-950">Meus Pedidos</h2>
         </div>
         <div className="flex items-center gap-3">
           <Button
@@ -249,10 +304,10 @@ export function Orders() {
                   className="p-4 cursor-pointer hover:bg-neutral-50/50 transition-colors"
                 >
                   <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex gap-6 flex-1 min-w-0">
                       <div
                         className={clsx(
-                          "w-10 h-10 rounded-xl flex items-center justify-center shadow-sm shrink-0",
+                          "h-fit p-4 rounded-xl",
                           activeOrder.status === "PAID"
                             ? "bg-emerald-50 text-emerald-600"
                             : activeOrder.status === "PENDING"
@@ -263,30 +318,36 @@ export function Orders() {
                         )}
                       >
                         {activeOrder.status === "DELIVERED" ? (
-                          <CheckCircle2 size={20} />
+                          <CheckCircle2 size={25} />
                         ) : activeOrder.status === "CANCELED" ? (
-                          <XCircle size={20} />
+                          <XCircle size={25} />
                         ) : (
-                          <Package size={20} />
+                          <Package size={25} />
                         )}
                       </div>
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-tight">
-                            #{shortId(activeOrder.id)}
+                      <div className="flex flex-col gap-2 min-w-0">
+                        <div className="flex items-start gap-2 mb-0.5">
+                          <span className="text-xs font-bold text-neutral-400 tracking-tight">
+                            Pedido #{shortId(activeOrder.id.toUpperCase())}
                           </span>
-                          <span className="text-neutral-200 text-xs">•</span>
-                          <span className="text-[10px] font-medium text-neutral-500">
-                            {formatDate(activeOrder.created_at)}
-                          </span>
+                          {activeOrder.delivery_date && (
+                            <>
+                              <span className="text-neutral-400 text-xs">
+                                •
+                              </span>
+                              <span className="text-xs font-medium text-emerald-600 flex items-center gap-1">
+                                {activeOrder.status === "DELIVERED" ||
+                                activeOrder.status === "SHIPPED"
+                                  ? "OK"
+                                  : `Entrega: ${formatDate(activeOrder.delivery_date)}`}
+                              </span>
+                            </>
+                          )}
                         </div>
 
-                        <h4 className="font-bold text-neutral-950 text-base mb-1 truncate">
+                        <h4 className="font-semibold text-neutral-950 text-xl mb-1 truncate flex items-center gap-5">
                           {activeOrder.user?.name || "Cliente Convidado"}
-                        </h4>
-
-                        <div className="flex items-center gap-2 flex-wrap">
                           <span
                             className={clsx(
                               "inline-block px-2 py-0.5 rounded-full text-[9px] font-bold border",
@@ -295,10 +356,20 @@ export function Orders() {
                           >
                             {STATUS_LABELS[activeOrder.status]}
                           </span>
+                        </h4>
 
-                          <div className="flex items-center gap-1">
-                            <Package size={12} className="text-neutral-400" />
-                            <span className="text-[10px] font-medium text-neutral-600">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs flex gap-1 items-center font-medium text-neutral-500">
+                              <Calendar
+                                size={12}
+                                className="text-neutral-400"
+                              />
+                              {formatDate(activeOrder.created_at)}
+                            </span>
+                            <span className="text-neutral-400 text-xs">•</span>
+                            <span className="text-xs font-medium text-neutral-600 flex items-center gap-1">
+                              <Package size={12} className="text-neutral-400" />
                               {itemCount} {itemCount === 1 ? "item" : "itens"}
                             </span>
                           </div>
@@ -309,19 +380,23 @@ export function Orders() {
                     <div className="flex items-center gap-3 shrink-0">
                       <div className="text-right">
                         <p className="text-[10px] font-medium text-neutral-400 uppercase tracking-wider mb-0.5">
-                          Total
+                          Total do pedido
                         </p>
-                        <p className="text-xl font-black text-neutral-950">
-                          {formatCurrency(activeOrder.grand_total || activeOrder.total)}
+                        <p className="text-2xl font-semibold text-neutral-950">
+                          {formatCurrency(
+                            activeOrder.grand_total || activeOrder.total,
+                          )}
                         </p>
                       </div>
-                      <ChevronDown
-                        size={20}
-                        className={clsx(
-                          "text-neutral-300 transition-transform duration-300",
-                          expandedId === order.id && "rotate-180",
-                        )}
-                      />
+                      <div className="p-1 rounded-sm border">
+                        <ChevronDown
+                          size={16}
+                          className={clsx(
+                            "text-neutral-500 transition-transform duration-300",
+                            expandedId === order.id && "rotate-180",
+                          )}
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -335,6 +410,10 @@ export function Orders() {
                       transition={{ duration: 0.25 }}
                       className="border-t border-neutral-50"
                     >
+                      <Separator
+                        orientation="horizontal"
+                        className="w-full mx-6"
+                      />
                       {detailsLoading && !details ? (
                         <div className="p-8 flex items-center justify-center gap-2 text-sm text-neutral-500">
                           <Loader2 className="h-4 w-4 animate-spin" />
@@ -348,48 +427,148 @@ export function Orders() {
                         <div className="p-5 grid grid-cols-1 lg:grid-cols-3 gap-6">
                           <div className="space-y-5">
                             <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 space-y-3">
-                              <h5 className="text-xs font-bold text-neutral-950 flex items-center gap-2">
-                                <MessageSquare size={12} /> Dados do Cliente
+                              <h5 className="text-sm font-bold text-neutral-950 flex items-center gap-2">
+                                <User size={16} /> Cliente
                               </h5>
-                              <div className="space-y-2 text-sm text-neutral-700">
-                                <p className="font-semibold text-neutral-900">
-                                  {details.user?.name || "Cliente convidado"}
-                                </p>
-                                {details.user?.email && <p>{details.user.email}</p>}
-                                {details.user?.phone && (
-                                  <a
-                                    href={`https://wa.me/55${onlyDigits(details.user.phone)}`}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-2 text-blue-600 hover:underline"
-                                  >
-                                    <Phone size={14} /> {details.user.phone}
-                                  </a>
-                                )}
+                              <div className="flex items-center gap-4">
+                                <Avatar>
+                                  <AvatarImage
+                                    src={details.user?.image_url ?? ""}
+                                  />
+                                  <AvatarFallback className="bg-blue-200">
+                                    {details.user?.name
+                                      ?.split(" ")
+                                      .slice(0, 2)
+                                      .map((n) => n[0])
+                                      .join("")
+                                      .toUpperCase() || "CL"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="text-neutral-700 text-sm">
+                                  <p className="font-medium text-neutral-900">
+                                    {details.user?.name || "Cliente convidado"}
+                                  </p>
+                                  {details.user?.email && (
+                                    <p className="font-light">
+                                      {details.user.email}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
+                              {details.user?.phone && (
+                                <a
+                                  href={`https://wa.me/55${onlyDigits(details.user.phone)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center text-blue-600 hover:underline"
+                                >
+                                  <Phone size={14} />{" "}
+                                  <span className="ml-2">
+                                    {formatPhone(details.user.phone)}
+                                  </span>
+                                  <ArrowUpRight size={12} />
+                                </a>
+                              )}
                             </div>
 
                             <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 space-y-3">
-                              <h5 className="text-xs font-bold text-neutral-950 flex items-center gap-2">
-                                <MapPin size={12} /> Entrega
+                              <h5 className="text-sm font-bold text-neutral-950 flex items-center gap-2">
+                                <MapPin size={16} /> Entrega
                               </h5>
                               <p className="text-xs text-neutral-700 leading-relaxed">
-                                {details.delivery_address || "Retirada na Loja"}
+                                {details.delivery_address ? (
+                                  <a
+                                    href={`https://maps.google.com/?q=${encodeURIComponent(details.delivery_address)}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title="Ver Endereço"
+                                    className="hover:underline"
+                                  >
+                                    {details.delivery_address}
+                                  </a>
+                                ) : (
+                                  <span>Retirada na Loja</span>
+                                )}
                               </p>
                               <p className="text-xs text-neutral-500 inline-flex items-center gap-1">
                                 <Calendar size={12} />
-                                {details.created_at ? formatDate(details.created_at) : "N/A"}
+                                {details.created_at
+                                  ? formatDate(details.created_at)
+                                  : "N/A"}
                               </p>
                             </div>
 
                             <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 space-y-3">
-                              <h5 className="text-xs font-bold text-neutral-950">Ações</h5>
+                              <h5 className="text-sm inline-flex items-center gap-2 font-bold text-neutral-950">
+                                <ZapIcon size={16} />
+                                Ações
+                              </h5>
                               <div className="flex flex-wrap gap-2">
-                                {STATUS_FLOW.map((status) => (
+                                <div className="flex justify-between items-center gap-4 w-full">
+                                  <h6 className="text-nowrap text-sm flex items-center gap-2 font-medium">
+                                    Status atual{" "}
+                                    <span
+                                      className={clsx(
+                                        "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border",
+                                        STATUS_COLORS[activeOrder.status],
+                                      )}
+                                    >
+                                      {STATUS_LABELS[activeOrder.status] ===
+                                      "Pago" ? (
+                                        <CheckCircle2
+                                          size={12}
+                                          className="text-emerald-600"
+                                        />
+                                      ) : null}
+                                      {STATUS_LABELS[activeOrder.status]}
+                                    </span>
+                                  </h6>
+
+                                  <Select
+                                    value={details.status}
+                                    onValueChange={(newStatus) => {
+                                      if (newStatus !== details.status) {
+                                        setPendingStatusChange({
+                                          orderId: details.id,
+                                          newStatus: newStatus as OrderStatus,
+                                          currentStatus: details.status,
+                                        });
+                                      }
+                                    }}
+                                    disabled={updatingId === details.id}
+                                  >
+                                    <SelectTrigger className="">
+                                      <SelectValue
+                                        placeholder="Alterar Status"
+                                        className="text-xs"
+                                      />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectGroup>
+                                        {STATUS_FLOW.map((status) => (
+                                          <SelectItem
+                                            key={status}
+                                            value={status}
+                                            disabled={details.status === status}
+                                          >
+                                            {STATUS_LABELS[status]}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectGroup>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                {/* {STATUS_FLOW.map((status) => (
                                   <Button
                                     key={status}
-                                    disabled={updatingId === details.id || details.status === status}
-                                    onClick={() => handleUpdateStatus(details.id, status)}
+                                    disabled={
+                                      updatingId === details.id ||
+                                      details.status === status
+                                    }
+                                    onClick={() =>
+                                      handleUpdateStatus(details.id, status)
+                                    }
                                     className={clsx(
                                       "px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-sm",
                                       details.status === status
@@ -397,28 +576,41 @@ export function Orders() {
                                         : "bg-white border border-neutral-100 text-neutral-900 hover:bg-neutral-50",
                                     )}
                                   >
-                                    {updatingId === details.id && details.status !== status
+                                    {updatingId === details.id &&
+                                    details.status !== status
                                       ? "..."
                                       : STATUS_LABELS[status]}
                                   </Button>
-                                ))}
+                                ))} */}
                                 {details.status !== "CANCELED" && (
                                   <Button
-                                    onClick={() => handleUpdateStatus(details.id, "CANCELED")}
-                                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-white border border-neutral-100 text-neutral-400 hover:bg-neutral-50"
+                                    onClick={() =>
+                                      handleUpdateStatus(details.id, "CANCELED")
+                                    }
+                                    className="w-full text-red-500 bg-red-50 hover:bg-red-500 border border-red-200 hover:text-white"
                                   >
-                                    Cancelar
+                                    <XCircle size={14} />
+                                    Cancelar pedido
                                   </Button>
                                 )}
                                 {details.status === "CANCELED" && (
                                   <Button
+                                    variant={"destructive"}
                                     onClick={async (e) => {
                                       e.stopPropagation();
-                                      if (confirm("Tem certeza que deseja excluir permanentemente este pedido?")) {
+                                      if (
+                                        confirm(
+                                          "Tem certeza que deseja excluir permanentemente este pedido?",
+                                        )
+                                      ) {
                                         try {
                                           await api.deleteOrder(details.id);
-                                          toast.success("Pedido excluído com sucesso");
-                                          setExpandedId((prev) => (prev === details.id ? null : prev));
+                                          toast.success(
+                                            "Pedido excluído com sucesso",
+                                          );
+                                          setExpandedId((prev) =>
+                                            prev === details.id ? null : prev,
+                                          );
                                           setOrderDetails((prev) => {
                                             const next = { ...prev };
                                             delete next[details.id];
@@ -426,12 +618,18 @@ export function Orders() {
                                           });
                                           await fetchOrders();
                                         } catch (e) {
-                                          toast.error(extractErrorMessage(e, "Erro ao excluir pedido"));
+                                          toast.error(
+                                            extractErrorMessage(
+                                              e,
+                                              "Erro ao excluir pedido",
+                                            ),
+                                          );
                                         }
                                       }
                                     }}
-                                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold bg-red-50 text-red-600 border border-red-100 hover:bg-red-100"
+                                    className="w-full bg-red-300"
                                   >
+                                    <Trash size={14} />
                                     Excluir
                                   </Button>
                                 )}
@@ -442,9 +640,12 @@ export function Orders() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     const phone = resolveClientPhone(details);
-                                    window.open(`/service?phone=${encodeURIComponent(phone)}`, "_blank");
+                                    window.open(
+                                      `/service?phone=${encodeURIComponent(phone)}`,
+                                      "_blank",
+                                    );
                                   }}
-                                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-bold bg-blue-50 text-blue-600 border border-blue-100 hover:bg-blue-100"
+                                  className="w-full text-blue-500 bg-blue-50 border border-blue-200 hover:bg-blue-600 hover:text-white"
                                 >
                                   <MessageCircle size={14} />
                                   Abrir Sessão do Cliente
@@ -452,72 +653,87 @@ export function Orders() {
                               )}
 
                               {details.google_drive_folder_url && (
-                                <a
-                                  href={details.google_drive_folder_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:underline"
+                                <Button
+                                  variant={"outline"}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(
+                                      details.google_drive_folder_url!,
+                                      "_blank",
+                                    );
+                                  }}
+                                  className="w-full"
                                 >
+                                  <Download size={14} />
                                   Arquivos no Drive
-                                </a>
+                                </Button>
                               )}
                             </div>
                           </div>
 
-                          <div className="lg:col-span-2 space-y-4">
-                            <h5 className="text-xs font-bold text-neutral-950">Itens e Revisão de Customização</h5>
+                          <div className="lg:col-span-2 space-y-4 border border-neutral-200 rounded-2xl p-4">
+                            <h5 className="text-sm font-bold text-neutral-950 flex items-center gap-2">
+                              <Handbag size={16} className="inline-block" />
+                              <span>Itens do Pedido</span>
+                            </h5>
+                            <Separator className="my-0 w-full" />
                             {details.items?.map((item: any, idx: number) => (
                               <div
                                 key={idx}
-                                className="rounded-2xl border border-neutral-200 bg-white overflow-hidden"
+                                className="rounded-2xl overflow-hidden"
                               >
-                                <div className="p-4 border-b border-neutral-100 bg-gradient-to-r from-neutral-50 to-white">
+                                <div className="p-4 border-b border-neutral-100 bg-linear-to-r from-neutral-50 to-white">
                                   <div className="flex gap-3">
                                     {item.product?.image_url && (
                                       <div className="w-16 h-16 rounded-lg overflow-hidden bg-white border border-neutral-200 shrink-0">
                                         <img
                                           src={item.product.image_url}
                                           alt={item.product.name}
-                                          className="w-full h-full object-contain p-1"
+                                          className="w-full h-full object-cover p-1"
                                         />
                                       </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                      <h6 className="font-bold text-neutral-950 text-sm">
+                                      <h6 className="font-semibold text-neutral-950 text-lg">
                                         {item.product?.name || "Produto"}
                                       </h6>
-                                      <p className="text-[11px] text-neutral-600 font-medium">
-                                        Quantidade: {item.quantity} | Unitário: {formatCurrency(item.price)}
+                                      <p className="text-[11px] text-neutral-600">
+                                        Quantidade: {item.quantity} | Unitário:{" "}
+                                        {formatCurrency(item.price)}
                                       </p>
                                     </div>
-                                    <span className="text-sm font-black text-neutral-950 shrink-0">
-                                      {formatCurrency(item.price * item.quantity)}
+                                    <span className="text-lg font-semibold text-neutral-950 shrink-0">
+                                      {formatCurrency(
+                                        item.price * item.quantity,
+                                      )}
                                     </span>
                                   </div>
                                 </div>
 
-                                <div className="p-4 space-y-3">
-                                  {!item.customizations || item.customizations.length === 0 ? (
-                                    <div className="rounded-xl border border-dashed border-neutral-200 p-4 text-xs text-neutral-500">
+                                <div className="p-4 space-y-3 border border-neutral-100">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <h5 className="text-sm font-semibold text-neutral-950 flex items-center gap-2">
+                                      <Edit3 size={12} />
+                                      <span>Personalizações</span>
+                                    </h5>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
+                                      ✓ Revisada
+                                    </span>
+                                  </div>
+                                  {!item.customizations ||
+                                  item.customizations.length === 0 ? (
+                                    <div className="rounded-xl p-4 text-xs text-neutral-500">
                                       Sem personalizações neste item.
                                     </div>
                                   ) : (
-                                    item.customizations.map((cust: any) => (
-                                      <div key={cust.id} className="rounded-xl border border-neutral-100 bg-neutral-50/40 p-3 space-y-2">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <p className="text-xs font-semibold text-neutral-900 inline-flex items-center gap-1.5">
-                                            <Edit3 size={12} />
-                                            {cust.title || "Personalização"}
-                                          </p>
-                                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                            Revisada
-                                          </span>
-                                        </div>
-                                        <p className="text-xs text-neutral-600 inline-flex items-center gap-1.5">
-                                          <ImageIcon size={12} />
-                                          {getCustomizationSummary(cust)}
-                                        </p>
-                                        <CustomizationDisplay customization={cust} />
+                                    item.customizations.map((cust: any, custIdx: number) => (
+                                      <div
+                                        key={cust.id || `cust-${custIdx}`}
+                                        className="rounded-xl py-3 border-t"
+                                      >
+                                        <CustomizationDisplay
+                                          customization={cust}
+                                        />
                                       </div>
                                     ))
                                   )}
@@ -535,6 +751,43 @@ export function Orders() {
           })}
         </div>
       )}
+
+      <AlertDialog
+        open={!!pendingStatusChange}
+        onOpenChange={(open) => {
+          if (!open) setPendingStatusChange(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar alteração de status</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingStatusChange && (
+                <span className="font-medium text-foreground">
+                  {STATUS_LABELS[pendingStatusChange.currentStatus]} →{" "}
+                  {STATUS_LABELS[pendingStatusChange.newStatus]}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingStatusChange) {
+                  handleUpdateStatus(
+                    pendingStatusChange.orderId,
+                    pendingStatusChange.newStatus,
+                  );
+                  setPendingStatusChange(null);
+                }
+              }}
+            >
+              Prosseguir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
