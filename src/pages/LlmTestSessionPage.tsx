@@ -44,6 +44,7 @@ interface ChatMessage {
   content: string;
   createdAt: string;
   traceLine?: string | null;
+  thought?: string | null;
   usedTools?: string[];
   linkPreviews?: LinkPreviewPayload[];
   agentName?: string | null;
@@ -136,7 +137,7 @@ export function LlmTestSessionPage() {
   );
 
   const activeMessages = useMemo(
-    () => messagesBySession[activeSessionId] || [],
+    () => (messagesBySession[activeSessionId] || []).filter((msg) => msg.role !== "tool"),
     [messagesBySession, activeSessionId],
   );
 
@@ -478,8 +479,10 @@ export function LlmTestSessionPage() {
           const eventData = JSON.parse(line) as LabTraceEvent;
           if (eventData.type === "state") {
             setThinkingLine(eventData.label);
+            const isThought = eventData.label.toLowerCase().startsWith("pensamento:");
             patchAssistantMessage(activeSessionId, assistantMessageId, {
-              traceLine: eventData.label,
+              traceLine: isThought ? "Planejando próxima ação" : eventData.label,
+              ...(isThought ? { thought: eventData.label } : {}),
             });
           }
 
@@ -875,6 +878,12 @@ export function LlmTestSessionPage() {
                   {message.traceLine ? (
                     <p className="text-xs text-slate-500/80 italic animate-pulse mb-2">
                       {message.traceLine}
+                    </p>
+                  ) : null}
+
+                  {message.thought ? (
+                    <p className="text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-md px-2 py-1 mb-2">
+                      {message.thought}
                     </p>
                   ) : null}
 
