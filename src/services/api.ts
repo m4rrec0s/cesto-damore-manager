@@ -339,6 +339,43 @@ export interface ItemsResponse {
   pagination: PaginationInfo;
 }
 
+export type InventoryStatus = "in_stock" | "low_stock" | "out_of_stock";
+export type InventoryEntityType = "product" | "item";
+
+export interface InventoryEntry {
+  id: string;
+  entityType: InventoryEntityType;
+  name: string;
+  category: string;
+  physical: number;
+  reserved: number;
+  available: number;
+  status: InventoryStatus;
+}
+
+export interface InventoryResponse {
+  data: InventoryEntry[];
+  pagination: PaginationInfo;
+}
+
+export interface InventoryMovement {
+  id: string;
+  product_id: string | null;
+  item_id: string | null;
+  type: string;
+  quantity: number;
+  reason: string;
+  created_at: string;
+  product?: { id: string; name: string } | null;
+  item?: { id: string; name: string } | null;
+  admin?: { id: string; name: string; email: string } | null;
+}
+
+export interface InventoryMovementsResponse {
+  data: InventoryMovement[];
+  pagination: PaginationInfo;
+}
+
 export interface OrdersResponse {
   data: {
     data: Order[];
@@ -1214,6 +1251,31 @@ class ApiService {
   getTrendSummary = async () => {
     return (await this.get("/admin/trends/summary")).data;
   };
+
+  // ===== Inventory Manager =====
+  getInventory = async (params?: {
+    page?: number;
+    per_page?: number;
+    search?: string;
+    status?: InventoryStatus;
+    entity_type?: InventoryEntityType | "all";
+  }): Promise<InventoryResponse> => (await this.get("/admin/inventory", { params })).data;
+
+  adjustInventory = async (payload: {
+    entity_type: InventoryEntityType;
+    entity_id: string;
+    operation: "increment" | "decrement" | "set" | "zero";
+    quantity?: number;
+    reason: string;
+  }) => (await this.post("/admin/inventory/adjust", payload)).data;
+
+  getInventoryMovements = async (params?: {
+    page?: number;
+    per_page?: number;
+    product_id?: string;
+    item_id?: string;
+  }): Promise<InventoryMovementsResponse> =>
+    (await this.get("/admin/inventory/movements", { params })).data;
 
   // ===== AIAgent Sessions =====
   getSessions = async () => (await this.get("/admin/ai/agent/sessions")).data;

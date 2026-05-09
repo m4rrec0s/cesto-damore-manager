@@ -22,6 +22,7 @@ import { ObsidianKnowledgePage } from "./pages/ObsidianKnowledgePage";
 import BotFlowPage from "./pages/BotFlowPage";
 import { BotChatTest } from "./pages/BotChatTest";
 import { UIProvider } from "./contexts/UIContext";
+import { StockManager } from "./pages/StockManager";
 
 export default function App() {
   return (
@@ -181,6 +182,14 @@ export default function App() {
           element={
             <AdminRoute>
               <FollowUp />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/stock-manager"
+          element={
+            <AdminRoute>
+              <StockManager />
             </AdminRoute>
           }
         />

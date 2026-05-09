@@ -26,6 +26,7 @@ import {
   Palette,
   BrainCircuit,
   Lightbulb,
+  Warehouse,
 } from "lucide-react";
 
 type Item = {
@@ -84,6 +85,7 @@ const groups: Group[] = [
     items: [
       { name: "Feriados", href: "/holidays", icon: Calendar },
       { name: "Follow-up", href: "/follow-up", icon: RefreshCw },
+      { name: "Estoque", href: "/stock-manager", icon: Warehouse },
       { name: "Design Editor", href: "/layouts", icon: Palette },
     ],
   },
