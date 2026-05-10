@@ -50,6 +50,7 @@ export function ProductsTab() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [types, setTypes] = useState<Type[]>([]);
   const [items, setItems] = useState<Item[]>([]);
+  const [modalItems, setModalItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [reloading, setReloading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -69,6 +70,7 @@ export function ProductsTab() {
     type_id: "",
     categories: [] as string[],
     production_time: 1,
+    stock_mode: "PRODUCT_ONLY" as "PRODUCT_ONLY" | "COMPONENTS_ONLY",
     is_active: true,
   });
 
@@ -115,6 +117,14 @@ export function ProductsTab() {
       errors.production_time = "Informe o tempo de produção em horas.";
     }
 
+    if (
+      formData.stock_mode === "COMPONENTS_ONLY" &&
+      components.filter((c) => c.item_id).length === 0
+    ) {
+      errors.stock_mode =
+        "Produtos em COMPONENTS_ONLY precisam ter ao menos 1 componente.";
+    }
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -126,11 +136,13 @@ export function ProductsTab() {
       const [categoriesData, typesData, itemsResponse] = await Promise.all([
         api.getCategories(),
         api.getTypes(),
-        api.getItems(),
+        api.getItems({ page: 1, perPage: 500 }),
       ]);
       setCategories(categoriesData);
       setTypes(typesData);
-      setItems(itemsResponse.items || []);
+      const baseItems = itemsResponse.items || [];
+      setItems(baseItems);
+      setModalItems(baseItems);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao carregar dados iniciais"));
     } finally {
@@ -185,31 +197,52 @@ export function ProductsTab() {
     setSubmitError("");
 
     if (product) {
+      if (!categories.length || !types.length || !items.length) {
+        await fetchInitialData(true);
+      }
       setLoadingProduct(true);
       setIsModalOpen(true);
       try {
         const fullProduct = await api.getProduct(product.id);
         setEditingProduct(fullProduct);
+        const mergedItemsMap = new Map<string, Item>();
+        items.forEach((item) => mergedItemsMap.set(item.id, item));
+        (fullProduct.components || []).forEach((comp: any) => {
+          const linked = comp.item;
+          if (linked?.id) mergedItemsMap.set(linked.id, linked);
+        });
+        (fullProduct.additionals || []).forEach((add: any) => {
+          const linked = add.additional;
+          if (linked?.id) mergedItemsMap.set(linked.id, linked);
+        });
+        setModalItems(Array.from(mergedItemsMap.values()));
+
         setFormData({
           name: fullProduct.name,
           description: fullProduct.description || "",
           price: fullProduct.price,
           discount: fullProduct.discount || 0,
           type_id: fullProduct.type_id || fullProduct.type?.id || "",
-          categories: fullProduct.categories?.map((c: Category) => c.id) || [],
+          categories:
+            fullProduct.categories?.map((c: any) => c.id || c.category?.id) ||
+            [],
           production_time: fullProduct.production_time || 1,
+          stock_mode:
+            fullProduct.stock_mode === "COMPONENTS_ONLY"
+              ? "COMPONENTS_ONLY"
+              : "PRODUCT_ONLY",
           is_active: fullProduct.is_active ?? true,
         });
         setImagePreview(fullProduct.image_url || "");
         setComponents(
           fullProduct.components?.map((c: any) => ({
-            item_id: c.item_id,
+            item_id: c.item_id || c.item?.id,
             quantity: c.quantity || 1,
           })) || [],
         );
         setAdditionals(
           fullProduct.additionals?.map((a: any) => ({
-            item_id: a.additional_id,
+            item_id: a.additional_id || a.item_id || a.additional?.id,
             custom_price: a.custom_price || a.additional?.base_price || 0,
           })) || [],
         );
@@ -231,10 +264,12 @@ export function ProductsTab() {
         type_id: types[0]?.id || "",
         categories: [],
         production_time: 1,
+        stock_mode: "PRODUCT_ONLY",
         is_active: true,
       });
       setComponents([]);
       setAdditionals([]);
+      setModalItems(items);
       setImagePreview("");
       setImageFile(null);
       setIsModalOpen(true);
@@ -259,6 +294,7 @@ export function ProductsTab() {
         discount: formData.discount,
         type_id: formData.type_id,
         production_time: formData.production_time,
+        stock_mode: formData.stock_mode,
         is_active: formData.is_active,
         categories: formData.categories as any,
         components: components.filter((c) => c.item_id),
@@ -367,6 +403,9 @@ export function ProductsTab() {
                   Preço
                 </TableHead>
                 <TableHead className="text-neutral-900/60 font-bold uppercase text-[10px] tracking-wider">
+                  Estoque
+                </TableHead>
+                <TableHead className="text-neutral-900/60 font-bold uppercase text-[10px] tracking-wider">
                   Categorias
                 </TableHead>
                 <TableHead className="text-right text-neutral-900/60 font-bold uppercase text-[10px] tracking-wider pr-6">
@@ -432,15 +471,29 @@ export function ProductsTab() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {product.categories?.map((cat) => (
-                        <span
-                          key={cat.id}
-                          className="px-2 py-0.5 bg-neutral-50 text-neutral-500 border border-neutral-100 rounded-lg text-[9px] font-bold uppercase"
-                        >
-                          {cat.name}
-                        </span>
-                      ))}
+                    <span
+                      className={clsx(
+                        "inline-flex rounded-full px-2 py-1 text-[10px] font-bold uppercase border",
+                        product.stock_mode === "COMPONENTS_ONLY"
+                          ? "bg-blue-50 text-blue-700 border-blue-200"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200",
+                      )}
+                    >
+                      {product.stock_mode || "PRODUCT_ONLY"}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="max-w-65 overflow-x-auto whitespace-nowrap pb-1 no-scrollbar">
+                      <div className="inline-flex gap-1">
+                        {product.categories?.map((cat) => (
+                          <span
+                            key={cat.id}
+                            className="px-2 py-0.5 bg-neutral-50 text-neutral-500 border border-neutral-100 rounded-lg text-[9px] font-bold uppercase"
+                          >
+                            {cat.name}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell className="text-right pr-6">
@@ -853,6 +906,48 @@ export function ProductsTab() {
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-neutral-700 mb-1">
+                                Modo de Estoque{" "}
+                                <span className="text-red-600">*</span>
+                              </label>
+                              <select
+                                title="Selecione modo de estoque"
+                                value={formData.stock_mode}
+                                onChange={(e) => {
+                                  setFormData({
+                                    ...formData,
+                                    stock_mode: e.target.value as
+                                      | "PRODUCT_ONLY"
+                                      | "COMPONENTS_ONLY",
+                                  });
+                                  if (formErrors.stock_mode) {
+                                    setFormErrors((prev) => ({
+                                      ...prev,
+                                      stock_mode: "",
+                                    }));
+                                  }
+                                }}
+                                className={clsx(
+                                  "w-full px-3 py-2 border rounded-md text-sm bg-white",
+                                  formErrors.stock_mode
+                                    ? "border-red-500"
+                                    : "border-neutral-300",
+                                )}
+                              >
+                                <option value="PRODUCT_ONLY">
+                                  Produto inteiro (PRODUCT_ONLY)
+                                </option>
+                                <option value="COMPONENTS_ONLY">
+                                  Por componentes (COMPONENTS_ONLY)
+                                </option>
+                              </select>
+                              {formErrors.stock_mode && (
+                                <p className="mt-1 text-xs text-red-600">
+                                  {formErrors.stock_mode}
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-neutral-700 mb-1">
                                 Tempo de Produção{" "}
                                 <span className="text-red-600">*</span>
                               </label>
@@ -979,7 +1074,7 @@ export function ProductsTab() {
                               </div>
                             ) : (
                               components.map((comp, idx) => {
-                                const currentItem = items.find(
+                                const currentItem = modalItems.find(
                                   (i) => i.id === comp.item_id,
                                 );
                                 return (
@@ -1003,7 +1098,7 @@ export function ProductsTab() {
                                             ? currentItem?.name || "Item"
                                             : "Selecionar Item..."}
                                         </option>
-                                        {items.map((item) => (
+                                        {modalItems.map((item) => (
                                           <option key={item.id} value={item.id}>
                                             {item.name}
                                           </option>
@@ -1075,7 +1170,7 @@ export function ProductsTab() {
                               </div>
                             ) : (
                               additionals.map((add, idx) => {
-                                const currentItem = items.find(
+                                const currentItem = modalItems.find(
                                   (i) => i.id === add.item_id,
                                 );
                                 return (
@@ -1099,7 +1194,7 @@ export function ProductsTab() {
                                             ? currentItem?.name || "Adicional"
                                             : "Selecionar Item..."}
                                         </option>
-                                        {items.map((item) => (
+                                        {modalItems.map((item) => (
                                           <option key={item.id} value={item.id}>
                                             {item.name}
                                           </option>

@@ -234,6 +234,7 @@ export interface Product {
   type_id: string;
   production_time?: number;
   is_active?: boolean;
+  stock_mode?: "PRODUCT_ONLY" | "COMPONENTS_ONLY";
   components?: ProductComponent[];
   related_products?: Omit<Product, "components" | "related_products">[];
   created_at: string;
@@ -250,6 +251,7 @@ export interface ProductInput {
   type_id: string;
   production_time?: number;
   is_active?: boolean;
+  stock_mode?: "PRODUCT_ONLY" | "COMPONENTS_ONLY";
   components?: { item_id: string; quantity: number }[];
   additionals?: { item_id: string; custom_price?: number }[];
 }
@@ -340,13 +342,12 @@ export interface ItemsResponse {
 }
 
 export type InventoryStatus = "in_stock" | "low_stock" | "out_of_stock";
-export type InventoryEntityType = "product" | "item";
-
 export interface InventoryEntry {
+  entity_type?: "item" | "product";
   id: string;
-  entityType: InventoryEntityType;
   name: string;
   category: string;
+  image_url?: string | null;
   physical: number;
   reserved: number;
   available: number;
@@ -1258,11 +1259,10 @@ class ApiService {
     per_page?: number;
     search?: string;
     status?: InventoryStatus;
-    entity_type?: InventoryEntityType | "all";
   }): Promise<InventoryResponse> => (await this.get("/admin/inventory", { params })).data;
 
   adjustInventory = async (payload: {
-    entity_type: InventoryEntityType;
+    entity_type?: "item" | "product";
     entity_id: string;
     operation: "increment" | "decrement" | "set" | "zero";
     quantity?: number;
@@ -1272,7 +1272,6 @@ class ApiService {
   getInventoryMovements = async (params?: {
     page?: number;
     per_page?: number;
-    product_id?: string;
     item_id?: string;
   }): Promise<InventoryMovementsResponse> =>
     (await this.get("/admin/inventory/movements", { params })).data;

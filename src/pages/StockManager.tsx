@@ -29,8 +29,6 @@ export function StockManager() {
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<InventoryStatus | "">("");
-  const [entityType, setEntityType] = useState<"all" | "product" | "item">("all");
-
   const [entries, setEntries] = useState<InventoryEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -45,7 +43,6 @@ export function StockManager() {
         per_page: 100,
         search: search || undefined,
         status: status || undefined,
-        entity_type: entityType,
       });
       setEntries(response.data || []);
     } catch (error) {
@@ -59,7 +56,7 @@ export function StockManager() {
   useEffect(() => {
     loadInventory();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status, entityType]);
+  }, [status]);
 
   const applyQuickAdjust = async (
     entry: InventoryEntry,
@@ -74,7 +71,7 @@ export function StockManager() {
 
     try {
       await api.adjustInventory({
-        entity_type: entry.entityType,
+        entity_type: entry.entity_type || "item",
         entity_id: entry.id,
         operation,
         quantity,
@@ -91,9 +88,7 @@ export function StockManager() {
     try {
       const response = await api.getInventoryMovements({
         per_page: 50,
-        ...(entry.entityType === "product"
-          ? { product_id: entry.id }
-          : { item_id: entry.id }),
+        item_id: entry.id,
       });
       setHistoryRows(response.data || []);
       setHistoryTitle(`Histórico: ${entry.name}`);
@@ -132,17 +127,6 @@ export function StockManager() {
           />
           <select
             className="h-10 rounded-md border border-neutral-300 px-3 text-sm"
-            value={entityType}
-            onChange={(e) =>
-              setEntityType(e.target.value as "all" | "product" | "item")
-            }
-          >
-            <option value="all">Todos</option>
-            <option value="product">Produtos</option>
-            <option value="item">Itens</option>
-          </select>
-          <select
-            className="h-10 rounded-md border border-neutral-300 px-3 text-sm"
             value={status}
             onChange={(e) => setStatus(e.target.value as InventoryStatus | "")}
           >
@@ -159,6 +143,7 @@ export function StockManager() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Item</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead>Nome</TableHead>
               <TableHead>Categoria</TableHead>
@@ -171,8 +156,21 @@ export function StockManager() {
           </TableHeader>
           <TableBody>
             {entries.map((entry) => (
-              <TableRow key={`${entry.entityType}-${entry.id}`}>
-                <TableCell>{entry.entityType === "product" ? "Produto" : "Item"}</TableCell>
+              <TableRow key={entry.id}>
+                <TableCell>
+                  <div className="h-10 w-10 overflow-hidden rounded-md border border-neutral-200 bg-neutral-100">
+                    {entry.image_url ? (
+                      <img
+                        src={entry.image_url}
+                        alt={entry.name}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : null}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {entry.entity_type === "product" ? "Produto" : "Item"}
+                </TableCell>
                 <TableCell>{entry.name}</TableCell>
                 <TableCell>{entry.category}</TableCell>
                 <TableCell>{entry.physical}</TableCell>
