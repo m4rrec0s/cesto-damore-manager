@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { useApi, type InventoryEntry, type InventoryMovement, type InventoryStatus } from "../services/api";
+import {
+  useApi,
+  type InventoryEntry,
+  type InventoryMovement,
+  type InventoryStatus,
+} from "../services/api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -17,6 +22,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../components/ui/dialog";
+import { ArrowDown, Edit, History } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 
 const statusLabel: Record<InventoryStatus, string> = {
   in_stock: "Em estoque",
@@ -60,10 +67,13 @@ export function StockManager() {
 
   const applyQuickAdjust = async (
     entry: InventoryEntry,
-    operation: "increment" | "decrement" | "zero",
+    operation: "increment" | "decrement" | "zero" | "set",
     quantity?: number,
   ) => {
-    const reason = window.prompt("Informe o motivo da alteração de estoque:", "Ajuste manual pelo manager");
+    const reason = window.prompt(
+      "Informe o motivo da alteração de estoque:",
+      "Ajuste manual pelo manager",
+    );
     if (!reason || !reason.trim()) {
       toast.error("Motivo é obrigatório");
       return;
@@ -82,6 +92,22 @@ export function StockManager() {
     } catch (error: any) {
       toast.error(error?.response?.data?.error || "Erro ao ajustar estoque");
     }
+  };
+
+  const applyExactQuantity = async (entry: InventoryEntry) => {
+    const exact = window.prompt(
+      "Informe a quantidade exata final para este item/produto:",
+      String(entry.physical ?? 0),
+    );
+    if (exact === null) return;
+
+    const exactValue = Number(exact);
+    if (!Number.isFinite(exactValue) || exactValue < 0) {
+      toast.error("Quantidade exata inválida");
+      return;
+    }
+
+    await applyQuickAdjust(entry, "set", Math.floor(exactValue));
   };
 
   const openHistory = async (entry: InventoryEntry) => {
@@ -111,9 +137,12 @@ export function StockManager() {
   return (
     <section className="m-6 space-y-4">
       <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-        <h1 className="text-xl font-semibold text-neutral-900">Controle de Estoque</h1>
+        <h1 className="text-xl font-semibold text-neutral-900">
+          Controle de Estoque
+        </h1>
         <p className="text-sm text-neutral-600">
-          Ajustes rápidos com auditoria e cálculo de disponível considerando reservas ativas.
+          Ajustes rápidos com auditoria e cálculo de disponível considerando
+          reservas ativas.
         </p>
       </div>
 
@@ -185,12 +214,57 @@ export function StockManager() {
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap gap-1">
-                    <Button size="sm" variant="outline" onClick={() => applyQuickAdjust(entry, "increment", 1)}>+1</Button>
-                    <Button size="sm" variant="outline" onClick={() => applyQuickAdjust(entry, "increment", 5)}>+5</Button>
-                    <Button size="sm" variant="outline" onClick={() => applyQuickAdjust(entry, "increment", 10)}>+10</Button>
-                    <Button size="sm" variant="outline" onClick={() => applyQuickAdjust(entry, "decrement", 1)}>-1</Button>
-                    <Button size="sm" variant="destructive" onClick={() => applyQuickAdjust(entry, "zero")}>Zerar</Button>
-                    <Button size="sm" onClick={() => openHistory(entry)}>Histórico</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => applyQuickAdjust(entry, "increment", 1)}
+                    >
+                      +1
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => applyQuickAdjust(entry, "increment", 5)}
+                    >
+                      +5
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => applyQuickAdjust(entry, "increment", 10)}
+                    >
+                      +10
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => applyQuickAdjust(entry, "decrement", 1)}
+                    >
+                      -1
+                    </Button>
+
+                    <div className="px-2">
+                      <Separator orientation="vertical" className="h-full" />
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => applyExactQuantity(entry)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => applyQuickAdjust(entry, "zero")}
+                    >
+                      <ArrowDown className="h-4 w-4" /> 0
+                    </Button>
+
+                    <Button size="sm" onClick={() => openHistory(entry)}>
+                      <History className="h-4 w-4" />
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -218,11 +292,15 @@ export function StockManager() {
               <TableBody>
                 {historyRows.map((row) => (
                   <TableRow key={row.id}>
-                    <TableCell>{new Date(row.created_at).toLocaleString()}</TableCell>
+                    <TableCell>
+                      {new Date(row.created_at).toLocaleString()}
+                    </TableCell>
                     <TableCell>{row.type}</TableCell>
                     <TableCell>{row.quantity}</TableCell>
                     <TableCell>{row.reason}</TableCell>
-                    <TableCell>{row.admin?.name || row.admin?.email || "-"}</TableCell>
+                    <TableCell>
+                      {row.admin?.name || row.admin?.email || "-"}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
