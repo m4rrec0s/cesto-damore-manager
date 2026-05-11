@@ -137,8 +137,9 @@ export default function App() {
             </AdminRoute>
           }
         />
+        <Route path="/ai" element={<Navigate to="/ai/bot-flow" replace />} />
         <Route
-          path="/llm-test"
+          path="/ai/llm-test"
           element={
             <AdminRoute>
               <LlmTestSessionPage />
@@ -146,7 +147,7 @@ export default function App() {
           }
         />
         <Route
-          path="/llm-prompt-priority"
+          path="/ai/llm-prompt-priority"
           element={
             <AdminRoute>
               <LlmPromptPriorityPage />
@@ -154,7 +155,7 @@ export default function App() {
           }
         />
         <Route
-          path="/obsidian-knowledge"
+          path="/ai/obsidian-knowledge"
           element={
             <AdminRoute>
               <ObsidianKnowledgePage />
@@ -162,7 +163,7 @@ export default function App() {
           }
         />
         <Route
-          path="/llm-knowledge"
+          path="/ai/llm-knowledge"
           element={
             <AdminRoute>
               <LlmKnowledgeDocsPage />
@@ -194,7 +195,7 @@ export default function App() {
           }
         />
         <Route
-          path="/bot-flow"
+          path="/ai/bot-flow"
           element={
             <AdminRoute>
               <BotFlowPage />
@@ -203,7 +204,22 @@ export default function App() {
         />
 
         {/* Fallback */}
-        <Route path="/bot-test" element={<AdminRoute><BotChatTest /></AdminRoute>} />
+        <Route path="/ai/bot-test" element={<AdminRoute><BotChatTest /></AdminRoute>} />
+        <Route path="/llm-test" element={<Navigate to="/ai/llm-test" replace />} />
+        <Route
+          path="/llm-prompt-priority"
+          element={<Navigate to="/ai/llm-prompt-priority" replace />}
+        />
+        <Route
+          path="/obsidian-knowledge"
+          element={<Navigate to="/ai/obsidian-knowledge" replace />}
+        />
+        <Route
+          path="/llm-knowledge"
+          element={<Navigate to="/ai/llm-knowledge" replace />}
+        />
+        <Route path="/bot-flow" element={<Navigate to="/ai/bot-flow" replace />} />
+        <Route path="/bot-test" element={<Navigate to="/ai/bot-test" replace />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </UIProvider>

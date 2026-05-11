@@ -258,7 +258,7 @@ export function Dashboard() {
       title: "LLM Lab (Chat Profissional)",
       description:
         "Chat estilo ChatGPT/Claude para testar a LLM com streaming, tools, pensamento e sessões salvas por usuário.",
-      href: "/llm-test",
+      href: "/ai/llm-test",
       icon: FlaskConical,
       cta: "Abrir teste",
     },
@@ -266,7 +266,7 @@ export function Dashboard() {
       title: "Prompt Prioritário (Legado)",
       description:
         "Gerenciamento de prompts temporários/permanentes da orquestração anterior.",
-      href: "/llm-prompt-priority",
+      href: "/ai/llm-prompt-priority",
       icon: SlidersHorizontal,
       cta: "Abrir configuração",
     },

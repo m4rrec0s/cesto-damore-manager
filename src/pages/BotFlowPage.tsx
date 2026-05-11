@@ -1033,8 +1033,8 @@ export default function BotFlowPage() {
   if (loading) return <div className="p-8">Carregando...</div>;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] space-y-4 p-4">
-      <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex-wrap gap-4">
+    <div className="relative h-[calc(100vh-80px)] p-4">
+      <div className="absolute left-4 right-4 top-4 z-40 flex justify-between items-center bg-white/95 backdrop-blur p-4 rounded-xl shadow-sm border border-gray-100 flex-wrap gap-4">
         <h1 className="text-2xl font-bold text-gray-800">
           Fluxo do Bot (Anna)
         </h1>
@@ -1050,11 +1050,37 @@ export default function BotFlowPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex gap-4 min-h-0 flex-col lg:flex-row">
+      <div className="absolute inset-4 top-[96px] min-h-0">
+        {/* Editor de Grafos */}
+        <div
+          className="h-full w-full border-2 border-gray-200 rounded-xl overflow-hidden shadow-inner bg-gray-50"
+          ref={reactFlowWrapper}
+        >
+          <ReactFlow
+            nodes={nodesForRender}
+            edges={edgesForRender}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            fitView
+            deleteKeyCode={["Backspace", "Delete"]}
+            onInit={(instance) => {
+              reactFlowInstance.current = instance;
+            }}
+          >
+            <Background gap={16} size={1.5} color="#e2e8f0" />
+            <Controls className="bg-white shadow-md border border-gray-100 rounded-lg p-1 m-2" />
+          </ReactFlow>
+        </div>
+
         {/* Lista de Nodes */}
         <div
-          className={`bg-white border-2 border-gray-200 rounded-xl flex flex-col shadow-lg shrink-0 min-h-[240px] max-h-[320px] lg:max-h-none transition-all duration-300 ${
-            isNodePanelOpen ? "w-full lg:w-72" : "w-full lg:w-14"
+          className={`absolute left-4 top-4 bottom-4 z-40 bg-white/95 backdrop-blur border-2 border-gray-200 rounded-xl flex flex-col shadow-lg shrink-0 transition-all duration-300 ${
+            isNodePanelOpen ? "w-80" : "w-14"
           }`}
         >
           <div className="p-3 border-b border-gray-100 flex items-center justify-between gap-2">
@@ -1186,35 +1212,9 @@ export default function BotFlowPage() {
           )}
         </div>
 
-        {/* Editor de Grafos */}
-        <div
-          className="flex-1 border-2 border-gray-200 rounded-xl overflow-hidden shadow-inner bg-gray-50 h-[400px] lg:h-auto"
-          ref={reactFlowWrapper}
-        >
-          <ReactFlow
-            nodes={nodesForRender}
-            edges={edgesForRender}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
-            nodeTypes={nodeTypes}
-            edgeTypes={edgeTypes}
-            fitView
-            deleteKeyCode={["Backspace", "Delete"]}
-            onInit={(instance) => {
-              reactFlowInstance.current = instance;
-            }}
-          >
-            <Background gap={16} size={1.5} color="#e2e8f0" />
-            <Controls className="bg-white shadow-md border border-gray-100 rounded-lg p-1 m-2" />
-          </ReactFlow>
-        </div>
-
         {/* Barra Lateral Editavel */}
-        <div className="w-full lg:w-80 bg-white border-2 border-gray-200 rounded-xl flex flex-col overflow-y-auto shadow-lg shrink-0 h-auto min-h-[300px]">
-          {selectedNode ? (
+        {selectedNode ? (
+          <div className="absolute right-4 top-4 bottom-4 z-40 w-[420px] max-w-[92vw] bg-white/95 backdrop-blur border-2 border-gray-200 rounded-xl flex flex-col overflow-y-auto shadow-lg">
             <div className="p-5 flex flex-col h-full animate-in fade-in slide-in-from-right-4 duration-200">
               <div className="flex justify-between items-center mb-5 border-b-2 border-gray-100 pb-3">
                 <h3 className="font-bold text-lg text-gray-800">
@@ -2050,35 +2050,8 @@ export default function BotFlowPage() {
                 </Button>
               </div>
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center p-8 text-center h-full text-gray-400">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4 text-gray-300">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="24"
-                  height="24"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M12 16v-4" />
-                  <path d="M12 8h.01" />
-                </svg>
-              </div>
-              <h3 className="font-bold text-gray-500 mb-2">
-                Nenhum nó selecionado
-              </h3>
-              <p className="text-xs">
-                Clique em algum bloco no painel à esquerda para editar suas
-                propriedades.
-              </p>
-            </div>
-          )}
-        </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

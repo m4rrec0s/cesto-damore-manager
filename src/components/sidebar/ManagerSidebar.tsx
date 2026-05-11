@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
+import { useState } from "react";
 import type { ComponentType } from "react";
 import {
   SidebarContent,
@@ -25,25 +26,27 @@ import {
   RefreshCw,
   Palette,
   BrainCircuit,
-  Lightbulb,
+  SlidersHorizontal,
   Warehouse,
+  ChevronDown,
 } from "lucide-react";
 
-type Item = {
+type SidebarItem = {
   name: string;
   href: string;
   icon?: ComponentType<{ className?: string }>;
   children?: { name: string; href: string }[];
+  matchPrefixes?: string[];
 };
 
-type Group = {
+type SidebarGroupConfig = {
   label: string;
-  items: Item[];
+  items: SidebarItem[];
 };
 
-const groups: Group[] = [
+const groups: SidebarGroupConfig[] = [
   {
-    label: "Visao Geral",
+    label: "Visão Geral",
     items: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Pedidos", href: "/orders", icon: ClipboardList },
@@ -57,6 +60,7 @@ const groups: Group[] = [
         name: "Catalogo",
         href: "/catalog/products",
         icon: Box,
+        matchPrefixes: ["/catalog/"],
         children: [
           { name: "Produtos", href: "/catalog/products" },
           { name: "Itens", href: "/catalog/items" },
@@ -67,21 +71,22 @@ const groups: Group[] = [
     ],
   },
   {
-    label: "IA e Automacoes",
+    label: "IA e Automações",
     items: [
-      { name: "CestoBot", href: "/bot-flow", icon: BotMessageSquare },
-      { name: "LLM Lab", href: "/llm-test", icon: Sparkles },
-      { name: "LLM Knowledge", href: "/llm-knowledge", icon: BookOpenText },
+      { name: "CestoBot", href: "/ai/bot-flow", icon: BotMessageSquare },
+      { name: "LLM Lab", href: "/ai/llm-test", icon: Sparkles },
+      { name: "LLM Knowledge", href: "/ai/llm-knowledge", icon: BookOpenText },
       {
         name: "Obsidian Knowledge",
-        href: "/obsidian-knowledge",
+        href: "/ai/obsidian-knowledge",
         icon: BrainCircuit,
       },
-      { name: "Teste do Bot", href: "/bot-test", icon: TestTube2 },
+      { name: "Prompt Priority", href: "/ai/llm-prompt-priority", icon: SlidersHorizontal },
+      { name: "Teste do Bot", href: "/ai/bot-test", icon: TestTube2 },
     ],
   },
   {
-    label: "Operacao",
+    label: "Operação",
     items: [
       { name: "Feriados", href: "/holidays", icon: Calendar },
       { name: "Follow-up", href: "/follow-up", icon: RefreshCw },
@@ -93,20 +98,51 @@ const groups: Group[] = [
 
 export function ManagerSidebar() {
   const location = useLocation();
+  const pathname = location.pathname;
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(
+    {},
+  );
+
+  const isItemActive = (item: SidebarItem) => {
+    if (pathname === item.href) return true;
+    if (item.matchPrefixes?.some((prefix) => pathname.startsWith(prefix))) {
+      return true;
+    }
+    if (item.children?.some((child) => child.href === pathname)) return true;
+    return false;
+  };
+
+  const isGroupCollapsed = (label: string) => collapsedGroups[label] ?? false;
+  const toggleGroup = (label: string) => {
+    setCollapsedGroups((prev) => ({
+      ...prev,
+      [label]: !isGroupCollapsed(label),
+    }));
+  };
 
   return (
     <SidebarContent>
       {groups.map((group) => (
         <SidebarGroup key={group.label}>
-          <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
-          <SidebarGroupContent>
+          <SidebarGroupLabel
+            className="cursor-pointer select-none"
+            onClick={() => toggleGroup(group.label)}
+          >
+            <div className="flex w-full items-center justify-between">
+              <span>{group.label}</span>
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${
+                  isGroupCollapsed(group.label) ? "-rotate-90" : "rotate-0"
+                }`}
+              />
+            </div>
+          </SidebarGroupLabel>
+          <SidebarGroupContent
+            className={isGroupCollapsed(group.label) ? "hidden" : ""}
+          >
             <SidebarMenu>
               {group.items.map((item) => {
-                const isActive =
-                  location.pathname === item.href ||
-                  item.children?.some(
-                    (child) => child.href === location.pathname,
-                  );
+                const isActive = isItemActive(item);
 
                 return (
                   <SidebarMenuItem key={item.name}>
@@ -126,7 +162,7 @@ export function ManagerSidebar() {
                           <SidebarMenuSubItem key={child.name}>
                             <SidebarMenuSubButton
                               asChild
-                              isActive={location.pathname === child.href}
+                              isActive={pathname === child.href}
                             >
                               <Link to={child.href}>
                                 <span>{child.name}</span>
