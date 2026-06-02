@@ -163,6 +163,9 @@ export function Orders() {
     newStatus: OrderStatus;
     currentStatus: OrderStatus;
   } | null>(null);
+  const [printJobs, setPrintJobs] = useState<
+    Record<string, { id: string; status: string; lastError?: string | null }>
+  >({});
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -192,6 +195,18 @@ export function Orders() {
       try {
         const details = await api.getOrder(orderId);
         setOrderDetails((prev) => ({ ...prev, [orderId]: details }));
+
+        if (details.status === "PAID" || details.status === "SHIPPED") {
+          try {
+            const job = await api.getPrintJobStatus(orderId);
+            setPrintJobs((prev) => ({
+              ...prev,
+              [orderId]: { id: job.id, status: job.status, lastError: job.lastError },
+            }));
+          } catch {
+            // Print job may not exist yet
+          }
+        }
       } catch (e) {
         toast.error(
           extractErrorMessage(e, "Erro ao carregar detalhes do pedido"),
@@ -227,6 +242,36 @@ export function Orders() {
       toast.error(extractErrorMessage(e, "Erro ao atualizar status"));
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  const handleRetryPrint = async (orderId: string) => {
+    const job = printJobs[orderId];
+    if (!job) return;
+    try {
+      await api.retryPrintJob(job.id);
+      setPrintJobs((prev) => ({
+        ...prev,
+        [orderId]: { ...prev[orderId], status: "PENDING", lastError: null },
+      }));
+      toast.success("Impressão reenfileirada");
+
+      const pollId = setInterval(async () => {
+        try {
+          const updated = await api.getPrintJobStatus(orderId);
+          setPrintJobs((prev) => ({
+            ...prev,
+            [orderId]: { id: updated.id, status: updated.status, lastError: updated.lastError },
+          }));
+          if (["PRINTED", "FAILED"].includes(updated.status)) {
+            clearInterval(pollId);
+          }
+        } catch {
+          // job may still be being created
+        }
+      }, 2000);
+    } catch (e) {
+      toast.error(extractErrorMessage(e, "Erro ao reenfileirar impressão"));
     }
   };
 
@@ -668,6 +713,64 @@ export function Orders() {
                                   Arquivos no Drive
                                 </Button>
                               )}
+
+                              {printJobs[details.id] && (() => {
+                                const job = printJobs[details.id];
+                                const isPrinted = job.status === "PRINTED";
+                                const isFailed = job.status === "FAILED";
+                                const isPending = ["PENDING", "SENT", "RECEIVED", "PRINTING"].includes(job.status);
+
+                                return (
+                                  <div className={clsx(
+                                    "rounded-xl border p-3 space-y-2",
+                                    isPrinted && "bg-emerald-50 border-emerald-200",
+                                    isFailed && "bg-red-50 border-red-200",
+                                    isPending && "bg-blue-50 border-blue-200",
+                                  )}>
+                                    <div className="flex items-center gap-2">
+                                      {isPrinted ? (
+                                        <CheckCircle2 size={14} className="text-emerald-600" />
+                                      ) : isFailed ? (
+                                        <XCircle size={14} className="text-red-600" />
+                                      ) : (
+                                        <Loader2 size={14} className="animate-spin text-blue-600" />
+                                      )}
+                                      <span className="text-xs font-bold text-neutral-900">
+                                        Impressão
+                                      </span>
+                                    </div>
+                                    <p className={clsx(
+                                      "text-[11px] font-medium",
+                                      isPrinted && "text-emerald-700",
+                                      isFailed && "text-red-700",
+                                      isPending && "text-blue-700",
+                                    )}>
+                                      {isPrinted && "Impresso com sucesso"}
+                                      {isFailed && (job.lastError || "Falha na impressão")}
+                                      {isPending && (
+                                        job.status === "PENDING" ? "Enfileirando..." :
+                                        job.status === "SENT" ? "Enviado ao agente" :
+                                        job.status === "RECEIVED" ? "Agente recebeu" :
+                                        "Imprimindo..."
+                                      )}
+                                    </p>
+                                    {isFailed && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleRetryPrint(details.id);
+                                        }}
+                                        className="w-full text-red-600 border-red-200 hover:bg-red-100"
+                                      >
+                                        <RefreshCw size={12} />
+                                        Tentar novamente
+                                      </Button>
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </div>
                           </div>
 
