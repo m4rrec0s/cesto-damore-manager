@@ -170,6 +170,7 @@ export interface LabMemorySnapshot {
       agent: "Ana" | "Bianca" | "Lucas" | "Alice";
       transition_reason?: string | null;
       executive_summary?: string | null;
+      product_return_count?: number;
       checklist?: {
         discoveryQualified: boolean;
         productSelected: boolean;
@@ -198,6 +199,17 @@ export interface LabMemorySnapshot {
     compact: string;
     db_summary: string | null;
     db_expires_at: string | null;
+  };
+  agent_logs?: {
+    baseDir: string;
+    agent: string;
+    conversion: string;
+    sessions: string;
+    errors: string;
+    tail_agent: string[];
+    tail_conversion: string[];
+    tail_sessions: string[];
+    note?: string;
   };
 }
 
@@ -1010,9 +1022,9 @@ class ApiService {
   getLayout = async (id: string) => (await this.get(`/layouts/${id}`)).data;
 
   // ===== Dynamic Layouts (para customizações) =====
-  getDynamicLayouts = async () => {
+  getDynamicLayouts = async (params?: { type?: string }) => {
     try {
-      const response = await this.get("/layouts/dynamic");
+      const response = await this.get("/layouts/dynamic", { params });
       return response.data;
     } catch (error) {
       console.error("Erro ao carregar layouts dinâmicos:", error);
@@ -1519,6 +1531,73 @@ class ApiService {
     (await this.post(`/kb/documents/${id}/revert/${version}`, {})).data;
 
   getKBAnalytics = async () => (await this.get("/kb/analytics")).data;
+
+  // ===== Print / Printer Configuration =====
+  getAgentStatus = async (): Promise<{ connected: boolean }> =>
+    (await this.get("/api/print/agent-status")).data;
+
+  getAvailablePrinters = async (): Promise<{
+    printers: string[];
+    agentConnected: boolean;
+  }> => (await this.get("/api/print/available-printers")).data;
+
+  getPrinterConfig = async (): Promise<Record<string, unknown>> =>
+    (await this.get("/admin/printer-config")).data;
+
+  savePrinterConfig = async (
+    role: string,
+    data: { printerName: string; isActive: boolean },
+  ) => (await this.put(`/admin/printer-config/${role}`, data)).data;
+
+  deletePrinterConfig = async (role: string) =>
+    (await this.delete(`/admin/printer-config/${role}`)).data;
+
+  getPrintJobStatus = async (orderId: string): Promise<{
+    id: string;
+    status: string;
+    lastError?: string | null;
+    updatedAt: string;
+  }> => (await this.get(`/api/print/jobs/${orderId}/status`)).data;
+
+  simulatePrint = async (payload: {
+    orderId: string;
+    giftMessage?: string;
+  }): Promise<{ ok: boolean; printJobId?: string; status?: string }> =>
+    (await this.post("/api/simulator/simulate-print", payload)).data;
+
+  getSimulateProducts = async (): Promise<{ products: any[] }> =>
+    (await this.get("/api/simulator/simulate-products")).data;
+
+  simulatePrototype = async (payload: {
+    items: Array<{
+      productId: string;
+      quantity?: number;
+      customizations?: Array<{
+        itemId: string;
+        customizationId: string;
+        type: string;
+        value: string;
+      }>;
+    }>;
+    giftMessage?: string;
+  }): Promise<{ ok: boolean; orderId?: string; printJobId?: string; status?: string }> =>
+    (await this.post("/api/simulator/simulate-prototype", payload)).data;
+
+  createManualPrintOrder = async (formData: FormData): Promise<{
+    ok: boolean;
+    orderId: string;
+    printJobId?: string;
+    status?: string;
+    folderUrl?: string;
+  }> =>
+    (
+      await this.client.post("/api/impressao/manual", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+    ).data;
+
+  retryPrintJob = async (printJobId: string): Promise<{ ok: boolean; printJobId: string; orderId: string }> =>
+    (await this.post(`/api/print/jobs/${printJobId}/retry`, {})).data;
 }
 
 export function useApi(): ApiService & {

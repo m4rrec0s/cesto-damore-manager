@@ -23,6 +23,9 @@ import BotFlowPage from "./pages/BotFlowPage";
 import { BotChatTest } from "./pages/BotChatTest";
 import { UIProvider } from "./contexts/UIContext";
 import { StockManager } from "./pages/StockManager";
+import { AgentLogsPage } from "./pages/AgentLogsPage";
+import { PrinterSettings } from "./pages/PrinterSettings";
+import { ManualPrintOrder } from "./pages/ManualPrintOrder";
 
 export default function App() {
   return (
@@ -202,24 +205,49 @@ export default function App() {
             </AdminRoute>
           }
         />
+        
+        {/* Agent Logs Viewer */}
+        <Route
+          path="/ai/agent-logs"
+          element={
+            <AdminRoute>
+              <AgentLogsPage />
+            </AdminRoute>
+          }
+        />
 
-        {/* Fallback */}
+        <Route
+          path="/impressao/manual"
+          element={
+            <AdminRoute>
+              <ManualPrintOrder />
+            </AdminRoute>
+          }
+        />
+
+        {/* Printer Settings */}
+        <Route
+          path="/settings/printers"
+          element={
+            <AdminRoute>
+              <PrinterSettings />
+            </AdminRoute>
+          }
+        />
+
+        {/* Fallback routes for backward compatibility with new conversation format */}
         <Route path="/ai/bot-test" element={<AdminRoute><BotChatTest /></AdminRoute>} />
+        
+        {/* Old path redirects to new paths */}
         <Route path="/llm-test" element={<Navigate to="/ai/llm-test" replace />} />
-        <Route
-          path="/llm-prompt-priority"
-          element={<Navigate to="/ai/llm-prompt-priority" replace />}
-        />
-        <Route
-          path="/obsidian-knowledge"
-          element={<Navigate to="/ai/obsidian-knowledge" replace />}
-        />
-        <Route
-          path="/llm-knowledge"
-          element={<Navigate to="/ai/llm-knowledge" replace />}
-        />
+        <Route path="/llm-prompt-priority" element={<Navigate to="/ai/llm-prompt-priority" replace />} />
+        <Route path="/obsidian-knowledge" element={<Navigate to="/ai/obsidian-knowledge" replace />} />
+        <Route path="/llm-knowledge" element={<Navigate to="/ai/llm-knowledge" replace />} />
         <Route path="/bot-flow" element={<Navigate to="/ai/bot-flow" replace />} />
         <Route path="/bot-test" element={<Navigate to="/ai/bot-test" replace />} />
+        <Route path="/agent-logs" element={<Navigate to="/ai/agent-logs" replace />} />
+        
+        {/* Catch-all fallback for conversation format compatibility */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </UIProvider>

@@ -30,13 +30,55 @@ type ChatRole = "user" | "assistant" | "tool";
 type InternalAgentName = "Ana" | "Bianca" | "Lucas" | "Alice";
 
 type LabTraceEvent =
-  | { type: "state"; label: string; timestamp: string }
-  | { type: "tool_call"; toolName: string; timestamp: string }
-  | { type: "tool_result"; toolName: string; success: boolean; timestamp: string }
-  | { type: "text_delta"; output: string; timestamp: string }
-  | { type: "done"; output: string; timestamp: string }
+  | { type: "state"; state?: string; label?: string; timestamp: string }
+  | {
+      type: "tool_call";
+      toolName: string;
+      input?: Record<string, unknown>;
+      timestamp: string;
+    }
+  | {
+      type: "tool_result";
+      toolName: string;
+      success: boolean;
+      timestamp: string;
+    }
+  | {
+      type: "text_delta";
+      delta?: string;
+      output?: string;
+      timestamp: string;
+    }
+  | { type: "done"; output?: string; timestamp: string }
   | { type: "warning"; message: string; timestamp: string }
   | { type: "error"; message: string; timestamp: string };
+
+function parseNdjsonEvent(line: string): LabTraceEvent | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed) as LabTraceEvent;
+  } catch {
+    return null;
+  }
+}
+
+function resolveStateLabel(ev: LabTraceEvent & { type?: string }): string {
+  if (ev.type !== "state") return "";
+  const anyEv = ev as { label?: string; state?: string };
+  if (typeof anyEv.label === "string" && anyEv.label.trim()) return anyEv.label;
+  if (typeof anyEv.state === "string" && anyEv.state.trim())
+    return `Estado: ${anyEv.state}`;
+  return "Atualizando estado…";
+}
+
+function formatLogLine(line: string): string {
+  try {
+    return JSON.stringify(JSON.parse(line), null, 2);
+  } catch {
+    return line;
+  }
+}
 
 interface ChatMessage {
   id: string;
@@ -120,9 +162,8 @@ export function LlmTestSessionPage() {
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
   const [showMemoryPanel, setShowMemoryPanel] = useState(false);
   const [loadingMemory, setLoadingMemory] = useState(false);
-  const [memorySnapshot, setMemorySnapshot] = useState<LabMemorySnapshot | null>(
-    null,
-  );
+  const [memorySnapshot, setMemorySnapshot] =
+    useState<LabMemorySnapshot | null>(null);
   const previewCacheRef = useRef<Record<string, LinkPreviewPayload | null>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -137,7 +178,10 @@ export function LlmTestSessionPage() {
   );
 
   const activeMessages = useMemo(
-    () => (messagesBySession[activeSessionId] || []).filter((msg) => msg.role !== "tool"),
+    () =>
+      (messagesBySession[activeSessionId] || []).filter(
+        (msg) => msg.role !== "tool",
+      ),
     [messagesBySession, activeSessionId],
   );
 
@@ -167,7 +211,9 @@ export function LlmTestSessionPage() {
             {
               id: created.session.id,
               created_at: new Date().toISOString(),
-              expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+              expires_at: new Date(
+                Date.now() + 30 * 24 * 60 * 60 * 1000,
+              ).toISOString(),
               is_blocked: false,
               totalMessages: 0,
               lastMessage: null,
@@ -244,9 +290,9 @@ export function LlmTestSessionPage() {
         }),
       );
 
-        setMessagesBySession((prev) => {
-          const sessionMessages = prev[activeSessionId] || [];
-          const updated = sessionMessages.map((message) => {
+      setMessagesBySession((prev) => {
+        const sessionMessages = prev[activeSessionId] || [];
+        const updated = sessionMessages.map((message) => {
           const uniqueUrls = Array.from(new Set(extractUrls(message.content)));
           const previews = uniqueUrls
             .map((url) => previewCacheRef.current[url])
@@ -299,7 +345,9 @@ export function LlmTestSessionPage() {
       return {
         ...prev,
         [sessionId]: sessionMessages.map((message) =>
-          message.id === assistantMessageId ? { ...message, ...patch } : message,
+          message.id === assistantMessageId
+            ? { ...message, ...patch }
+            : message,
         ),
       };
     });
@@ -357,7 +405,9 @@ export function LlmTestSessionPage() {
       const next: LabSessionSummary = {
         id: created.session.id,
         created_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        expires_at: new Date(
+          Date.now() + 30 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
         is_blocked: false,
         totalMessages: 0,
         lastMessage: null,
@@ -388,7 +438,9 @@ export function LlmTestSessionPage() {
       });
 
       setSessions((prev) => {
-        const filtered = prev.filter((session) => session.id !== activeSession.id);
+        const filtered = prev.filter(
+          (session) => session.id !== activeSession.id,
+        );
         setActiveSessionId(filtered[0]?.id || "");
         setMemorySnapshot(null);
         return filtered;
@@ -464,6 +516,7 @@ export function LlmTestSessionPage() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let streamBuffer = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -476,18 +529,27 @@ export function LlmTestSessionPage() {
         for (const line of lines) {
           if (!line.trim()) continue;
 
-          const eventData = JSON.parse(line) as LabTraceEvent;
+          const eventData = parseNdjsonEvent(line);
+          if (!eventData || typeof eventData.type !== "string") continue;
+
           if (eventData.type === "state") {
-            setThinkingLine(eventData.label);
-            const isThought = eventData.label.toLowerCase().startsWith("pensamento:");
+            const label = resolveStateLabel(eventData);
+            setThinkingLine(label);
+            const isThought = label.toLowerCase().startsWith("pensamento:");
             patchAssistantMessage(activeSessionId, assistantMessageId, {
-              traceLine: isThought ? "Planejando próxima ação" : eventData.label,
-              ...(isThought ? { thought: eventData.label } : {}),
+              traceLine: isThought ? "Planejando próxima ação" : label,
+              ...(isThought ? { thought: label } : {}),
             });
           }
 
           if (eventData.type === "tool_call") {
-            const toolText = `Usando tool: ${eventData.toolName}`;
+            const keys =
+              eventData.input && typeof eventData.input === "object"
+                ? Object.keys(eventData.input).slice(0, 5).join(", ")
+                : "";
+            const toolText = keys
+              ? `Usando tool: ${eventData.toolName} (${keys})`
+              : `Usando tool: ${eventData.toolName}`;
             setThinkingLine(toolText);
             addToolToAssistantMessage(
               activeSessionId,
@@ -510,8 +572,19 @@ export function LlmTestSessionPage() {
           }
 
           if (eventData.type === "text_delta") {
+            if (
+              typeof eventData.output === "string" &&
+              eventData.output.length > 0
+            ) {
+              streamBuffer = eventData.output;
+            } else if (
+              typeof eventData.delta === "string" &&
+              eventData.delta.length > 0
+            ) {
+              streamBuffer += eventData.delta;
+            }
             patchAssistantMessage(activeSessionId, assistantMessageId, {
-              content: eventData.output,
+              content: streamBuffer,
               traceLine: "Escrevendo resposta final...",
             });
           }
@@ -528,8 +601,14 @@ export function LlmTestSessionPage() {
           }
 
           if (eventData.type === "done") {
+            if (
+              typeof eventData.output === "string" &&
+              eventData.output.length > 0
+            ) {
+              streamBuffer = eventData.output;
+            }
             patchAssistantMessage(activeSessionId, assistantMessageId, {
-              content: eventData.output,
+              content: streamBuffer,
               traceLine: "",
             });
             setThinkingLine("");
@@ -691,7 +770,9 @@ export function LlmTestSessionPage() {
                     <p className="text-[11px] text-slate-700">
                       Última atualização:{" "}
                       {memorySnapshot.session.updated_at
-                        ? new Date(memorySnapshot.session.updated_at).toLocaleString()
+                        ? new Date(
+                            memorySnapshot.session.updated_at,
+                          ).toLocaleString()
                         : "n/a"}
                     </p>
                     {memorySnapshot.session.completeness ? (
@@ -739,8 +820,16 @@ export function LlmTestSessionPage() {
                         </p>
                         <p className="text-[11px] text-slate-600 mt-1">
                           Motivo:{" "}
-                          {memorySnapshot.session.phase.transition_reason || "n/a"}
+                          {memorySnapshot.session.phase.transition_reason ||
+                            "n/a"}
                         </p>
+                        {typeof memorySnapshot.session.phase
+                          .product_return_count === "number" ? (
+                          <p className="text-[11px] text-slate-600 mt-1">
+                            Retornos ao produto em foco:{" "}
+                            {memorySnapshot.session.phase.product_return_count}
+                          </p>
+                        ) : null}
                         {memorySnapshot.session.phase.checklist ? (
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {[
@@ -751,7 +840,8 @@ export function LlmTestSessionPage() {
                               ] as const,
                               [
                                 "produto",
-                                memorySnapshot.session.phase.checklist.productSelected,
+                                memorySnapshot.session.phase.checklist
+                                  .productSelected,
                               ] as const,
                               [
                                 "customização",
@@ -800,7 +890,8 @@ export function LlmTestSessionPage() {
                     <>
                       <div className="rounded-xl border border-slate-200 p-3 bg-slate-50">
                         <p className="text-xs font-semibold text-slate-600 mb-2">
-                          Cliente (compact) — {memorySnapshot.customer.customer_phone}
+                          Cliente (compact) —{" "}
+                          {memorySnapshot.customer.customer_phone}
                         </p>
                         <pre className="text-[11px] whitespace-pre-wrap text-slate-700">
                           {memorySnapshot.customer.compact}
@@ -828,6 +919,88 @@ export function LlmTestSessionPage() {
                       Nenhuma memória de cliente vinculada a esta sessão ainda.
                     </p>
                   )}
+                  {memorySnapshot.agent_logs ? (
+                    <div className="rounded-xl border border-indigo-200 p-3 bg-indigo-50/90 space-y-2">
+                      <p className="text-xs font-semibold text-indigo-950">
+                        Logs do agente (JSONL no servidor)
+                      </p>
+                      {memorySnapshot.agent_logs.note ? (
+                        <p className="text-[10px] text-indigo-900/90">
+                          {memorySnapshot.agent_logs.note}
+                        </p>
+                      ) : null}
+                      <div className="space-y-1 text-[10px] font-mono text-indigo-950 break-all">
+                        <div>
+                          <span className="font-semibold text-indigo-800">
+                            baseDir:
+                          </span>{" "}
+                          {memorySnapshot.agent_logs.baseDir}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-indigo-800">
+                            agent.log:
+                          </span>{" "}
+                          {memorySnapshot.agent_logs.agent}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-indigo-800">
+                            conversion.log:
+                          </span>{" "}
+                          {memorySnapshot.agent_logs.conversion}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-indigo-800">
+                            sessions.log:
+                          </span>{" "}
+                          {memorySnapshot.agent_logs.sessions}
+                        </div>
+                        <div>
+                          <span className="font-semibold text-indigo-800">
+                            errors.log:
+                          </span>{" "}
+                          {memorySnapshot.agent_logs.errors}
+                        </div>
+                      </div>
+                      <div className="grid md:grid-cols-1 gap-2">
+                        <div>
+                          <p className="text-[10px] font-semibold text-indigo-900 mb-1">
+                            Tail agent.log (filtrado por sessionId)
+                          </p>
+                          <pre className="text-[10px] whitespace-pre-wrap bg-white/80 border border-indigo-100 rounded-lg p-2 max-h-40 overflow-auto text-slate-800">
+                            {memorySnapshot.agent_logs.tail_agent?.length
+                              ? memorySnapshot.agent_logs.tail_agent
+                                  .map(formatLogLine)
+                                  .join("\n---\n")
+                              : "(sem linhas recentes — rode um turno com INTERNAL_COT_ENABLED ou eventos que gravem em agent.log)"}
+                          </pre>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold text-indigo-900 mb-1">
+                            Tail conversion.log
+                          </p>
+                          <pre className="text-[10px] whitespace-pre-wrap bg-white/80 border border-indigo-100 rounded-lg p-2 max-h-32 overflow-auto text-slate-800">
+                            {memorySnapshot.agent_logs.tail_conversion?.length
+                              ? memorySnapshot.agent_logs.tail_conversion
+                                  .map(formatLogLine)
+                                  .join("\n---\n")
+                              : "(sem linhas)"}
+                          </pre>
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-semibold text-indigo-900 mb-1">
+                            Tail sessions.log
+                          </p>
+                          <pre className="text-[10px] whitespace-pre-wrap bg-white/80 border border-indigo-100 rounded-lg p-2 max-h-28 overflow-auto text-slate-800">
+                            {memorySnapshot.agent_logs.tail_sessions?.length
+                              ? memorySnapshot.agent_logs.tail_sessions
+                                  .map(formatLogLine)
+                                  .join("\n---\n")
+                              : "(sem linhas)"}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <p className="text-xs text-slate-500">
@@ -838,7 +1011,7 @@ export function LlmTestSessionPage() {
           </div>
         ) : null}
 
-        <main className="flex-1 min-h-0 overflow-y-auto px-3 py-4 md:px-6 md:py-5 space-y-4">
+        <main className="flex-1 min-h-0 max-h-screen overflow-y-auto px-3 py-4 md:px-6 md:py-5 space-y-4">
           {loadingMessages ? (
             <div className="h-full flex items-center justify-center text-slate-500 text-sm">
               Carregando mensagens...
@@ -863,7 +1036,11 @@ export function LlmTestSessionPage() {
                   }`}
                 >
                   <div className="flex items-center gap-2 text-xs mb-2 opacity-80">
-                    {message.role === "user" ? <User size={14} /> : <Bot size={14} />}
+                    {message.role === "user" ? (
+                      <User size={14} />
+                    ) : (
+                      <Bot size={14} />
+                    )}
                     <span>
                       {message.role === "user"
                         ? "Você"
