@@ -58,6 +58,11 @@ const DesignTestPage = () => {
     {},
   );
   const [workspaceZoom, setWorkspaceZoom] = useState(1);
+  const multiPageRef = useRef<{ pages: any[]; activePageIndex: number }>({
+    pages: [],
+    activePageIndex: 0,
+  });
+  const [activePageIndex, setActivePageIndex] = useState(0);
   const [localImages, setLocalImages] = useState<Record<string, string>>(() => {
     try {
       if (!layoutId) return {};
@@ -247,9 +252,17 @@ const DesignTestPage = () => {
               ? JSON.parse(layout.fabricJsonState)
               : layout.fabricJsonState;
 
+          const isMultiPage = Array.isArray(state?.pages);
+          const pages = isMultiPage ? state.pages : [];
+          multiPageRef.current = { pages, activePageIndex: 0 };
+
+          const stateForCanvas = isMultiPage && pages[0]
+            ? pages[0].canvasState
+            : state;
+
           // Converter i-text para textbox e desativar objectCaching para qualidade
-          if (state && state.objects) {
-            state.objects = state.objects.map((obj: any) => {
+          if (stateForCanvas && stateForCanvas.objects) {
+            stateForCanvas.objects = stateForCanvas.objects.map((obj: any) => {
               const updatedObj = { ...obj, objectCaching: false };
               if (updatedObj.type === "i-text") {
                 updatedObj.type = "textbox";
@@ -261,9 +274,9 @@ const DesignTestPage = () => {
 
           try {
             // Pre-carregar fontes usadas no estado para evitar mudanças de layout
-            if (state && state.objects) {
+            if (stateForCanvas && stateForCanvas.objects) {
               const fontsToLoad = new Set<string>();
-              state.objects.forEach((o: any) => {
+              stateForCanvas.objects.forEach((o: any) => {
                 if (o.fontFamily && o.fontFamily !== "Arial") {
                   fontsToLoad.add(o.fontFamily);
                 }
@@ -275,7 +288,7 @@ const DesignTestPage = () => {
               }
             }
 
-            await c.loadFromJSON(state);
+            await c.loadFromJSON(stateForCanvas);
           } catch (jsonErr) {
             console.error("Erro ao carregar estado do canvas:", jsonErr);
           }
@@ -292,66 +305,8 @@ const DesignTestPage = () => {
 
           if (!mountedRef.current) return;
 
-          // Configurar objetos
-          const objects = c.getObjects();
-          const initialTexts: Record<string, string> = {};
-
-          for (const obj of objects as any[]) {
-            // Bloquear todos por padrão
-            obj.set({
-              selectable: false,
-              evented: false,
-              lockMovementX: true,
-              lockMovementY: true,
-              lockScalingX: true,
-              lockScalingY: true,
-              lockRotation: true,
-              hasControls: false,
-              hasBorders: false,
-              hoverCursor: "default",
-            });
-
-            // Identificar frames
-            const isFrame =
-              obj.isFrame === true ||
-              obj.name === "photo-frame" ||
-              obj.name === "image-frame" ||
-              (obj.customData && obj.customData.isFrame === true);
-
-            if (isFrame) {
-              obj.isFrame = true; // Normalizar
-
-              const id = obj.id || obj.name;
-
-              // Adicionar placeholder visual se não houver imagem local ou no canvas
-              const hasImage = objects.some(
-                (img: any) => img.name === `uploaded-img-${id}`,
-              );
-
-              if (!hasImage && !localImages[id]) {
-                await addFramePlaceholder(c, obj);
-              } else if (localImages[id]) {
-                // Se temos uma imagem local salva, carregar ela
-                await loadLocalImageToFrame(c, obj, localImages[id]);
-              }
-            }
-
-            // Se for customizável, preparar campos
-            if (obj.isCustomizable) {
-              const id =
-                obj.id ||
-                obj.name ||
-                `obj-${Math.random().toString(36).substr(2, 9)}`;
-
-              if (!obj.id) obj.set("id", id);
-
-              if (obj.type === "i-text" || obj.type === "textbox") {
-                initialTexts[id] = obj.text || "";
-              }
-            }
-          }
-
-          setEditableTexts(initialTexts);
+          const { texts } = await processCanvasObjects(c);
+          setEditableTexts(texts);
           c.renderAll();
 
           // Re-initialize textboxes after render to ensure proper wrapping and padding
@@ -503,6 +458,73 @@ const DesignTestPage = () => {
     canvas.renderAll();
   };
 
+  const processCanvasObjects = async (canvas: any) => {
+    const objects = canvas.getObjects();
+    const texts: Record<string, string> = {};
+
+    const currentPageIndex = multiPageRef.current.activePageIndex;
+    const isMultiPage = multiPageRef.current.pages.length > 1;
+
+    for (const obj of objects as any[]) {
+      obj.set({
+        selectable: false,
+        evented: false,
+        lockMovementX: true,
+        lockMovementY: true,
+        lockScalingX: true,
+        lockScalingY: true,
+        lockRotation: true,
+        hasControls: false,
+        hasBorders: false,
+        hoverCursor: "default",
+      });
+
+      const isFrame =
+        obj.isFrame === true ||
+        obj.name === "photo-frame" ||
+        obj.name === "image-frame" ||
+        (obj.name && obj.name.includes("frame")) ||
+        (obj.customData && obj.customData.isFrame === true);
+
+      if (isFrame) {
+        obj.isFrame = true;
+        const rawFid = obj.id || obj.name;
+        const fid = isMultiPage ? `p${currentPageIndex}_${rawFid}` : rawFid;
+
+        const hasImage = objects.some(
+          (img: any) => img.name === `uploaded-img-${rawFid}`,
+        );
+        const hasPlaceholder = objects.some(
+          (o: any) => o.name === `placeholder-img-${rawFid}` ||
+            o.name === `placeholder-icon-${rawFid}`,
+        );
+
+        if (!hasImage && !hasPlaceholder && !localImages[fid]) {
+          await addFramePlaceholder(canvas, obj);
+        } else if (!hasImage && localImages[fid]) {
+          await loadLocalImageToFrame(canvas, obj, localImages[fid]);
+        } else if (hasImage) {
+          obj.set({ fill: "transparent", stroke: "transparent", opacity: 0 });
+        }
+      }
+
+      if (obj.isCustomizable) {
+        const id =
+          obj.id ||
+          obj.name ||
+          `obj-${Math.random().toString(36).substr(2, 9)}`;
+
+        if (!obj.id) obj.set("id", id);
+
+        if (obj.type === "i-text" || obj.type === "textbox") {
+          texts[id] = obj.text || "";
+        }
+      }
+    }
+
+    return { texts };
+  };
+
   const loadLocalImageToFrame = async (
     canvas: any,
     frame: any,
@@ -626,25 +648,10 @@ const DesignTestPage = () => {
       return;
     }
 
-    // Procurar pelo frame específico
-    const frame = currentCanvas
-      .getObjects()
-      .find(
-        (obj: any) =>
-          obj.id === frameId ||
-          obj.name === frameId ||
-          (obj.isFrame && (obj.id === frameId || obj.name === frameId)),
-      );
-
-    if (!frame) {
-      toast.error("Moldura não encontrada");
-      return;
-    }
-
     const toastId = toast.loading("Fazendo upload da imagem...");
 
     try {
-      // Fazer upload para /temp via API
+      // Upload para /temp via API
       const token =
         localStorage.getItem("token") || localStorage.getItem("appToken") || "";
       const formData = new FormData();
@@ -654,49 +661,52 @@ const DesignTestPage = () => {
         `${import.meta.env.VITE_API_URL}/uploads/temp`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
           body: formData,
         },
       );
 
-      if (!uploadResponse.ok) {
-        throw new Error("Erro ao fazer upload da imagem");
-      }
+      if (!uploadResponse.ok) throw new Error("Erro ao fazer upload da imagem");
 
       const uploadedData = await uploadResponse.json();
       let imageUrl = uploadedData.url || uploadedData.path;
-
-      if (!imageUrl) {
-        throw new Error("URL da imagem não retornada");
-      }
-
-      // Garantir que a URL seja absoluta para o Fabric.js
+      if (!imageUrl) throw new Error("URL da imagem não retornada");
       if (imageUrl.startsWith("/")) {
         imageUrl = `${import.meta.env.VITE_API_URL}${imageUrl}`;
       }
 
-      // Salvar URL no estado local (não base64!)
-      setLocalImages((prev) => ({
-        ...prev,
-        [frameId]: imageUrl,
-      }));
+      // Determinar a chave de armazenamento
+      const isMp = multiPageRef.current.pages.length > 1;
+      // Encontrar o pageIndex do frame
+      let framePageIndex = multiPageRef.current.activePageIndex;
+      if (isMp) {
+        const found = allPhotoFrames.find((f: any) => f._rawFrameId === frameId);
+        if (found) framePageIndex = found._pageIndex;
+      }
+      const imageKey = isMp ? `p${framePageIndex}_${frameId}` : frameId;
+      setLocalImages((prev) => ({ ...prev, [imageKey]: imageUrl }));
 
-      // Carregar a imagem do URL
-      await loadLocalImageToFrame(currentCanvas, frame, imageUrl);
+      // Carregar no canvas se o frame está na página ativa
+      if (framePageIndex === multiPageRef.current.activePageIndex) {
+        const frame = currentCanvas
+          .getObjects()
+          .find((obj: any) => obj.id === frameId || obj.name === frameId);
+        if (frame) {
+          // Remover placeholders
+          const icon = currentCanvas
+            .getObjects()
+            .find((o: any) => o.name === `placeholder-icon-${frameId}`);
+          const text = currentCanvas
+            .getObjects()
+            .find((o: any) => o.name === `placeholder-text-${frameId}`);
+          if (icon) currentCanvas.remove(icon);
+          if (text) currentCanvas.remove(text);
 
-      // Remover placeholder
-      const icon = currentCanvas
-        .getObjects()
-        .find((o: any) => o.name === `placeholder-icon-${frameId}`);
-      const text = currentCanvas
-        .getObjects()
-        .find((o: any) => o.name === `placeholder-text-${frameId}`);
-      if (icon) currentCanvas.remove(icon);
-      if (text) currentCanvas.remove(text);
+          await loadLocalImageToFrame(currentCanvas, frame, imageUrl);
+          currentCanvas.renderAll();
+        }
+      }
 
-      currentCanvas.renderAll();
       setUpdateNonce((prev) => prev + 1);
       toast.success("Imagem enviada com sucesso!", { id: toastId });
     } catch (error) {
@@ -802,16 +812,16 @@ const DesignTestPage = () => {
     );
   }
 
-  const objects =
+  const canvasObjects =
     activeCanvas || fabricRef.current
       ? (activeCanvas || fabricRef.current).getObjects()
       : [];
 
-  const textObjects = objects.filter(
+  const textObjects = canvasObjects.filter(
     (obj: any) =>
       obj.isCustomizable && (obj.type === "i-text" || obj.type === "textbox"),
   );
-  const shapeObjects = objects.filter(
+  const shapeObjects = canvasObjects.filter(
     (obj: any) =>
       obj.isCustomizable &&
       obj.type !== "i-text" &&
@@ -819,7 +829,38 @@ const DesignTestPage = () => {
       !obj.isFrame &&
       !obj.name?.startsWith("placeholder-"),
   );
-  const photoFrames = objects.filter((obj: any) => obj.isFrame);
+
+  const allPhotoFrames: any[] = [];
+  const isMultiPageFrames = multiPageRef.current.pages.length > 1;
+  if (multiPageRef.current.pages.length > 0) {
+    for (let pi = 0; pi < multiPageRef.current.pages.length; pi++) {
+      const pg = multiPageRef.current.pages[pi];
+      const pgObjects = pg.canvasState?.objects || [];
+      for (const obj of pgObjects) {
+        const isFrame =
+          obj.isFrame === true ||
+          obj.name === "photo-frame" ||
+          obj.name === "image-frame" ||
+          (obj.customData && obj.customData.isFrame === true);
+        if (isFrame) {
+          const rawFid = obj.id || obj.name;
+          const fid = isMultiPageFrames ? `p${pi}_${rawFid}` : rawFid;
+          allPhotoFrames.push({
+            ...obj,
+            _frameId: fid,
+            _rawFrameId: rawFid,
+            _pageName: isMultiPageFrames
+              ? `${pg.name || `P${pi + 1}`}`
+              : undefined,
+            _pageIndex: pi,
+          });
+        }
+      }
+    }
+  }
+  const photoFrames = allPhotoFrames.length > 0
+    ? allPhotoFrames
+    : canvasObjects.filter((obj: any) => obj.isFrame);
 
   return (
     <div className="min-h-screen overflow-hidden bg-neutral-900 text-white flex flex-col">
@@ -881,19 +922,51 @@ const DesignTestPage = () => {
 
       <div className="grid grid-cols-[1fr_20rem] flex-1 min-h-0">
         <div className="flex-1 min-h-0 items-center justify-center p-8 bg-neutral-950 overflow-hidden ">
+          {multiPageRef.current.pages.length > 1 && (
+              <div className="flex items-center gap-1 mb-2">
+                {multiPageRef.current.pages.map((pg: any, idx: number) => (
+                  <button
+                    key={pg.id || idx}
+                    onClick={async () => {
+                      const c = activeCanvas || fabricRef.current;
+                      if (!c || idx === multiPageRef.current.activePageIndex) return;
+                      const currentPageState = JSON.parse(JSON.stringify(c.toJSON()));
+                      const updatedPages = multiPageRef.current.pages.map((p: any, i: number) =>
+                        i === multiPageRef.current.activePageIndex
+                          ? { ...p, canvasState: currentPageState }
+                          : p,
+                      );
+                      multiPageRef.current.pages = updatedPages;
+                      multiPageRef.current.activePageIndex = idx;
+                      await c.loadFromJSON(updatedPages[idx].canvasState);
+                      await processCanvasObjects(c);
+                      c.renderAll();
+                      setActivePageIndex(idx);
+                    }}
+                    className={`px-3 py-1.5 text-xs rounded-md transition-colors ${
+                      idx === multiPageRef.current.activePageIndex
+                        ? "bg-rose-500 text-white"
+                        : "bg-neutral-700 text-neutral-300 hover:bg-neutral-600"
+                    }`}
+                  >
+                    {pg.name || `Página ${idx + 1}`}
+                  </button>
+                ))}
+              </div>
+            )}
           <div
-            className="bg-white rounded shadow-2xl relative"
-            style={{
-              width: (layout?.width || 378) * workspaceZoom,
-              height: (layout?.height || 567) * workspaceZoom,
-              transform: "none",
-            }}
-          >
-            <div
-              ref={canvasContainerRef}
-              style={{ width: "100%", height: "100%" }}
-            />
-          </div>
+              className="bg-white rounded shadow-2xl relative"
+              style={{
+                width: (layout?.width || 378) * workspaceZoom,
+                height: (layout?.height || 567) * workspaceZoom,
+                transform: "none",
+              }}
+            >
+              <div
+                ref={canvasContainerRef}
+                style={{ width: "100%", height: "100%" }}
+              />
+            </div>
         </div>
 
         <div className="w-80 h-full bg-neutral-800 border-l border-neutral-700 p-6 overflow-y-auto">
@@ -983,19 +1056,21 @@ const DesignTestPage = () => {
                   <ImageIcon className="h-3 w-3" /> Fotos / Molduras
                 </h3>
                 {photoFrames.map((obj: any) => {
-                  const id = obj.id || obj.name;
-                  const hasImage = objects.some(
-                    (o: any) => o.name === `uploaded-img-${id}`,
-                  );
+                  const id = obj._frameId || obj.id || obj.name;
+                  const rawId = obj._rawFrameId || obj.id || obj.name;
+                  const hasImage = !!localImages[id];
+                  const frameLabel = obj._pageName
+                    ? `${obj._pageName} - ${obj.name || "Moldura"}`
+                    : obj.name || "Moldura de Foto";
 
                   return (
                     <div
-                      key={id}
+                      key={`${obj._pageIndex ?? 0}-${id}`}
                       className="space-y-3 p-4 bg-neutral-700/30 rounded-xl border border-neutral-600/50"
                     >
                       <div className="flex justify-between items-center">
                         <label className="text-xs text-neutral-400 font-medium">
-                          {obj.name || "Moldura de Foto"}
+                          {frameLabel}
                         </label>
                         {hasImage && (
                           <span className="text-[10px] text-green-500 font-bold">
@@ -1022,7 +1097,7 @@ const DesignTestPage = () => {
                         id={`upload-${id}`}
                         type="file"
                         accept="image/*"
-                        onChange={(e) => handleImageUpload(e, id)}
+                        onChange={(e) => handleImageUpload(e, rawId)}
                         className="hidden"
                       />
                     </div>

@@ -25,6 +25,7 @@ import {
 } from "../ui/dropdown-menu";
 import { Link } from "react-router-dom";
 import { useUI } from "../../contexts/UIContext";
+import { SidebarTrigger } from "../animate-ui/components/radix/sidebar";
 
 interface DesignToolbarProps {
   designId?: string | null;
@@ -77,13 +78,7 @@ export const DesignToolbar = ({
     <header className="flex items-center justify-between h-12 px-6 border-b border-neutral-700 bg-linear-to-r from-teal-500 via-blue-500 to-purple-500 shrink-0">
       <div className="flex items-center w-full">
         <div className="flex items-center gap-3 h-fit">
-          <Button
-            variant="link"
-            className="px-0 py-0 text-white hover:no-underline"
-            onClick={toggleSidebar}
-          >
-            <Menu className="h-4 w-4" />
-          </Button>
+          <SidebarTrigger />
           <h1 className="text-sm font-bold">Arquivo</h1>
           <SeparatorVertical />
           {/* <Button variant="link" onClick={() => onResize(20, 9.4)} className="text-white text-xs gap-1">
@@ -211,7 +206,9 @@ export const DesignToolbar = ({
           placeholder="Nome do design"
         />
         <div className="flex items-center gap-2 bg-black/20 border border-white/10 rounded-md px-2 h-8">
-          <span className="text-[10px] uppercase font-bold text-white/60 whitespace-nowrap">Tempo (h)</span>
+          <span className="text-[10px] uppercase font-bold text-white/60 whitespace-nowrap">
+            Tempo (h)
+          </span>
           <Input
             type="number"
             value={productionTime}

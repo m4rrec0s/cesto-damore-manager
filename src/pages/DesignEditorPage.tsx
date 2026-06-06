@@ -12,6 +12,7 @@ import { DesignSidebar } from "@/components/editor/DesignSidebar";
 import { DesignToolbar } from "@/components/editor/DesignToolbar";
 import { ObjectToolbar } from "@/components/editor/ObjectToolbar";
 import { DesignPanels } from "@/components/editor/DesignPanels";
+import { usePageManager, extractPages } from "@/hooks/usePageManager";
 import placeholderImg from "../assets/placeholder.png";
 import styles from "./DesignEditorPage.module.css";
 
@@ -478,6 +479,19 @@ const DesignEditorPage = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [canvas, setCanvas] = useState<FabricCanvas | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fabricRef = useRef<FabricCanvas | null>(null);
+  const autoSaveTimeout = useRef<NodeJS.Timeout | null>(null);
+  const namesSaveTimeout = useRef<NodeJS.Timeout | null>(null);
+  const isInternalUpdate = useRef(false);
+  const pageManager = usePageManager(
+    canvas,
+    () => { isInternalUpdate.current = true; },
+    () => { isInternalUpdate.current = false; },
+  );
+  const setPageManagerPages = useRef(pageManager.setPages);
+  setPageManagerPages.current = pageManager.setPages;
+
   const [selectedObject, setSelectedObject] = useState<FabricObject | null>(
     null,
   );
@@ -501,7 +515,7 @@ const DesignEditorPage = () => {
   const [workspaceZoom, setWorkspaceZoom] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
   const [snapEnabled, setSnapEnabled] = useState(true);
-  const [rulersEnabled, setRulersEnabled] = useState(true);
+  const [rulersEnabled, setRulersEnabled] = useState(false);
   const [manualGuides, setManualGuides] = useState<GuideLine[]>([]);
   const [guides, setGuides] = useState<GuideLine[]>([]);
   const [guideBadges, setGuideBadges] = useState<GuideBadge[]>([]);
@@ -511,11 +525,6 @@ const DesignEditorPage = () => {
   } | null>(null);
 
   // Refs para gerenciar o estado sem disparar re-renders desnecessários
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fabricRef = useRef<FabricCanvas | null>(null);
-  const autoSaveTimeout = useRef<NodeJS.Timeout | null>(null);
-  const namesSaveTimeout = useRef<NodeJS.Timeout | null>(null);
-  const isInternalUpdate = useRef(false);
   const manualGuidesRef = useRef<GuideLine[]>([]);
   const snapEnabledRef = useRef(snapEnabled);
   const rulersEnabledRef = useRef(rulersEnabled);
@@ -976,33 +985,46 @@ const DesignEditorPage = () => {
             if (parsedState.backgroundColor) {
               setCanvasBg(parsedState.backgroundColor);
               setIsTransparent(parsedState.backgroundColor === "transparent");
+            } else if (parsedState.pages?.[0]?.canvasState?.backgroundColor) {
+              const pageBg = parsedState.pages[0].canvasState.backgroundColor;
+              setCanvasBg(pageBg);
+              setIsTransparent(pageBg === "transparent");
             } else if (layout.backgroundColor) {
               setCanvasBg(layout.backgroundColor);
               setIsTransparent(layout.backgroundColor === "transparent");
             }
 
+            const loadedPages = extractPages(parsedState);
+
             // Converter i-text para textbox para suporte a quebra de linha
             // e garantir que objectCaching esteja desativado para qualidade no zoom
-            if (parsedState.objects) {
-              parsedState.objects = parsedState.objects.map(
-                (obj: FabricObject) => {
-                  const updatedObj = { ...obj, objectCaching: false };
-                  if (updatedObj.type === "i-text") {
-                    updatedObj.type = "textbox";
-                    if (!updatedObj.width) updatedObj.width = 200;
-                  }
-                  return updatedObj;
-                },
-              );
+            const processObjects = (objects: any[]) =>
+              objects.map((obj: FabricObject) => {
+                const updatedObj = { ...obj, objectCaching: false };
+                if (updatedObj.type === "i-text") {
+                  updatedObj.type = "textbox";
+                  if (!updatedObj.width) updatedObj.width = 200;
+                }
+                return updatedObj;
+              });
+
+            for (const page of loadedPages) {
+              if (page.canvasState?.objects) {
+                page.canvasState.objects = processObjects(page.canvasState.objects);
+              }
             }
 
+            setPageManagerPages.current(loadedPages);
+
+            const firstPageCanvasState = loadedPages[0]?.canvasState || parsedState;
             (window as unknown as CustomWindow).__initialCanvasState =
-              parsedState;
+              firstPageCanvasState;
 
             // Pre-load fonts used in the layout
-            if (parsedState.objects) {
+            const allObjects = loadedPages.flatMap((p) => p.canvasState?.objects || []);
+            if (allObjects.length > 0) {
               const fonts = new Set<string>();
-              parsedState.objects.forEach((obj: FabricObject) => {
+              allObjects.forEach((obj: FabricObject) => {
                 if (obj.fontFamily && obj.fontFamily !== "Arial") {
                   fonts.add(obj.fontFamily);
                 }
@@ -1113,7 +1135,7 @@ const DesignEditorPage = () => {
         const handleCanvasModified = () => {
           if (isInternalUpdate.current) return;
           setIsDirty(true);
-          triggerAutoSave();
+          triggerAutoSaveRef.current();
           updateHistory();
         };
 
@@ -1720,7 +1742,6 @@ const DesignEditorPage = () => {
 
       setSaving(true);
       try {
-        // Gerar preview apenas em salvamentos manuais para evitar "fadiga" e lentidão no auto-save
         let previewImageUrl: string | undefined;
         if (isManual) {
           try {
@@ -1740,13 +1761,20 @@ const DesignEditorPage = () => {
           localStorage.getItem("appToken") ||
           "";
 
+        const allPages = await pageManager.saveCurrentPageState();
+
+        const fabricJsonState = {
+          pages: allPages,
+          activePageIndex: pageManager.activePageIndex,
+        };
+
         await layoutApiService.updateLayout(layoutId, {
           name: designName,
-          fabricJsonState: currentCanvas.toObject(CUSTOM_PROPS),
+          fabricJsonState,
           width: Math.round(dimensions.width),
           height: Math.round(dimensions.height),
           productionTime,
-          previewImageUrl, // Se for auto-save, envia undefined e mantém o atual no banco
+          previewImageUrl,
           token,
           isPublished: isManual ? true : undefined,
         });
@@ -1766,8 +1794,12 @@ const DesignEditorPage = () => {
       dimensions.width,
       dimensions.height,
       productionTime,
+      pageManager,
     ],
   );
+
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
 
   const triggerAutoSave = useCallback(() => {
     if (autoSaveTimeout.current) {
@@ -1776,10 +1808,13 @@ const DesignEditorPage = () => {
     autoSaveTimeout.current = setTimeout(() => {
       const currentCanvas = (canvas || fabricRef.current) as FabricCanvas;
       if (currentCanvas) {
-        handleSave(false);
+        handleSaveRef.current(false);
       }
-    }, 3000); // 3 seconds of inactivity
-  }, [canvas, handleSave]);
+    }, 3000);
+  }, [canvas]);
+
+  const triggerAutoSaveRef = useRef(triggerAutoSave);
+  triggerAutoSaveRef.current = triggerAutoSave;
 
   const handleUndo = useCallback(async () => {
     if (historyIndex <= 0 || !canvas) return;
@@ -2078,7 +2113,7 @@ const DesignEditorPage = () => {
 
         const oldZoom = workspaceZoomRef.current || workspaceZoom;
         const delta = ev.deltaY;
-        const newZoom = clamp(oldZoom * 0.999 ** delta, 0.1, 5);
+        const newZoom = clamp(oldZoom * 0.998 ** delta, 0.1, 5);
 
         const relX = container.scrollLeft + x;
         const relY = container.scrollTop + y;
@@ -2125,7 +2160,7 @@ const DesignEditorPage = () => {
 
     const oldZoom = workspaceZoomRef.current || workspaceZoom;
     const delta = e.deltaY;
-    const newZoom = clamp(oldZoom * 0.999 ** delta, 0.1, 5);
+    const newZoom = clamp(oldZoom * 0.998 ** delta, 0.1, 5);
 
     // Compute scroll so the point under the cursor stays fixed
     const relX = container.scrollLeft + x;
@@ -2167,10 +2202,13 @@ const DesignEditorPage = () => {
 
   if (loading) {
     return (
-      <div className="h-screen w-full flex items-center justify-center bg-[#0d1216] text-white">
-        <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
-          <p>Inicializando editor...</p>
+      <div className="h-screen w-full flex items-center justify-center bg-[#0d1216]">
+        <div className="flex flex-col items-center gap-5">
+          <div className="relative">
+            <div className="h-10 w-10 rounded-full border-2 border-neutral-700" />
+            <div className="absolute inset-0 h-10 w-10 rounded-full border-2 border-transparent border-t-pink-500 animate-spin" />
+          </div>
+          <p className="text-sm text-neutral-400 tracking-wide">Carregando editor...</p>
         </div>
       </div>
     );
@@ -2295,7 +2333,8 @@ const DesignEditorPage = () => {
 
         <div
           ref={containerRef}
-          className="flex-1 flex items-center justify-center bg-[#0d1216] relative p-8 overflow-auto custom-scrollbar"
+          className="flex-1 flex flex-col items-center bg-[#0d1216] relative overflow-auto scrollbar-thin scrollbar-thumb-neutral-700 scrollbar-track-transparent"
+          style={{ paddingTop: '3rem', paddingBottom: '6rem' }}
           onClick={(e) => {
             if (e.target === e.currentTarget && canvas) {
               (canvas as FabricCanvas).discardActiveObject();
@@ -2303,6 +2342,33 @@ const DesignEditorPage = () => {
             }
           }}
         >
+          {/* Page header — name, duplicate, delete */}
+          <div className="sticky top-0 z-30 flex items-center gap-2 mb-3 px-3 py-1.5 bg-neutral-900/80 backdrop-blur-sm rounded-lg border border-neutral-700/50">
+            <input
+              type="text"
+              value={pageManager.pages[pageManager.activePageIndex]?.name || `Página ${pageManager.activePageIndex + 1}`}
+              onChange={(e) => pageManager.renamePage(pageManager.activePageIndex, e.target.value)}
+              className="text-[11px] font-medium text-neutral-300 bg-transparent border-none outline-none w-24 focus:bg-neutral-700/50 focus:px-1.5 focus:rounded transition-all"
+            />
+            <div className="h-3 w-px bg-neutral-600" />
+            <button
+              onClick={() => pageManager.duplicatePage(pageManager.activePageIndex)}
+              className="text-[10px] text-neutral-400 hover:text-white px-1.5 py-0.5 rounded hover:bg-neutral-700/50 transition-colors"
+              title="Duplicar página"
+            >
+              Duplicar
+            </button>
+            {pageManager.pages.length > 1 && (
+              <button
+                onClick={() => pageManager.removePage(pageManager.activePageIndex)}
+                className="text-[10px] text-neutral-400 hover:text-red-400 px-1.5 py-0.5 rounded hover:bg-neutral-700/50 transition-colors"
+                title="Excluir página"
+              >
+                Excluir
+              </button>
+            )}
+          </div>
+
           <div
             ref={stageRef}
             className="relative shrink-0"
@@ -2493,16 +2559,54 @@ const DesignEditorPage = () => {
             </div>
           </div>
 
-          <div className="absolute bottom-4 right-4 flex items-center gap-2 bg-neutral-900/80 px-3 py-1.5 rounded-full backdrop-blur-sm border border-neutral-700 text-[10px] text-neutral-300">
-            <span>
-              {Math.round((dimensions.width / CM_TO_PX) * 10) / 10} x{" "}
-              {Math.round((dimensions.height / CM_TO_PX) * 10) / 10} cm
+          <div className="fixed bottom-4 right-4 z-50 flex items-center gap-1.5 bg-neutral-900/90 px-3 py-2 rounded-lg backdrop-blur-md border border-neutral-700/50 text-[10px] text-neutral-400 shadow-xl">
+            <button
+              onClick={() => smoothZoom(Math.max(0.1, workspaceZoom - 0.1), { x: (dimensions.width * workspaceZoom) / 2, y: (dimensions.height * workspaceZoom) / 2 }, 120)}
+              className="px-1.5 py-0.5 hover:text-white hover:bg-neutral-700/50 rounded transition-colors"
+            >
+              −
+            </button>
+            <span className="font-medium text-neutral-200 min-w-[3ch] text-center">
+              {Math.round(workspaceZoom * 100)}%
             </span>
-            <span className="h-3 w-px bg-white/20 mx-1"></span>
-            <span>{Math.round(workspaceZoom * 100)}%</span>
-            <span className="h-3 w-px bg-white/20 mx-1"></span>
-            <span>96 DPI</span>
+            <button
+              onClick={() => smoothZoom(Math.min(5, workspaceZoom + 0.1), { x: (dimensions.width * workspaceZoom) / 2, y: (dimensions.height * workspaceZoom) / 2 }, 120)}
+              className="px-1.5 py-0.5 hover:text-white hover:bg-neutral-700/50 rounded transition-colors"
+            >
+              +
+            </button>
+            <span className="h-3 w-px bg-neutral-600 mx-1" />
+            <span>
+              {Math.round((dimensions.width / CM_TO_PX) * 10) / 10} × {Math.round((dimensions.height / CM_TO_PX) * 10) / 10} cm
+            </span>
           </div>
+
+          {/* Page navigation pills */}
+          {pageManager.pages.length > 1 && (
+            <div className="flex items-center gap-1.5 mt-4 mb-2">
+              {pageManager.pages.map((pg, idx) => (
+                <button
+                  key={pg.id}
+                  onClick={() => pageManager.switchToPage(idx)}
+                  className={`px-3 py-1 text-[11px] rounded-md transition-all ${
+                    idx === pageManager.activePageIndex
+                      ? "bg-white/10 text-white border border-white/20"
+                      : "text-neutral-500 hover:text-neutral-300 hover:bg-white/5"
+                  }`}
+                >
+                  {pg.name || `${idx + 1}`}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* + Adicionar Página */}
+          <button
+            onClick={pageManager.addPage}
+            className="mt-4 mb-8 w-full max-w-[200px] py-3 border-2 border-dashed border-neutral-700 rounded-xl text-neutral-500 text-xs hover:border-neutral-500 hover:text-neutral-300 transition-colors"
+          >
+            + Adicionar página
+          </button>
         </div>
       </main>
     </section>

@@ -75,24 +75,24 @@ export function Layout({ children }: { children: ReactNode }) {
         <SidebarRail />
       </Sidebar>
 
-      <SidebarInset
-        className={
-          path.startsWith("/layouts/editor") ? "bg-[#0d1216]" : "bg-neutral-100"
-        }
-      >
-        <header className="flex h-14 items-center gap-2 border-b border-neutral-200 bg-white px-4">
-          <SidebarTrigger className="-ml-1" />
-          <span className="text-sm font-semibold text-neutral-900">
-            Cesto D'Amore
-          </span>
-        </header>
+      {!path.startsWith("/layouts") ? (
+        <SidebarInset>
+          <header className="flex h-14 items-center gap-2 border-b border-neutral-200 bg-white px-4">
+            <SidebarTrigger className="-ml-1" />
+            <span className="text-sm font-semibold text-neutral-900">
+              Cesto D'Amore
+            </span>
+          </header>
 
-        <main
-          className={`flex-1 min-h-0 ${path.startsWith("/service") ? "overflow-hidden" : "overflow-auto"}`}
-        >
-          {children}
-        </main>
-      </SidebarInset>
+          <main
+            className={`flex-1 min-h-0 ${path.startsWith("/service") ? "overflow-hidden" : "overflow-auto"}`}
+          >
+            {children}
+          </main>
+        </SidebarInset>
+      ) : (
+        <main className="flex-1 min-h-0 overflow-auto">{children}</main>
+      )}
     </SidebarProvider>
   );
 }

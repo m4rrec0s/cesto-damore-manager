@@ -1,8 +1,12 @@
 .designCanvas {
     background-color: white;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.05),
+        0 25px 50px -12px rgba(0, 0, 0, 0.4);
     position: relative;
     flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 2px;
     width: var(--design-width, 756px);
     height: var(--design-height, 355.4px);
 }
