@@ -78,11 +78,14 @@ export function usePageManager(
   canvas: FabricLike | null,
   onBeforeLoad?: () => void,
   onAfterLoad?: () => void,
+  baseDimensions?: { width: number; height: number },
 ) {
   const [pages, setPages] = useState<DynamicLayoutPage[]>([]);
   const [activePageIndex, setActivePageIndex] = useState(0);
   const [isPageSwitching, setIsPageSwitching] = useState(false);
   const serializeWorkerRef = useRef<Worker | null>(null);
+  const baseDimensionsRef = useRef(baseDimensions);
+  baseDimensionsRef.current = baseDimensions;
 
   const pagesRef = useRef(pages);
   pagesRef.current = pages;
@@ -109,6 +112,12 @@ export function usePageManager(
     if (!c || currentPages.length === 0) return currentPages;
 
     const canvasState = await serializeInWorker(c, serializeWorkerRef.current);
+
+    // Fix: save base design dimensions, not backstore (DPR-scaled) dimensions
+    if (baseDimensionsRef.current) {
+      canvasState.width = baseDimensionsRef.current.width;
+      canvasState.height = baseDimensionsRef.current.height;
+    }
 
     const thumbnailDataUrl = c.toDataURL({
       multiplier: 0.15,

@@ -484,10 +484,15 @@ const DesignEditorPage = () => {
   const autoSaveTimeout = useRef<NodeJS.Timeout | null>(null);
   const namesSaveTimeout = useRef<NodeJS.Timeout | null>(null);
   const isInternalUpdate = useRef(false);
+  const [dimensions, setDimensions] = useState({
+    width: 10 * CM_TO_PX,
+    height: 15 * CM_TO_PX,
+  });
   const pageManager = usePageManager(
     canvas,
     () => { isInternalUpdate.current = true; },
     () => { isInternalUpdate.current = false; },
+    dimensions,
   );
   const setPageManagerPages = useRef(pageManager.setPages);
   setPageManagerPages.current = pageManager.setPages;
@@ -498,10 +503,6 @@ const DesignEditorPage = () => {
   const [designName, setDesignName] = useState("Novo Design");
   const [canvasBg, setCanvasBg] = useState("#ffffff");
   const [isTransparent, setIsTransparent] = useState(false);
-  const [dimensions, setDimensions] = useState({
-    width: 10 * CM_TO_PX,
-    height: 15 * CM_TO_PX,
-  });
   const [productionTime, setProductionTime] = useState(0);
   const [activePanel, setActivePanel] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState(false);
