@@ -24,7 +24,7 @@ import { BotChatTest } from "./pages/BotChatTest";
 import { UIProvider } from "./contexts/UIContext";
 import { StockManager } from "./pages/StockManager";
 import { AgentLogsPage } from "./pages/AgentLogsPage";
-import { PrinterSettings } from "./pages/PrinterSettings";
+
 import { ManualPrintOrder } from "./pages/ManualPrintOrder";
 import { DevicesPage } from "./pages/DevicesPage";
 
@@ -226,15 +226,8 @@ export default function App() {
           }
         />
 
-        {/* Printer Settings */}
-        <Route
-          path="/settings/printers"
-          element={
-            <AdminRoute>
-              <PrinterSettings />
-            </AdminRoute>
-          }
-        />
+        {/* Redirect old printers page to devices */}
+        <Route path="/settings/printers" element={<Navigate to="/settings/devices" replace />} />
 
         {/* Print Devices */}
         <Route
