@@ -3,7 +3,7 @@ import { useApi } from "../services/api";
 import { Monitor, Wifi, WifiOff, Star, Trash2, RefreshCw } from "lucide-react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import Layout from "../components/Layout";
+import { Layout } from "../components/Layout";
 
 interface DevicePrinter {
   name: string;
@@ -65,7 +65,7 @@ export function DevicesPage() {
   }, [api]);
 
   const setDefault = async (deviceId: string) => {
-    await api.patch(`/print-agent/devices/${deviceId}/default`);
+    await api.put(`/print-agent/devices/${deviceId}/default`, {});
     setDevices((prev) => prev.map((d) => ({ ...d, isDefault: d.deviceId === deviceId })));
   };
 
