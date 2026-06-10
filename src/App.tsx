@@ -26,6 +26,7 @@ import { StockManager } from "./pages/StockManager";
 import { AgentLogsPage } from "./pages/AgentLogsPage";
 import { PrinterSettings } from "./pages/PrinterSettings";
 import { ManualPrintOrder } from "./pages/ManualPrintOrder";
+import { DevicesPage } from "./pages/DevicesPage";
 
 export default function App() {
   return (
@@ -231,6 +232,16 @@ export default function App() {
           element={
             <AdminRoute>
               <PrinterSettings />
+            </AdminRoute>
+          }
+        />
+
+        {/* Print Devices */}
+        <Route
+          path="/settings/devices"
+          element={
+            <AdminRoute>
+              <DevicesPage />
             </AdminRoute>
           }
         />

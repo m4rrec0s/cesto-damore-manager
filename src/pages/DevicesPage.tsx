@@ -1,0 +1,173 @@
+import { useEffect, useState, useCallback } from "react";
+import { useApi } from "../services/api";
+import { Monitor, Wifi, WifiOff, Star, Trash2, RefreshCw } from "lucide-react";
+import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import Layout from "../components/Layout";
+
+interface DevicePrinter {
+  name: string;
+  status: number;
+}
+
+interface Device {
+  deviceId: string;
+  deviceName: string;
+  ip: string;
+  printers: DevicePrinter[];
+  connectedAt: string;
+  lastSeenAt: string;
+  isDefault: boolean;
+  isActive: boolean;
+}
+
+const PRINTER_STATUS: Record<number, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+  0: { label: "Idle", variant: "default" },
+  1: { label: "Pausada", variant: "secondary" },
+  2: { label: "Erro", variant: "destructive" },
+  3: { label: "Removendo", variant: "outline" },
+  8: { label: "Economia", variant: "secondary" },
+};
+
+export function DevicesPage() {
+  const api = useApi();
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchDevices = useCallback(async () => {
+    try {
+      const res = await api.get("/print-agent/devices");
+      setDevices(res.data);
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    fetchDevices();
+  }, [fetchDevices]);
+
+  // SSE for real-time updates
+  useEffect(() => {
+    const baseUrl = (api as any).defaults?.baseURL || "";
+    const source = new EventSource(`${baseUrl}/print-agent/devices/stream`);
+    source.onmessage = (e) => {
+      try {
+        const update: Partial<Device> & { deviceId: string } = JSON.parse(e.data);
+        setDevices((prev) =>
+          prev.map((d) => (d.deviceId === update.deviceId ? { ...d, ...update } : d))
+        );
+      } catch { /* ignore */ }
+    };
+    return () => source.close();
+  }, [api]);
+
+  const setDefault = async (deviceId: string) => {
+    await api.patch(`/print-agent/devices/${deviceId}/default`);
+    setDevices((prev) => prev.map((d) => ({ ...d, isDefault: d.deviceId === deviceId })));
+  };
+
+  const removeDevice = async (deviceId: string) => {
+    if (!confirm("Remover este dispositivo?")) return;
+    await api.delete(`/print-agent/devices/${deviceId}`);
+    setDevices((prev) => prev.filter((d) => d.deviceId !== deviceId));
+  };
+
+  const onlineCount = devices.filter((d) => d.isActive).length;
+
+  return (
+    <Layout>
+      <div className="p-6 max-w-5xl mx-auto">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-xl font-bold">Dispositivos Vinculados</h1>
+            <p className="text-sm text-neutral-500 mt-1">
+              {onlineCount} online de {devices.length} total
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={fetchDevices} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+            Atualizar
+          </Button>
+        </div>
+
+        {devices.length === 0 && !loading ? (
+          <div className="text-center py-16 text-neutral-400">
+            <Monitor className="w-12 h-12 mx-auto mb-3 opacity-40" />
+            <p>Nenhum dispositivo conectado ainda</p>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {devices.map((device) => (
+              <div
+                key={device.deviceId}
+                className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
+                  device.isActive
+                    ? "bg-white border-neutral-200 hover:border-neutral-300"
+                    : "bg-neutral-50 border-neutral-100 opacity-70"
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  device.isActive ? "bg-emerald-50 text-emerald-600" : "bg-neutral-100 text-neutral-400"
+                }`}>
+                  {device.isActive ? <Wifi size={20} /> : <WifiOff size={20} />}
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm truncate">{device.deviceName}</span>
+                    {device.isDefault && (
+                      <Badge variant="default" className="text-[10px] px-1.5 py-0">Padrão</Badge>
+                    )}
+                  </div>
+                  <div className="text-xs text-neutral-400 mt-0.5">
+                    IP: {device.ip || "—"} • Última atividade: {new Date(device.lastSeenAt).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit" })}
+                  </div>
+                  {Array.isArray(device.printers) && device.printers.length > 0 && (
+                    <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                      {device.printers.map((p) => {
+                        const info = PRINTER_STATUS[p.status] ?? PRINTER_STATUS[0];
+                        return (
+                          <Badge key={p.name} variant={info.variant} className="text-[10px]">
+                            {p.name} ({info.label})
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {!device.isDefault && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      title="Definir como padrão"
+                      onClick={() => setDefault(device.deviceId)}
+                    >
+                      <Star size={14} />
+                    </Button>
+                  )}
+                  {!device.isActive && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-500 hover:text-red-700"
+                      title="Remover dispositivo"
+                      onClick={() => removeDevice(device.deviceId)}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}
