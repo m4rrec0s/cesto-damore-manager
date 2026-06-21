@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import { AdminRoute } from "./contexts/AdminRoute";
+import { useAuth } from "./contexts/useAuth";
 import { LoginForm } from "./components/LoginForm";
 import { Dashboard } from "./pages/Dashboard";
 import { Toaster } from "sonner";
@@ -31,6 +32,7 @@ import { ManualPrintOrder } from "./pages/ManualPrintOrder";
 import { DevicesPage } from "./pages/DevicesPage";
 
 export default function App() {
+  const { user } = useAuth();
   const {
     permission,
     enabled,
@@ -39,6 +41,9 @@ export default function App() {
   } = useOrderNotifications();
 
   useEffect(() => {
+    // Só solicita permissão se o usuário estiver autenticado
+    if (!user) return;
+
     // Solicitar permissão apenas se ainda não foi solicitada
     if (permission.status === "default" && !permission.requested) {
       // Aguarda 2 segundos e solicita permissão
@@ -55,7 +60,7 @@ export default function App() {
       // Se já tem permissão mas não está ativo, iniciar
       startPolling();
     }
-  }, [permission.status, permission.requested, enabled, requestPermission, startPolling]);
+  }, [user, permission.status, permission.requested, enabled, requestPermission, startPolling]);
 
   return (
     <UIProvider>
