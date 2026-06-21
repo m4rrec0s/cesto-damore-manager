@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom";
+import { useEffect } from "react";
 import { AdminRoute } from "./contexts/AdminRoute";
 import { LoginForm } from "./components/LoginForm";
 import { Dashboard } from "./pages/Dashboard";
@@ -24,11 +25,37 @@ import { BotChatTest } from "./pages/BotChatTest";
 import { UIProvider } from "./contexts/UIContext";
 import { StockManager } from "./pages/StockManager";
 import { AgentLogsPage } from "./pages/AgentLogsPage";
+import { useOrderNotifications } from "./hooks/useOrderNotifications";
 
 import { ManualPrintOrder } from "./pages/ManualPrintOrder";
 import { DevicesPage } from "./pages/DevicesPage";
 
 export default function App() {
+  const {
+    permission,
+    enabled,
+    requestPermission,
+    startPolling,
+  } = useOrderNotifications();
+
+  useEffect(() => {
+    // Solicitar permissão de notificação quando o app iniciar
+    // apenas se ainda não foi solicitada
+    if (permission.status === "default" && !permission.requested) {
+      const timer = setTimeout(async () => {
+        const granted = await requestPermission();
+        if (granted) {
+          startPolling();
+        }
+      }, 2000); // Aguarda 2 segundos após o carregamento
+
+      return () => clearTimeout(timer);
+    } else if (permission.status === "granted" && !enabled) {
+      // Se já tem permissão mas não está ativo, iniciar
+      startPolling();
+    }
+  }, [permission, enabled, requestPermission, startPolling]);
+
   return (
     <UIProvider>
       <Toaster
