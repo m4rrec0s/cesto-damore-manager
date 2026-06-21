@@ -65,6 +65,7 @@ type OrderSummary = Order & {
 const STATUS_LABELS: Record<OrderStatus, string> = {
   PENDING: "Pendente",
   PAID: "Pago",
+  PAID_STOCK_FAILED: "Pago - Erro no Estoque",
   SHIPPED: "Enviado",
   DELIVERED: "Entregue",
   CANCELED: "Cancelado",
@@ -73,6 +74,7 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
 const STATUS_COLORS: Record<OrderStatus, string> = {
   PENDING: "bg-amber-100 text-amber-600 border-amber-200",
   PAID: "bg-emerald-100 text-emerald-700 border-emerald-200",
+  PAID_STOCK_FAILED: "bg-red-100 text-red-600 border-red-200",
   SHIPPED: "bg-blue-100 text-blue-700 border-blue-200",
   DELIVERED: "bg-neutral-100 text-neutral-700 border-neutral-200",
   CANCELED: "bg-gray-100 text-gray-700 border-gray-200",
@@ -165,6 +167,9 @@ export function Orders() {
   } | null>(null);
   const [printJobs, setPrintJobs] = useState<
     Record<string, { id: string; status: string; lastError?: string | null }>
+  >({});
+  const [decrementingItems, setDecrementingItems] = useState<
+    Record<string, boolean>
   >({});
 
   const fetchOrders = useCallback(async () => {
@@ -272,6 +277,30 @@ export function Orders() {
       }, 2000);
     } catch (e) {
       toast.error(extractErrorMessage(e, "Erro ao reenfileirar impressão"));
+    }
+  };
+
+  const handleManualStockDecrement = async (
+    orderId: string,
+    orderItemId: string,
+  ) => {
+    const key = `${orderId}-${orderItemId}`;
+    setDecrementingItems((prev) => ({ ...prev, [key]: true }));
+
+    try {
+      await api.manualStockDecrement(orderId, orderItemId);
+      toast.success("Estoque decrementado com sucesso!");
+
+      // Recarrega os detalhes do pedido
+      const details = await api.getOrder(orderId);
+      setOrderDetails((prev) => ({ ...prev, [orderId]: details }));
+
+      // Atualiza a lista de pedidos
+      await fetchOrders();
+    } catch (e) {
+      toast.error(extractErrorMessage(e, "Erro ao decrementar estoque"));
+    } finally {
+      setDecrementingItems((prev) => ({ ...prev, [key]: false }));
     }
   };
 
@@ -823,6 +852,55 @@ export function Orders() {
                                       ✓ Revisada
                                     </span>
                                   </div>
+
+                                  {details.status === "PAID_STOCK_FAILED" && (
+                                    <div className="rounded-xl bg-red-50 border border-red-200 p-3 space-y-2">
+                                      <div className="flex items-center gap-2 text-red-700">
+                                        <XCircle size={14} />
+                                        <span className="text-xs font-bold">
+                                          Falha ao decrementar estoque
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-red-600">
+                                        O estoque não pôde ser decrementado automaticamente. 
+                                        Verifique a disponibilidade e tente manualmente.
+                                      </p>
+                                      <Button
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleManualStockDecrement(
+                                            details.id,
+                                            item.id,
+                                          );
+                                        }}
+                                        disabled={
+                                          decrementingItems[
+                                            `${details.id}-${item.id}`
+                                          ]
+                                        }
+                                        className="w-full text-red-600 bg-white border border-red-300 hover:bg-red-100"
+                                      >
+                                        {decrementingItems[
+                                          `${details.id}-${item.id}`
+                                        ] ? (
+                                          <>
+                                            <Loader2
+                                              size={12}
+                                              className="animate-spin"
+                                            />
+                                            Decrementando...
+                                          </>
+                                        ) : (
+                                          <>
+                                            <RefreshCw size={12} />
+                                            Decrementar Estoque Manualmente
+                                          </>
+                                        )}
+                                      </Button>
+                                    </div>
+                                  )}
+
                                   {!item.customizations ||
                                   item.customizations.length === 0 ? (
                                     <div className="rounded-xl p-4 text-xs text-neutral-500">

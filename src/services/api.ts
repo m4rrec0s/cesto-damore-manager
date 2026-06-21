@@ -400,6 +400,7 @@ export interface OrdersResponse {
 export type OrderStatus =
   | "PENDING"
   | "PAID"
+  | "PAID_STOCK_FAILED"
   | "SHIPPED"
   | "DELIVERED"
   | "CANCELED";
@@ -1236,6 +1237,9 @@ class ApiService {
   deleteAllCanceledOrders = async () =>
     (await this.delete("/orders/canceled/all")).data;
 
+  manualStockDecrement = async (orderId: string, orderItemId: string) =>
+    (await this.post(`/orders/${orderId}/items/${orderItemId}/manual-stock-decrement`, {})).data;
+
   // ===== Image Upload =====
   uploadImage = async (file: File): Promise<{ url: string }> => {
     const formData = new FormData();
@@ -1533,7 +1537,7 @@ class ApiService {
   getKBAnalytics = async () => (await this.get("/kb/analytics")).data;
 
   // ===== Print / Printer Configuration =====
-  getAgentStatus = async (): Promise<{ connected: boolean }> =>
+  getAgentStatus = async (): Promise<{ connected: boolean; deviceName: string | null; deviceId: string | null }> =>
     (await this.get("/api/print/agent-status")).data;
 
   getAvailablePrinters = async (): Promise<{
@@ -1541,16 +1545,23 @@ class ApiService {
     agentConnected: boolean;
   }> => (await this.get("/api/print/available-printers")).data;
 
-  getPrinterConfig = async (): Promise<Record<string, unknown>> =>
-    (await this.get("/admin/printer-config")).data;
+  getPrinterConfig = async (deviceId?: string): Promise<Record<string, unknown>> => {
+    const params = deviceId ? { deviceId } : {};
+    return (await this.get("/admin/printer-config", { params })).data;
+  };
 
   savePrinterConfig = async (
     role: string,
-    data: { printerName: string; isActive: boolean },
+    data: { printerName: string; isActive: boolean; deviceId?: string },
   ) => (await this.put(`/admin/printer-config/${role}`, data)).data;
 
-  deletePrinterConfig = async (role: string) =>
-    (await this.delete(`/admin/printer-config/${role}`)).data;
+  deletePrinterConfig = async (role: string, deviceId?: string) => {
+    let url = `/admin/printer-config/${role}`;
+    if (deviceId) {
+      url += `?deviceId=${encodeURIComponent(deviceId)}`;
+    }
+    return (await this.delete(url)).data;
+  };
 
   getPrintJobStatus = async (orderId: string): Promise<{
     id: string;
