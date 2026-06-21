@@ -1,22 +1,25 @@
-import { useEffect, useState, useCallback } from "react";
-import { useApi } from "../services/api";
+import { useCallback, useEffect, useState } from "react";
 import {
+  ChevronDown,
   Monitor,
-  Wifi,
-  WifiOff,
+  RefreshCw,
+  Save,
   Star,
   Trash2,
-  RefreshCw,
-  ChevronDown,
-  Save,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
-import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
 import { toast } from "sonner";
+import useApi from "../services/api";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+
+/* ─── Types ────────────────────────────────────────────────────────────── */
 
 interface DevicePrinter {
   name: string;
   status: number;
+  role?: 'photo' | 'letter' | null;
 }
 
 interface Device {
@@ -30,19 +33,25 @@ interface Device {
   isActive: boolean;
 }
 
+interface DevicePrinterConfig {
+  photo: string;
+  letter: string;
+}
+
+/* ─── Constants ────────────────────────────────────────────────────────── */
+
 const PRINTER_STATUS: Record<
   number,
-  {
-    label: string;
-    variant: "default" | "secondary" | "destructive" | "outline";
-  }
+  { label: string; variant: "default" | "secondary" | "destructive" | "outline" }
 > = {
-  0: { label: "Idle", variant: "default" },
+  0: { label: "Pronta", variant: "default" },
   1: { label: "Pausada", variant: "secondary" },
   2: { label: "Erro", variant: "destructive" },
   3: { label: "Removendo", variant: "outline" },
   8: { label: "Economia", variant: "secondary" },
 };
+
+/* ─── Component ────────────────────────────────────────────────────────── */
 
 export function DevicesPage() {
   const api = useApi();
@@ -50,11 +59,13 @@ export function DevicesPage() {
   const [loading, setLoading] = useState(true);
   const [expandedDevice, setExpandedDevice] = useState<string | null>(null);
 
-  // Printer config state (global — syncs to default device)
-  const [photoPrinter, setPhotoPrinter] = useState("");
-  const [letterPrinter, setLetterPrinter] = useState("");
-  const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
+  // Per-device printer config
+  const [deviceConfigs, setDeviceConfigs] = useState<
+    Record<string, DevicePrinterConfig>
+  >({});
   const [savingPrinter, setSavingPrinter] = useState(false);
+
+  /* ─── Fetch devices ──────────────────────────────────────────────────── */
 
   const fetchDevices = useCallback(async () => {
     try {
@@ -67,30 +78,21 @@ export function DevicesPage() {
     }
   }, [api]);
 
-  const loadPrinterConfig = useCallback(async () => {
-    try {
-      const [printersRes, configRes] = await Promise.all([
-        api.getAvailablePrinters(),
-        api.getPrinterConfig(),
-      ]);
-      setAvailablePrinters(printersRes.printers);
-      const cfg = configRes as Record<string, any>;
-      setPhotoPrinter(cfg.photo?.printerName ?? "");
-      setLetterPrinter(cfg.letter?.printerName ?? "");
-    } catch {
-      /* silent */
-    }
-  }, [api]);
-
   useEffect(() => {
     fetchDevices();
-    loadPrinterConfig();
-  }, [fetchDevices, loadPrinterConfig]);
+  }, [fetchDevices]);
 
-  // SSE for real-time updates
+  /* ─── SSE for real-time updates ──────────────────────────────────────── */
+
   useEffect(() => {
     const baseUrl = import.meta.env.VITE_API_URL || "";
-    const source = new EventSource(`${baseUrl}/print-agent/devices/stream`);
+    const apiKey =
+      import.meta.env.VITE_API_KEY ||
+      import.meta.env.VITE_AI_AGENT_API_KEY ||
+      import.meta.env.VITE_AI_API_KEY ||
+      "";
+    const params = apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : "";
+    const source = new EventSource(`${baseUrl}/print-agent/devices/stream${params}`);
     source.onmessage = (e) => {
       try {
         const update: Partial<Device> & { deviceId: string } = JSON.parse(
@@ -106,7 +108,148 @@ export function DevicesPage() {
       }
     };
     return () => source.close();
-  }, [api]);
+  }, []);
+
+  /* ─── Load printer config for a device ───────────────────────────────── */
+
+  const loadDevicePrinterConfig = useCallback(
+    async (deviceId: string) => {
+      try {
+        // Get config from the device's printers field
+        const device = devices.find((d) => d.deviceId === deviceId)
+        if (!device) return
+        
+        const photoPrinter = device.printers.find((p) => p.role === 'photo')
+        const letterPrinter = device.printers.find((p) => p.role === 'letter')
+        
+        setDeviceConfigs((prev) => ({
+          ...prev,
+          [deviceId]: {
+            photo: photoPrinter?.name ?? "",
+            letter: letterPrinter?.name ?? "",
+          },
+        }));
+      } catch {
+        /* silent */
+      }
+    },
+    [devices],
+  );
+
+  /* ─── Handle expand device ───────────────────────────────────────────── */
+
+  const handleExpandDevice = useCallback(
+    (deviceId: string) => {
+      if (expandedDevice === deviceId) {
+        setExpandedDevice(null);
+        return;
+      }
+      setExpandedDevice(deviceId);
+      loadDevicePrinterConfig(deviceId);
+    },
+    [expandedDevice, loadDevicePrinterConfig],
+  );
+
+  /* ─── Save printer config for a device ───────────────────────────────── */
+
+  const savePrinterForRole = async (
+    deviceId: string,
+    role: "photo" | "letter",
+    printerName: string,
+  ) => {
+    setSavingPrinter(true);
+    try {
+      await api.savePrinterConfig(role, {
+        printerName,
+        isActive: true,
+        deviceId,
+      });
+      
+      // Update local device state to reflect the new role assignment
+      setDevices((prev) =>
+        prev.map((d) => {
+          if (d.deviceId !== deviceId) return d
+          
+          // Remove this role from any other printer
+          const updatedPrinters = d.printers.map((p) => {
+            if (p.name === printerName) {
+              return { ...p, role }
+            }
+            if (p.role === role) {
+              return { ...p, role: null }
+            }
+            return p
+          })
+          
+          // If printer doesn't exist in the list, add it
+          if (!updatedPrinters.find((p) => p.name === printerName)) {
+            updatedPrinters.push({ name: printerName, status: 0, role })
+          }
+          
+          return { ...d, printers: updatedPrinters }
+        })
+      )
+      
+      // Update config state
+      setDeviceConfigs((prev) => ({
+        ...prev,
+        [deviceId]: {
+          ...prev[deviceId],
+          [role]: printerName,
+        },
+      }));
+      
+      toast.success(
+        `Impressora de ${role === "photo" ? "fotos" : "cartinhas"} salva para este dispositivo`,
+      );
+    } catch {
+      toast.error("Erro ao salvar impressora");
+    } finally {
+      setSavingPrinter(false);
+    }
+  };
+
+  /* ─── Delete printer config for a device ─────────────────────────────── */
+
+  const deletePrinterForRole = async (
+    deviceId: string,
+    role: "photo" | "letter",
+  ) => {
+    try {
+      await api.deletePrinterConfig(role, deviceId);
+      
+      // Update local device state to remove the role
+      setDevices((prev) =>
+        prev.map((d) => {
+          if (d.deviceId !== deviceId) return d
+          
+          const updatedPrinters = d.printers.map((p) => {
+            if (p.role === role) {
+              return { ...p, role: null }
+            }
+            return p
+          })
+          
+          return { ...d, printers: updatedPrinters }
+        })
+      )
+      
+      // Update config state
+      setDeviceConfigs((prev) => ({
+        ...prev,
+        [deviceId]: {
+          ...prev[deviceId],
+          [role]: "",
+        },
+      }));
+      
+      toast.success("Configuração removida");
+    } catch {
+      toast.error("Erro ao remover configuração");
+    }
+  };
+
+  /* ─── Set default device ─────────────────────────────────────────────── */
 
   const setDefault = async (deviceId: string) => {
     await api.put(`/print-agent/devices/${deviceId}/default`, {});
@@ -116,6 +259,8 @@ export function DevicesPage() {
     toast.success("Dispositivo padrão atualizado");
   };
 
+  /* ─── Remove device ──────────────────────────────────────────────────── */
+
   const removeDevice = async (deviceId: string) => {
     if (!confirm("Remover este dispositivo?")) return;
     await api.delete(`/print-agent/devices/${deviceId}`);
@@ -123,22 +268,7 @@ export function DevicesPage() {
     toast.success("Dispositivo removido");
   };
 
-  const savePrinterForRole = async (
-    role: "photo" | "letter",
-    printerName: string,
-  ) => {
-    setSavingPrinter(true);
-    try {
-      await api.savePrinterConfig(role, { printerName, isActive: true });
-      toast.success(
-        `Impressora de ${role === "photo" ? "fotos" : "cartinhas"} salva`,
-      );
-    } catch {
-      toast.error("Erro ao salvar impressora");
-    } finally {
-      setSavingPrinter(false);
-    }
-  };
+  /* ─── Render ─────────────────────────────────────────────────────────── */
 
   const onlineCount = devices.filter((d) => d.isActive).length;
 
@@ -154,10 +284,7 @@ export function DevicesPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => {
-            fetchDevices();
-            loadPrinterConfig();
-          }}
+          onClick={fetchDevices}
           disabled={loading}
         >
           <RefreshCw
@@ -176,6 +303,13 @@ export function DevicesPage() {
         <div className="grid gap-3">
           {devices.map((device) => {
             const isExpanded = expandedDevice === device.deviceId;
+            const deviceConfig = deviceConfigs[device.deviceId] || {
+              photo: "",
+              letter: "",
+            };
+            const devicePrinters =
+              device.printers?.map((p) => p.name) || [];
+
             return (
               <div
                 key={device.deviceId}
@@ -187,9 +321,7 @@ export function DevicesPage() {
               >
                 <div
                   className="flex items-center gap-4 p-4 cursor-pointer"
-                  onClick={() =>
-                    setExpandedDevice(isExpanded ? null : device.deviceId)
-                  }
+                  onClick={() => handleExpandDevice(device.deviceId)}
                 >
                   <div
                     className={`w-10 h-10 rounded-lg flex items-center justify-center ${
@@ -268,12 +400,12 @@ export function DevicesPage() {
 
                 {isExpanded && (
                   <div className="border-t border-neutral-100 p-4 space-y-4">
-                    {/* Printer list */}
+                    {/* Printer list from device */}
                     {Array.isArray(device.printers) &&
                       device.printers.length > 0 && (
                         <div>
                           <p className="text-xs font-semibold text-neutral-500 mb-2">
-                            IMPRESSORAS CONECTADAS
+                            IMPRESSORAS DETECTADAS
                           </p>
                           <div className="flex gap-1.5 flex-wrap">
                             {device.printers.map((p) => {
@@ -293,76 +425,96 @@ export function DevicesPage() {
                         </div>
                       )}
 
-                    {/* Printer role config — only for default device */}
-                    {device.isDefault && device.isActive && (
+                    {/* Printer role config for this device */}
+                    {device.isActive && (
                       <div>
                         <p className="text-xs font-semibold text-neutral-500 mb-2">
                           CONFIGURAÇÃO DE IMPRESSORAS
                         </p>
                         <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="space-y-1.5">
-                            <label className="text-xs text-neutral-500">
-                              Fotos & Quadros
-                            </label>
-                            <div className="flex gap-2">
-                              <select
-                                className="flex-1 text-sm border rounded-lg px-3 py-1.5"
-                                value={photoPrinter}
-                                onChange={(e) =>
-                                  setPhotoPrinter(e.target.value)
-                                }
-                              >
-                                <option value="">Selecionar...</option>
-                                {availablePrinters.map((p) => (
-                                  <option key={p} value={p}>
-                                    {p}
-                                  </option>
-                                ))}
-                              </select>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={!photoPrinter || savingPrinter}
-                                onClick={() =>
-                                  savePrinterForRole("photo", photoPrinter)
-                                }
-                              >
-                                <Save size={14} />
-                              </Button>
+                            <div className="space-y-1.5">
+                              <label className="text-xs text-neutral-500">
+                                Fotos & Quadros
+                              </label>
+                              <div className="flex gap-2">
+                                <select
+                                  className="flex-1 text-sm border rounded-lg px-3 py-1.5"
+                                  value={deviceConfig.photo}
+                                  onChange={(e) =>
+                                    setDeviceConfigs((prev) => ({
+                                      ...prev,
+                                      [device.deviceId]: {
+                                        ...prev[device.deviceId],
+                                        photo: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                >
+                                  <option value="">Selecionar...</option>
+                                  {devicePrinters.map((p) => (
+                                    <option key={p} value={p}>
+                                      {p}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!deviceConfig.photo || savingPrinter}
+                                  onClick={() =>
+                                    savePrinterForRole(
+                                      device.deviceId,
+                                      "photo",
+                                      deviceConfig.photo,
+                                    )
+                                  }
+                                >
+                                  <Save size={14} />
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs text-neutral-500">
+                                Cartinhas
+                              </label>
+                              <div className="flex gap-2">
+                                <select
+                                  className="flex-1 text-sm border rounded-lg px-3 py-1.5"
+                                  value={deviceConfig.letter}
+                                  onChange={(e) =>
+                                    setDeviceConfigs((prev) => ({
+                                      ...prev,
+                                      [device.deviceId]: {
+                                        ...prev[device.deviceId],
+                                        letter: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                >
+                                  <option value="">Selecionar...</option>
+                                  {devicePrinters.map((p) => (
+                                    <option key={p} value={p}>
+                                      {p}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={!deviceConfig.letter || savingPrinter}
+                                  onClick={() =>
+                                    savePrinterForRole(
+                                      device.deviceId,
+                                      "letter",
+                                      deviceConfig.letter,
+                                    )
+                                  }
+                                >
+                                  <Save size={14} />
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                          <div className="space-y-1.5">
-                            <label className="text-xs text-neutral-500">
-                              Cartinhas
-                            </label>
-                            <div className="flex gap-2">
-                              <select
-                                className="flex-1 text-sm border rounded-lg px-3 py-1.5"
-                                value={letterPrinter}
-                                onChange={(e) =>
-                                  setLetterPrinter(e.target.value)
-                                }
-                              >
-                                <option value="">Selecionar...</option>
-                                {availablePrinters.map((p) => (
-                                  <option key={p} value={p}>
-                                    {p}
-                                  </option>
-                                ))}
-                              </select>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={!letterPrinter || savingPrinter}
-                                onClick={() =>
-                                  savePrinterForRole("letter", letterPrinter)
-                                }
-                              >
-                                <Save size={14} />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
                       </div>
                     )}
                   </div>

@@ -20,6 +20,7 @@ import {
   LayoutGrid,
   Check,
   X,
+  RefreshCw,
 } from "lucide-react";
 
 type Tab = "config" | "simulator";
@@ -96,7 +97,7 @@ export function PrinterSettings() {
     Record<string, Record<string, string>>
   >({});
 
-  // Load agent status periodically
+  // Load agent status once on mount
   useEffect(() => {
     const fetch = async () => {
       try {
@@ -107,20 +108,13 @@ export function PrinterSettings() {
       }
     };
     fetch();
-    const interval = setInterval(fetch, 5000);
-    return () => clearInterval(interval);
   }, [api]);
 
-  // Load printers and config
-  const loadPrinterData = useCallback(async () => {
+  // Load printer config from database (not from agent)
+  const loadPrinterConfig = useCallback(async () => {
     setLoadingConfig(true);
     try {
-      const [printersRes, configRes] = await Promise.all([
-        api.getAvailablePrinters(),
-        api.getPrinterConfig(),
-      ]);
-      setAvailablePrinters(printersRes.printers);
-      setAgentOnline(printersRes.agentConnected);
+      const configRes = await api.getPrinterConfig();
       const cfg = configRes as Record<string, any>;
       setPhotoPrinter(cfg.photo?.printerName ?? "");
       setLetterPrinter(cfg.letter?.printerName ?? "");
@@ -132,21 +126,32 @@ export function PrinterSettings() {
   }, [api]);
 
   useEffect(() => {
-    loadPrinterData();
-  }, [loadPrinterData]);
+    loadPrinterConfig();
+  }, [loadPrinterConfig]);
+
+  // Fetch available printers on-demand (when user clicks refresh)
+  const fetchAvailablePrinters = useCallback(async () => {
+    try {
+      const printersRes = await api.getAvailablePrinters();
+      setAvailablePrinters(printersRes.printers);
+      setAgentOnline(printersRes.agentConnected);
+    } catch {
+      setAvailablePrinters([]);
+      setAgentOnline(false);
+    }
+  }, [api]);
 
   // Load products and layouts for simulator
   useEffect(() => {
     if (tab !== "simulator") return;
     setLoadingProducts(true);
-    Promise.all([
-      api.getSimulateProducts(),
-      api.getDynamicLayouts(),
-    ])
+    Promise.all([api.getSimulateProducts(), api.getDynamicLayouts()])
       .then(([prodRes, layouts]) => {
         setProducts(prodRes.products || []);
         setAvailableLayouts(
-          Array.isArray(layouts) ? layouts : layouts?.layouts || layouts?.data || [],
+          Array.isArray(layouts)
+            ? layouts
+            : layouts?.layouts || layouts?.data || [],
         );
       })
       .catch(() => toast.error("Erro ao carregar dados"))
@@ -164,7 +169,7 @@ export function PrinterSettings() {
       toast.success(
         `Impressora ${role === "photo" ? "de fotos" : "de cartinhas"} salva`,
       );
-      await loadPrinterData();
+      await loadPrinterConfig();
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Erro ao salvar");
     } finally {
@@ -176,7 +181,7 @@ export function PrinterSettings() {
     try {
       await api.deletePrinterConfig(role);
       toast.success("Configuração removida");
-      await loadPrinterData();
+      await loadPrinterConfig();
     } catch (err: any) {
       toast.error(err.response?.data?.error || "Erro ao remover");
     }
@@ -285,7 +290,8 @@ export function PrinterSettings() {
         >
           <option value="">Selecione...</option>
           {options.map((opt: any, i: number) => {
-            const optValue = typeof opt === "string" ? opt : opt.label || opt.name || opt.id;
+            const optValue =
+              typeof opt === "string" ? opt : opt.label || opt.name || opt.id;
             return (
               <option key={i} value={optValue}>
                 {optValue}
@@ -305,14 +311,14 @@ export function PrinterSettings() {
     }
 
     if (cust.type === "DYNAMIC_LAYOUT") {
-      const rawLayouts: any[] =
-        custDef?.customization_data?.layouts || [];
-      const configuredLayouts = rawLayouts.length > 0
-        ? rawLayouts.map((l: any) => {
-            const full = availableLayouts.find((al: any) => al.id === l.id);
-            return full ? { ...l, fabricJsonState: full.fabricJsonState } : l;
-          })
-        : availableLayouts;
+      const rawLayouts: any[] = custDef?.customization_data?.layouts || [];
+      const configuredLayouts =
+        rawLayouts.length > 0
+          ? rawLayouts.map((l: any) => {
+              const full = availableLayouts.find((al: any) => al.id === l.id);
+              return full ? { ...l, fabricJsonState: full.fabricJsonState } : l;
+            })
+          : availableLayouts;
       const selectedLayout = configuredLayouts.find(
         (l: any) => l.name === value,
       );
@@ -360,10 +366,12 @@ export function PrinterSettings() {
               </div>
               {(() => {
                 const imageSlots: any[] = [];
-                const objs =
-                  selectedLayout.fabricJsonState?.objects || [];
+                const objs = selectedLayout.fabricJsonState?.objects || [];
                 for (const obj of objs) {
-                  if (obj.type === "image" && !obj.src?.includes("baseImageUrl")) {
+                  if (
+                    obj.type === "image" &&
+                    !obj.src?.includes("baseImageUrl")
+                  ) {
                     imageSlots.push(obj);
                   }
                 }
@@ -375,7 +383,8 @@ export function PrinterSettings() {
                       </span>
                       {imageSlots.map((slot: any, i: number) => {
                         const slotId = slot.id || `slot_${i}`;
-                        const slots = layoutImageSlots[cust.customizationId] || {};
+                        const slots =
+                          layoutImageSlots[cust.customizationId] || {};
                         return (
                           <div key={slotId}>
                             <label className="text-xs text-neutral-500 block mb-0.5">
@@ -582,6 +591,23 @@ export function PrinterSettings() {
       {/* TAB: Configuration */}
       {tab === "config" && (
         <div className="space-y-6">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-neutral-500">
+              {agentOnline
+                ? "Agente conectado — selecione as impressoras abaixo"
+                : "Agente offline — digite o nome da impressora manualmente"}
+            </div>
+            {agentOnline && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchAvailablePrinters}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Buscar impressoras
+              </Button>
+            )}
+          </div>
           {loadingConfig ? (
             <div className="flex justify-center py-12">
               <Loader2 className="animate-spin w-6 h-6 text-neutral-400" />
@@ -862,9 +888,7 @@ export function PrinterSettings() {
                       ) : (
                         <Send className="w-4 h-4 mr-2" />
                       )}
-                      {simulating
-                        ? "Simulando..."
-                        : "Simular Impressão"}
+                      {simulating ? "Simulando..." : "Simular Impressão"}
                     </Button>
 
                     {!agentConnected && (
