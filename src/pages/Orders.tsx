@@ -172,6 +172,30 @@ export function Orders() {
     Record<string, boolean>
   >({});
 
+  // Verificar se há orderId na URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const orderId = params.get("orderId");
+    
+    if (orderId && orders.length > 0) {
+      // Encontrar o pedido e expandir
+      const order = orders.find(o => o.id === orderId);
+      if (order) {
+        setExpandedId(orderId);
+        fetchOrderDetails(orderId);
+        
+        // Scroll suave até o pedido
+        setTimeout(() => {
+          const element = document.getElementById(`order-${orderId}`);
+          element?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 300);
+        
+        // Limpar o query param da URL
+        window.history.replaceState({}, "", "/orders");
+      }
+    }
+  }, [orders]);
+
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
@@ -371,6 +395,7 @@ export function Orders() {
             return (
               <div
                 key={order.id}
+                id={`order-${order.id}`}
                 className="bg-white rounded-3xl border border-neutral-100 shadow-sm overflow-hidden transition-all hover:shadow-md"
               >
                 <div

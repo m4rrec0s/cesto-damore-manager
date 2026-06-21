@@ -39,22 +39,23 @@ export default function App() {
   } = useOrderNotifications();
 
   useEffect(() => {
-    // Solicitar permissão de notificação quando o app iniciar
-    // apenas se ainda não foi solicitada
+    // Solicitar permissão apenas se ainda não foi solicitada
     if (permission.status === "default" && !permission.requested) {
-      const timer = setTimeout(async () => {
-        const granted = await requestPermission();
-        if (granted) {
-          startPolling();
-        }
-      }, 2000); // Aguarda 2 segundos após o carregamento
+      // Aguarda 2 segundos e solicita permissão
+      const timer = setTimeout(() => {
+        requestPermission().then((granted) => {
+          if (granted) {
+            startPolling();
+          }
+        });
+      }, 2000);
 
       return () => clearTimeout(timer);
     } else if (permission.status === "granted" && !enabled) {
       // Se já tem permissão mas não está ativo, iniciar
       startPolling();
     }
-  }, [permission, enabled, requestPermission, startPolling]);
+  }, [permission.status, permission.requested, enabled, requestPermission, startPolling]);
 
   return (
     <UIProvider>

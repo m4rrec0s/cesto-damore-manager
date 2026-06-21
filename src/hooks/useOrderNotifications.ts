@@ -1,10 +1,39 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useApi } from "../services/api";
+
+interface OrderNotification {
+  id: string;
+  orderId: string;
+  title: string;
+  message: string;
+  timestamp: number;
+  seen: boolean;
+}
 
 interface NotificationPermission {
   status: "granted" | "denied" | "default";
   requested: boolean;
 }
+
+const STORAGE_KEY = "order_notifications";
+const MAX_NOTIFICATIONS = 50;
+
+const loadNotifications = (): OrderNotification[] => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveNotifications = (notifications: OrderNotification[]) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(notifications));
+  } catch (error) {
+    console.error("Erro ao salvar notificações:", error);
+  }
+};
 
 export const useOrderNotifications = () => {
   const api = useApi();
@@ -13,8 +42,11 @@ export const useOrderNotifications = () => {
     requested: false,
   });
   const [enabled, setEnabled] = useState(false);
+  const [notifications, setNotifications] = useState<OrderNotification[]>(loadNotifications());
   const lastOrderIdRef = useRef<string | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const unseenCount = notifications.filter(n => !n.seen).length;
 
   useEffect(() => {
     // Verificar se o navegador suporta notificações
@@ -47,33 +79,84 @@ export const useOrderNotifications = () => {
     }
   };
 
-  const showNotification = (
+  const addNotification = useCallback((notification: Omit<OrderNotification, "id" | "timestamp" | "seen">) => {
+    const newNotification: OrderNotification = {
+      ...notification,
+      id: `${Date.now()}-${Math.random()}`,
+      timestamp: Date.now(),
+      seen: false,
+    };
+
+    setNotifications(prev => {
+      const updated = [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS);
+      saveNotifications(updated);
+      return updated;
+    });
+
+    return newNotification;
+  }, []);
+
+  const markAsSeen = useCallback((notificationId: string) => {
+    setNotifications(prev => {
+      const updated = prev.map(n => 
+        n.id === notificationId ? { ...n, seen: true } : n
+      );
+      saveNotifications(updated);
+      return updated;
+    });
+  }, []);
+
+  const markAllAsSeen = useCallback(() => {
+    setNotifications(prev => {
+      const updated = prev.map(n => ({ ...n, seen: true }));
+      saveNotifications(updated);
+      return updated;
+    });
+  }, []);
+
+  const clearNotifications = useCallback(() => {
+    setNotifications([]);
+    saveNotifications([]);
+  }, []);
+
+  const showNotification = useCallback((
+    orderId: string,
     title: string,
     body: string,
     icon?: string,
   ) => {
+    // Adicionar ao histórico
+    addNotification({
+      orderId,
+      title,
+      message: body,
+    });
+
+    // Mostrar notificação nativa se permitido
     if (permission.status !== "granted") {
-      console.warn("Permissão de notificação não concedida");
       return;
     }
 
     try {
       const notification = new Notification(title, {
         body,
-        icon: icon || "/logo192.png",
-        badge: icon || "/logo192.png",
-        tag: "order-notification",
-        requireInteraction: true,
+        icon: icon || "/cart-icon.svg",
+        badge: icon || "/cart-icon.svg",
+        tag: `order-${orderId}`,
+        requireInteraction: false,
+        silent: false,
       });
 
       notification.onclick = () => {
         window.focus();
+        // Navegar para a página de pedidos será tratado pelo componente
+        window.location.href = `/orders?orderId=${orderId}`;
         notification.close();
       };
     } catch (error) {
       console.error("Erro ao mostrar notificação:", error);
     }
-  };
+  }, [permission.status, addNotification]);
 
   const checkNewOrders = async () => {
     try {
@@ -112,8 +195,9 @@ export const useOrderNotifications = () => {
           }).format(total);
 
           showNotification(
+            latestOrder.id,
             `🛒 Novo Pedido - ${firstName}`,
-            `Entrega: ${deliveryDate}\n${itemsCount} ${itemsText} • ${totalText}`,
+            `Entrega: ${deliveryDate} • ${itemsCount} ${itemsText} • ${totalText}`,
             "/cart-icon.svg",
           );
         }
@@ -155,9 +239,14 @@ export const useOrderNotifications = () => {
   return {
     permission,
     enabled,
+    notifications,
+    unseenCount,
     requestPermission,
     startPolling,
     stopPolling,
     showNotification,
+    markAsSeen,
+    markAllAsSeen,
+    clearNotifications,
   };
 };

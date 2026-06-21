@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/useAuth";
 import { Button } from "./ui/button";
 import logo from "../assets/logocestodamore.png";
 import { ManagerSidebar } from "./sidebar/ManagerSidebar";
+import { NotificationCenter } from "./NotificationCenter";
 import {
   Sidebar,
   SidebarFooter,
@@ -82,6 +83,9 @@ export function Layout({ children }: { children: ReactNode }) {
             <span className="text-sm font-semibold text-neutral-900">
               Cesto D'Amore
             </span>
+            <div className="ml-auto">
+              <NotificationCenter />
+            </div>
           </header>
 
           <main
