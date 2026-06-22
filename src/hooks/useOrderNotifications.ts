@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useApi } from "../services/api";
 
 interface OrderNotification {
   id: string;
@@ -17,6 +16,7 @@ interface NotificationPermission {
 
 const STORAGE_KEY = "order_notifications";
 const MAX_NOTIFICATIONS = 50;
+const API_URL = import.meta.env.VITE_API_URL as string;
 
 const loadNotifications = (): OrderNotification[] => {
   try {
@@ -36,25 +36,18 @@ const saveNotifications = (notifications: OrderNotification[]) => {
 };
 
 export const useOrderNotifications = () => {
-  const api = useApi();
   const [permission, setPermission] = useState<NotificationPermission>({
     status: "default",
     requested: false,
   });
   const [enabled, setEnabled] = useState(false);
   const [notifications, setNotifications] = useState<OrderNotification[]>(loadNotifications());
-  const lastOrderIdRef = useRef<string | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const unseenCount = notifications.filter(n => !n.seen).length;
 
   useEffect(() => {
-    // Verificar se o navegador suporta notificações
-    if (!("Notification" in window)) {
-      console.warn("Este navegador não suporta notificações");
-      return;
-    }
-
+    if (!("Notification" in window)) return;
     setPermission({
       status: Notification.permission as "granted" | "denied" | "default",
       requested: Notification.permission !== "default",
@@ -62,19 +55,12 @@ export const useOrderNotifications = () => {
   }, []);
 
   const requestPermission = async () => {
-    if (!("Notification" in window)) {
-      return false;
-    }
-
+    if (!("Notification" in window)) return false;
     try {
       const result = await Notification.requestPermission();
-      setPermission({
-        status: result as "granted" | "denied" | "default",
-        requested: true,
-      });
+      setPermission({ status: result as "granted" | "denied" | "default", requested: true });
       return result === "granted";
-    } catch (error) {
-      console.error("Erro ao solicitar permissão de notificação:", error);
+    } catch {
       return false;
     }
   };
@@ -86,21 +72,17 @@ export const useOrderNotifications = () => {
       timestamp: Date.now(),
       seen: false,
     };
-
     setNotifications(prev => {
       const updated = [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS);
       saveNotifications(updated);
       return updated;
     });
-
     return newNotification;
   }, []);
 
   const markAsSeen = useCallback((notificationId: string) => {
     setNotifications(prev => {
-      const updated = prev.map(n => 
-        n.id === notificationId ? { ...n, seen: true } : n
-      );
+      const updated = prev.map(n => n.id === notificationId ? { ...n, seen: true } : n);
       saveNotifications(updated);
       return updated;
     });
@@ -123,115 +105,74 @@ export const useOrderNotifications = () => {
     orderId: string,
     title: string,
     body: string,
-    icon?: string,
   ) => {
-    // Adicionar ao histórico
-    addNotification({
-      orderId,
-      title,
-      message: body,
-    });
+    addNotification({ orderId, title, message: body });
 
-    // Mostrar notificação nativa se permitido
-    if (permission.status !== "granted") {
-      return;
-    }
-
-    try {
-      const notification = new Notification(title, {
-        body,
-        icon: icon || "/cart-icon.svg",
-        badge: icon || "/cart-icon.svg",
-        tag: `order-${orderId}`,
-        requireInteraction: false,
-        silent: false,
-      });
-
-      notification.onclick = () => {
-        window.focus();
-        // Navegar para a página de pedidos será tratado pelo componente
-        window.location.href = `/orders?orderId=${orderId}`;
-        notification.close();
-      };
-    } catch (error) {
-      console.error("Erro ao mostrar notificação:", error);
+    if (permission.status === "granted") {
+      try {
+        const notification = new Notification(title, {
+          body,
+          icon: "/cart-icon.svg",
+          tag: `order-${orderId}`,
+        });
+        notification.onclick = () => {
+          window.focus();
+          window.location.href = `/orders?orderId=${orderId}`;
+          notification.close();
+        };
+      } catch {}
     }
   }, [permission.status, addNotification]);
 
-  const checkNewOrders = async () => {
-    try {
-      const response = await api.getOrders({
-        status: "PAID",
-        limit: 1,
-        summary: true,
-      });
+  const startPolling = useCallback(() => {
+    if (eventSourceRef.current) return;
 
-      if (response.data.data && response.data.data.length > 0) {
-        const latestOrder = response.data.data[0];
-        
-        // Se é a primeira vez ou se há um novo pedido
-        if (lastOrderIdRef.current === null) {
-          lastOrderIdRef.current = latestOrder.id;
-          return;
-        }
+    const token = localStorage.getItem("token") || localStorage.getItem("appToken");
+    if (!token) return;
 
-        if (latestOrder.id !== lastOrderIdRef.current) {
-          lastOrderIdRef.current = latestOrder.id;
-
-          // Buscar detalhes completos do pedido para notificação
-          const orderDetails = await api.getOrder(latestOrder.id);
-          
-          const firstName = orderDetails.user?.name?.split(" ")[0] || "Cliente";
-          const deliveryDate = orderDetails.delivery_date
-            ? new Date(orderDetails.delivery_date).toLocaleDateString("pt-BR")
-            : "Sem data";
-          
-          const itemsCount = orderDetails.items?.length || 0;
-          const itemsText = itemsCount === 1 ? "item" : "itens";
-          const total = orderDetails.grand_total || orderDetails.total || 0;
-          const totalText = new Intl.NumberFormat("pt-BR", {
-            style: "currency",
-            currency: "BRL",
-          }).format(total);
-
-          showNotification(
-            latestOrder.id,
-            `🛒 Novo Pedido - ${firstName}`,
-            `Entrega: ${deliveryDate} • ${itemsCount} ${itemsText} • ${totalText}`,
-            "/cart-icon.svg",
-          );
-        }
-      }
-    } catch (error) {
-      console.error("Erro ao verificar novos pedidos:", error);
-    }
-  };
-
-  const startPolling = () => {
-    if (intervalRef.current) {
-      return;
-    }
-
-    // Polling a cada 30 segundos
-    intervalRef.current = setInterval(checkNewOrders, 30000);
+    const url = `${API_URL}/admin/orders/stream?token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
+    eventSourceRef.current = es;
     setEnabled(true);
 
-    // Primeira verificação imediata
-    checkNewOrders();
-  };
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === "order_paid") {
+          const totalText = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(data.total);
+          const deliveryText = data.deliveryDate
+            ? new Date(data.deliveryDate).toLocaleDateString("pt-BR")
+            : "Sem data";
+          showNotification(
+            data.orderId,
+            `🛒 Novo Pedido - ${data.customerName}`,
+            `Entrega: ${deliveryText} • ${data.itemsCount} item(s) • ${totalText}`,
+          );
+        }
+      } catch {}
+    };
 
-  const stopPolling = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    es.onerror = () => {
+      es.close();
+      eventSourceRef.current = null;
+      setEnabled(false);
+      // Reconectar após 5s
+      setTimeout(() => startPolling(), 5000);
+    };
+  }, [showNotification]);
+
+  const stopPolling = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
     }
     setEnabled(false);
-  };
+  }, []);
 
   useEffect(() => {
     return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
       }
     };
   }, []);
@@ -244,7 +185,6 @@ export const useOrderNotifications = () => {
     requestPermission,
     startPolling,
     stopPolling,
-    showNotification,
     markAsSeen,
     markAllAsSeen,
     clearNotifications,
