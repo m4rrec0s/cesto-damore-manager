@@ -20,6 +20,7 @@ import {
   Trash,
   Download,
   Handbag,
+  DollarSign,
 } from "lucide-react";
 import { useApi } from "../services/api";
 import type { Order, OrderStatus } from "../types";
@@ -178,20 +179,20 @@ export function Orders() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const orderId = params.get("orderId");
-    
+
     if (orderId && orders.length > 0) {
       // Encontrar o pedido e expandir
-      const order = orders.find(o => o.id === orderId);
+      const order = orders.find((o) => o.id === orderId);
       if (order) {
         setExpandedId(orderId);
         fetchOrderDetails(orderId);
-        
+
         // Scroll suave até o pedido
         setTimeout(() => {
           const element = document.getElementById(`order-${orderId}`);
           element?.scrollIntoView({ behavior: "smooth", block: "center" });
         }, 300);
-        
+
         // Limpar o query param da URL
         window.history.replaceState({}, "", "/orders");
       }
@@ -232,7 +233,11 @@ export function Orders() {
             const job = await api.getPrintJobStatus(orderId);
             setPrintJobs((prev) => ({
               ...prev,
-              [orderId]: { id: job.id, status: job.status, lastError: job.lastError },
+              [orderId]: {
+                id: job.id,
+                status: job.status,
+                lastError: job.lastError,
+              },
             }));
           } catch {
             // Print job may not exist yet
@@ -292,7 +297,11 @@ export function Orders() {
           const updated = await api.getPrintJobStatus(orderId);
           setPrintJobs((prev) => ({
             ...prev,
-            [orderId]: { id: updated.id, status: updated.status, lastError: updated.lastError },
+            [orderId]: {
+              id: updated.id,
+              status: updated.status,
+              lastError: updated.lastError,
+            },
           }));
           if (["PRINTED", "FAILED"].includes(updated.status)) {
             clearInterval(pollId);
@@ -703,32 +712,51 @@ export function Orders() {
                                         min="0"
                                         placeholder="Valor (vazio = total)"
                                         value={refundAmount}
-                                        onChange={(e) => setRefundAmount(e.target.value)}
-                                        className="flex-1 px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                        onChange={(e) =>
+                                          setRefundAmount(e.target.value)
+                                        }
+                                        className="flex-1 px-2 py-1.5 text-sm border border-amber-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-400"
                                       />
                                       <Button
-                                        disabled={refundingId === details.payment!.id}
+                                        disabled={
+                                          refundingId === details.payment!.id
+                                        }
                                         onClick={async () => {
-                                          const amt = refundAmount ? parseFloat(refundAmount) : undefined;
+                                          const amt = refundAmount
+                                            ? parseFloat(refundAmount)
+                                            : undefined;
                                           const msg = amt
                                             ? `Reembolsar R$ ${amt.toFixed(2)}?`
                                             : "Reembolsar o valor TOTAL deste pagamento?";
                                           if (!confirm(msg)) return;
                                           setRefundingId(details.payment!.id);
                                           try {
-                                            await api.refundPayment(details.payment!.id, amt);
-                                            toast.success(amt ? `Reembolso de R$ ${amt.toFixed(2)} realizado` : "Reembolso total realizado");
+                                            await api.refundPayment(
+                                              details.payment!.id,
+                                              amt,
+                                            );
+                                            toast.success(
+                                              amt
+                                                ? `Reembolso de R$ ${amt.toFixed(2)} realizado`
+                                                : "Reembolso total realizado",
+                                            );
                                             setRefundAmount("");
                                             fetchOrders();
                                           } catch (err: any) {
-                                            toast.error(err?.response?.data?.error || "Erro ao reembolsar");
+                                            toast.error(
+                                              err?.response?.data?.error ||
+                                                "Erro ao reembolsar",
+                                            );
                                           } finally {
                                             setRefundingId(null);
                                           }
                                         }}
-                                        className="text-amber-600 bg-amber-50 hover:bg-amber-500 border border-amber-200 hover:text-white text-xs px-3"
+                                        className="text-amber-600 bg-amber-50 hover:bg-amber-500 border border-amber-200 hover:text-white text-sm"
                                       >
-                                        {refundingId === details.payment!.id ? "..." : "💰 Reembolsar"}
+                                        <DollarSign size={14} />
+                                        {refundingId === details.payment!.id
+                                          ? "..."
+                                          : "Reembolsar"}
                                       </Button>
                                     </div>
                                   </div>
@@ -809,63 +837,88 @@ export function Orders() {
                                 </Button>
                               )}
 
-                              {printJobs[details.id] && (() => {
-                                const job = printJobs[details.id];
-                                const isPrinted = job.status === "PRINTED";
-                                const isFailed = job.status === "FAILED";
-                                const isPending = ["PENDING", "SENT", "RECEIVED", "PRINTING"].includes(job.status);
+                              {printJobs[details.id] &&
+                                (() => {
+                                  const job = printJobs[details.id];
+                                  const isPrinted = job.status === "PRINTED";
+                                  const isFailed = job.status === "FAILED";
+                                  const isPending = [
+                                    "PENDING",
+                                    "SENT",
+                                    "RECEIVED",
+                                    "PRINTING",
+                                  ].includes(job.status);
 
-                                return (
-                                  <div className={clsx(
-                                    "rounded-xl border p-3 space-y-2",
-                                    isPrinted && "bg-emerald-50 border-emerald-200",
-                                    isFailed && "bg-red-50 border-red-200",
-                                    isPending && "bg-blue-50 border-blue-200",
-                                  )}>
-                                    <div className="flex items-center gap-2">
-                                      {isPrinted ? (
-                                        <CheckCircle2 size={14} className="text-emerald-600" />
-                                      ) : isFailed ? (
-                                        <XCircle size={14} className="text-red-600" />
-                                      ) : (
-                                        <Loader2 size={14} className="animate-spin text-blue-600" />
+                                  return (
+                                    <div
+                                      className={clsx(
+                                        "rounded-xl border p-3 space-y-2",
+                                        isPrinted &&
+                                          "bg-emerald-50 border-emerald-200",
+                                        isFailed && "bg-red-50 border-red-200",
+                                        isPending &&
+                                          "bg-blue-50 border-blue-200",
                                       )}
-                                      <span className="text-xs font-bold text-neutral-900">
-                                        Impressão
-                                      </span>
-                                    </div>
-                                    <p className={clsx(
-                                      "text-[11px] font-medium",
-                                      isPrinted && "text-emerald-700",
-                                      isFailed && "text-red-700",
-                                      isPending && "text-blue-700",
-                                    )}>
-                                      {isPrinted && "Impresso com sucesso"}
-                                      {isFailed && (job.lastError || "Falha na impressão")}
-                                      {isPending && (
-                                        job.status === "PENDING" ? "Enfileirando..." :
-                                        job.status === "SENT" ? "Enviado ao agente" :
-                                        job.status === "RECEIVED" ? "Agente recebeu" :
-                                        "Imprimindo..."
-                                      )}
-                                    </p>
-                                    {isFailed && (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleRetryPrint(details.id);
-                                        }}
-                                        className="w-full text-red-600 border-red-200 hover:bg-red-100"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        {isPrinted ? (
+                                          <CheckCircle2
+                                            size={14}
+                                            className="text-emerald-600"
+                                          />
+                                        ) : isFailed ? (
+                                          <XCircle
+                                            size={14}
+                                            className="text-red-600"
+                                          />
+                                        ) : (
+                                          <Loader2
+                                            size={14}
+                                            className="animate-spin text-blue-600"
+                                          />
+                                        )}
+                                        <span className="text-xs font-bold text-neutral-900">
+                                          Impressão
+                                        </span>
+                                      </div>
+                                      <p
+                                        className={clsx(
+                                          "text-[11px] font-medium",
+                                          isPrinted && "text-emerald-700",
+                                          isFailed && "text-red-700",
+                                          isPending && "text-blue-700",
+                                        )}
                                       >
-                                        <RefreshCw size={12} />
-                                        Tentar novamente
-                                      </Button>
-                                    )}
-                                  </div>
-                                );
-                              })()}
+                                        {isPrinted && "Impresso com sucesso"}
+                                        {isFailed &&
+                                          (job.lastError ||
+                                            "Falha na impressão")}
+                                        {isPending &&
+                                          (job.status === "PENDING"
+                                            ? "Enfileirando..."
+                                            : job.status === "SENT"
+                                              ? "Enviado ao agente"
+                                              : job.status === "RECEIVED"
+                                                ? "Agente recebeu"
+                                                : "Imprimindo...")}
+                                      </p>
+                                      {isFailed && (
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRetryPrint(details.id);
+                                          }}
+                                          className="w-full text-red-600 border-red-200 hover:bg-red-100"
+                                        >
+                                          <RefreshCw size={12} />
+                                          Tentar novamente
+                                        </Button>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                             </div>
                           </div>
 
@@ -928,8 +981,9 @@ export function Orders() {
                                         </span>
                                       </div>
                                       <p className="text-[11px] text-red-600">
-                                        O estoque não pôde ser decrementado automaticamente. 
-                                        Verifique a disponibilidade e tente manualmente.
+                                        O estoque não pôde ser decrementado
+                                        automaticamente. Verifique a
+                                        disponibilidade e tente manualmente.
                                       </p>
                                       <Button
                                         size="sm"
@@ -973,16 +1027,18 @@ export function Orders() {
                                       Sem personalizações neste item.
                                     </div>
                                   ) : (
-                                    item.customizations.map((cust: any, custIdx: number) => (
-                                      <div
-                                        key={cust.id || `cust-${custIdx}`}
-                                        className="rounded-xl py-3 border-t"
-                                      >
-                                        <CustomizationDisplay
-                                          customization={cust}
-                                        />
-                                      </div>
-                                    ))
+                                    item.customizations.map(
+                                      (cust: any, custIdx: number) => (
+                                        <div
+                                          key={cust.id || `cust-${custIdx}`}
+                                          className="rounded-xl py-3 border-t"
+                                        >
+                                          <CustomizationDisplay
+                                            customization={cust}
+                                          />
+                                        </div>
+                                      ),
+                                    )
                                   )}
                                 </div>
                               </div>
