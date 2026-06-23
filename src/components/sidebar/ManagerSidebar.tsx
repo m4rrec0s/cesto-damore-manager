@@ -31,6 +31,7 @@ import {
   ChevronDown,
   Printer,
   Images,
+  Ticket,
 } from "lucide-react";
 
 type SidebarItem = {
@@ -93,6 +94,7 @@ const groups: SidebarGroupConfig[] = [
       { name: "Feriados", href: "/holidays", icon: Calendar },
       { name: "Follow-up", href: "/follow-up", icon: RefreshCw },
       { name: "Estoque", href: "/stock-manager", icon: Warehouse },
+      { name: "Cupons", href: "/coupons", icon: Ticket },
       { name: "Pedido Manual", href: "/impressao/manual", icon: Images },
       { name: "Design Editor", href: "/layouts", icon: Palette },
     ],
