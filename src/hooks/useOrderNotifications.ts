@@ -50,6 +50,7 @@ export const useOrderNotifications = () => {
   const [enabled, setEnabled] = useState(false);
   const [notifications, setNotifications] = useState<OrderNotification[]>(loadNotifications());
   const eventSourceRef = useRef<EventSource | null>(null);
+  const sseRetriesRef = useRef(0);
 
   const unseenCount = notifications.filter(n => !n.seen).length;
 
@@ -84,9 +85,18 @@ export const useOrderNotifications = () => {
       const token = localStorage.getItem("token") || localStorage.getItem("appToken");
       if (!token) return;
 
-      // Buscar VAPID public key do backend
-      const res = await fetch(`${API_URL}/push/vapid-key`);
-      const { publicKey } = await res.json();
+      // Buscar VAPID public key do backend via API client (CORS OK)
+      let publicKey: string;
+      try {
+        const res = await fetch(`${API_URL}/push/vapid-key`, {
+          headers: { "Authorization": `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        publicKey = data.publicKey;
+      } catch {
+        return; // Silenciar - VAPID não configurado ou CORS
+      }
       if (!publicKey) return;
 
       const applicationServerKey = urlBase64ToUint8Array(publicKey);
@@ -103,8 +113,8 @@ export const useOrderNotifications = () => {
         },
         body: JSON.stringify(subscription),
       });
-    } catch (err) {
-      console.error("Erro ao registrar Web Push:", err);
+    } catch {
+      // Silenciar erros de push - não é crítico
     }
   };
 
@@ -184,6 +194,7 @@ export const useOrderNotifications = () => {
     setEnabled(true);
 
     es.onmessage = (event) => {
+      sseRetriesRef.current = 0; // Reset retries on successful message
       try {
         const data = JSON.parse(event.data);
         if (data.type === "order_paid") {
@@ -204,8 +215,12 @@ export const useOrderNotifications = () => {
       es.close();
       eventSourceRef.current = null;
       setEnabled(false);
-      // Reconectar após 5s
-      setTimeout(() => startPolling(), 5000);
+      // Reconectar com backoff, max 5 tentativas
+      sseRetriesRef.current++;
+      if (sseRetriesRef.current <= 5) {
+        const delay = Math.min(5000 * Math.pow(2, sseRetriesRef.current - 1), 60000);
+        setTimeout(() => startPolling(), delay);
+      }
     };
   }, [showNotification]);
 
