@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
+const API_URL = import.meta.env.VITE_API_URL as string;
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+}
+
 interface OrderNotification {
   id: string;
   orderId: string;
@@ -59,9 +68,45 @@ export const useOrderNotifications = () => {
     try {
       const result = await Notification.requestPermission();
       setPermission({ status: result as "granted" | "denied" | "default", requested: true });
+      if (result === "granted") {
+        await registerPushSubscription();
+      }
       return result === "granted";
     } catch {
       return false;
+    }
+  };
+
+  const registerPushSubscription = async () => {
+    try {
+      if (!("serviceWorker" in navigator)) return;
+      const registration = await navigator.serviceWorker.register("/sw-push.js");
+      await navigator.serviceWorker.ready;
+
+      const token = localStorage.getItem("token") || localStorage.getItem("appToken");
+      if (!token) return;
+
+      // Buscar VAPID public key do backend
+      const res = await fetch(`${API_URL}/push/vapid-key`);
+      const { publicKey } = await res.json();
+      if (!publicKey) return;
+
+      const applicationServerKey = urlBase64ToUint8Array(publicKey);
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey,
+      });
+
+      await fetch(`${API_URL}/push/subscribe`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(subscription),
+      });
+    } catch (err) {
+      console.error("Erro ao registrar Web Push:", err);
     }
   };
 
@@ -129,6 +174,11 @@ export const useOrderNotifications = () => {
 
     const token = localStorage.getItem("token") || localStorage.getItem("appToken");
     if (!token) return;
+
+    // Registrar Web Push se permissão já concedida
+    if (Notification.permission === "granted") {
+      registerPushSubscription();
+    }
 
     const url = `${API_URL}/admin/orders/stream?token=${encodeURIComponent(token)}`;
     const es = new EventSource(url);
