@@ -13,6 +13,7 @@ import { Types } from "./pages/Types";
 import { Feed } from "./pages/Feed";
 import { Service } from "./pages/Service";
 import { Holidays } from "./pages/Holidays";
+import CouponsPage from "./pages/CouponsPage";
 import { FollowUp } from "./pages/FollowUp";
 import DesignEditorPage from "./pages/DesignEditorPage";
 import { NewDesignPage } from "./pages/NewDesignPage";
@@ -212,6 +213,14 @@ export default function App() {
           element={
             <AdminRoute>
               <Holidays />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="/coupons"
+          element={
+            <AdminRoute>
+              <CouponsPage />
             </AdminRoute>
           }
         />

@@ -1487,6 +1487,12 @@ class ApiService {
   deleteHoliday = async (id: string) =>
     (await this.delete(`/admin/holidays/${id}`)).data;
 
+  // ===== Coupons =====
+  getCoupons = async () => (await this.get("/admin/coupons")).data;
+  createCoupon = async (payload: Record<string, unknown>) => (await this.post("/admin/coupons", payload)).data;
+  updateCoupon = async (id: string, payload: Record<string, unknown>) => (await this.put(`/admin/coupons/${id}`, payload)).data;
+  getCouponStats = async (id: string) => (await this.get(`/admin/coupons/${id}/stats`)).data;
+
   // ===== FollowUp =====
   getFollowUpHistory = async () =>
     (await this.get("/admin/followup/history")).data;
