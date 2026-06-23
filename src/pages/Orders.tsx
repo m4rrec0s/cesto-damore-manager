@@ -165,6 +165,8 @@ export function Orders() {
     newStatus: OrderStatus;
     currentStatus: OrderStatus;
   } | null>(null);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
+  const [refundAmount, setRefundAmount] = useState<string>("");
   const [printJobs, setPrintJobs] = useState<
     Record<string, { id: string; status: string; lastError?: string | null }>
   >({});
@@ -693,21 +695,43 @@ export function Orders() {
                                   </Button>
                                 )}
                                 {details.payment?.status === "APPROVED" && (
-                                  <Button
-                                    onClick={async () => {
-                                      if (!confirm("Reembolsar o valor total deste pagamento?")) return;
-                                      try {
-                                        await api.refundPayment(details.payment!.id);
-                                        toast.success("Reembolso realizado com sucesso");
-                                        fetchOrders();
-                                      } catch (err: any) {
-                                        toast.error(err?.response?.data?.error || "Erro ao reembolsar");
-                                      }
-                                    }}
-                                    className="w-full text-amber-600 bg-amber-50 hover:bg-amber-500 border border-amber-200 hover:text-white"
-                                  >
-                                    💰 Reembolsar pagamento
-                                  </Button>
+                                  <div className="w-full space-y-2">
+                                    <div className="flex gap-2">
+                                      <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        placeholder="Valor (vazio = total)"
+                                        value={refundAmount}
+                                        onChange={(e) => setRefundAmount(e.target.value)}
+                                        className="flex-1 px-2 py-1.5 text-xs border border-amber-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                      />
+                                      <Button
+                                        disabled={refundingId === details.payment!.id}
+                                        onClick={async () => {
+                                          const amt = refundAmount ? parseFloat(refundAmount) : undefined;
+                                          const msg = amt
+                                            ? `Reembolsar R$ ${amt.toFixed(2)}?`
+                                            : "Reembolsar o valor TOTAL deste pagamento?";
+                                          if (!confirm(msg)) return;
+                                          setRefundingId(details.payment!.id);
+                                          try {
+                                            await api.refundPayment(details.payment!.id, amt);
+                                            toast.success(amt ? `Reembolso de R$ ${amt.toFixed(2)} realizado` : "Reembolso total realizado");
+                                            setRefundAmount("");
+                                            fetchOrders();
+                                          } catch (err: any) {
+                                            toast.error(err?.response?.data?.error || "Erro ao reembolsar");
+                                          } finally {
+                                            setRefundingId(null);
+                                          }
+                                        }}
+                                        className="text-amber-600 bg-amber-50 hover:bg-amber-500 border border-amber-200 hover:text-white text-xs px-3"
+                                      >
+                                        {refundingId === details.payment!.id ? "..." : "💰 Reembolsar"}
+                                      </Button>
+                                    </div>
+                                  </div>
                                 )}
                                 {details.status === "CANCELED" && (
                                   <Button
