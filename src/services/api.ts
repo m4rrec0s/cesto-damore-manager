@@ -1114,6 +1114,16 @@ class ApiService {
     return (await this.post("/uploads/cleanup", {})).data;
   };
 
+  // ===== Admin Payments =====
+  getPaymentDetails = async (paymentId: string) =>
+    (await this.client.get(`/admin/payments/${paymentId}`)).data;
+
+  refundPayment = async (paymentId: string, amount?: number) =>
+    (await this.client.post(`/admin/payments/${paymentId}/refund`, amount ? { amount } : {})).data;
+
+  cancelPayment = async (paymentId: string) =>
+    (await this.client.post(`/admin/payments/${paymentId}/cancel`)).data;
+
   // ===== Orders =====
   getOrders = async (params?: {
     status?: string;

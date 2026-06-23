@@ -692,6 +692,23 @@ export function Orders() {
                                     Cancelar pedido
                                   </Button>
                                 )}
+                                {details.payment?.status === "APPROVED" && (
+                                  <Button
+                                    onClick={async () => {
+                                      if (!confirm("Reembolsar o valor total deste pagamento?")) return;
+                                      try {
+                                        await api.refundPayment(details.payment!.id);
+                                        toast.success("Reembolso realizado com sucesso");
+                                        fetchOrders();
+                                      } catch (err: any) {
+                                        toast.error(err?.response?.data?.error || "Erro ao reembolsar");
+                                      }
+                                    }}
+                                    className="w-full text-amber-600 bg-amber-50 hover:bg-amber-500 border border-amber-200 hover:text-white"
+                                  >
+                                    💰 Reembolsar pagamento
+                                  </Button>
+                                )}
                                 {details.status === "CANCELED" && (
                                   <Button
                                     variant={"destructive"}
