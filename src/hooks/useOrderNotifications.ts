@@ -25,8 +25,6 @@ interface NotificationPermission {
 
 const STORAGE_KEY = "order_notifications";
 const MAX_NOTIFICATIONS = 50;
-const API_URL = import.meta.env.VITE_API_URL as string;
-
 const loadNotifications = (): OrderNotification[] => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -94,7 +92,7 @@ export const useOrderNotifications = () => {
       const applicationServerKey = urlBase64ToUint8Array(publicKey);
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey,
+        applicationServerKey: applicationServerKey.buffer as ArrayBuffer,
       });
 
       await fetch(`${API_URL}/push/subscribe`, {
