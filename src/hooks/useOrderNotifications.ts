@@ -169,15 +169,47 @@ function clearNotificationsAction() {
 }
 
 // ─── Sound ─────────────────────────────────────────────────────────
-const bellAudio = typeof Audio !== "undefined" ? new Audio("/ding.mp3") : null;
-if (bellAudio) {
+let bellAudio: HTMLAudioElement | null = null;
+let audioUnlocked = false;
+
+function ensureAudio() {
+  if (bellAudio || typeof Audio === "undefined") return;
+  bellAudio = new Audio("/ding.mp3");
   bellAudio.preload = "auto";
-  bellAudio.currentTime = 1; // start at 1s where the actual sound begins
+}
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  ensureAudio();
+  if (!bellAudio) return;
+  bellAudio.currentTime = 1;
+  bellAudio.volume = 0.01;
+  bellAudio
+    .play()
+    .then(() => {
+      audioUnlocked = true;
+      bellAudio!.pause();
+      bellAudio!.currentTime = 1;
+      bellAudio!.volume = 1;
+    })
+    .catch(() => {});
+}
+
+// Unlock on first user interaction
+if (typeof document !== "undefined") {
+  for (const ev of ["click", "touchstart", "keydown"]) {
+    document.addEventListener(ev, unlockAudio, { once: true, passive: true });
+  }
 }
 
 function playOrderBell() {
   try {
+    ensureAudio();
     if (!bellAudio) return;
+    if (!audioUnlocked) {
+      unlockAudio();
+      return;
+    }
     bellAudio.currentTime = 1;
     bellAudio.volume = 1;
     bellAudio.play().catch(() => {});
