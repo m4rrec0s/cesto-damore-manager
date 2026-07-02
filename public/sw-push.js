@@ -3,8 +3,8 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title || "Cesto d'Amore", {
       body: data.body || "",
-      icon: "/cart-icon.svg",
-      badge: "/cart-icon.svg",
+      icon: "/cart-icon.png",
+      badge: "/cart-icon.png",
       tag: data.orderId ? `order-${data.orderId}` : undefined,
       data: { url: data.url || "/orders" },
     })

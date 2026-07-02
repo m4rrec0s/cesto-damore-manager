@@ -64,8 +64,12 @@ type Listener = () => void;
 
 let notifications: OrderNotification[] = loadNotifications();
 let permission: NotificationPermission = {
-  status: (typeof Notification !== "undefined" ? Notification.permission : "default") as "granted" | "denied" | "default",
-  requested: typeof Notification !== "undefined" && Notification.permission !== "default",
+  status: (typeof Notification !== "undefined"
+    ? Notification.permission
+    : "default") as "granted" | "denied" | "default",
+  requested:
+    typeof Notification !== "undefined" &&
+    Notification.permission !== "default",
 };
 let enabled = false;
 let eventSourceInstance: EventSource | null = null;
@@ -77,8 +81,13 @@ function emit() {
   for (const l of listeners) l();
 }
 
-function setNotifications(updater: OrderNotification[] | ((prev: OrderNotification[]) => OrderNotification[])) {
-  notifications = typeof updater === "function" ? updater(notifications) : updater;
+function setNotifications(
+  updater:
+    | OrderNotification[]
+    | ((prev: OrderNotification[]) => OrderNotification[]),
+) {
+  notifications =
+    typeof updater === "function" ? updater(notifications) : updater;
   saveNotifications(notifications);
   emit();
 }
@@ -96,7 +105,9 @@ function setPermission(p: NotificationPermission) {
 // ─── Actions ───────────────────────────────────────────────────────
 
 function addNotificationAction(
-  notification: Omit<OrderNotification, "id" | "timestamp" | "seen"> & { serverId?: string },
+  notification: Omit<OrderNotification, "id" | "timestamp" | "seen"> & {
+    serverId?: string;
+  },
 ) {
   setNotifications((prev) => {
     const isDuplicate = prev.some(
@@ -158,32 +169,29 @@ function clearNotificationsAction() {
 }
 
 // ─── Sound ─────────────────────────────────────────────────────────
-let audioCtx: AudioContext | null = null;
+const bellAudio = typeof Audio !== "undefined" ? new Audio("/ding.mp3") : null;
+if (bellAudio) {
+  bellAudio.preload = "auto";
+  bellAudio.currentTime = 1; // start at 1s where the actual sound begins
+}
 
 function playOrderBell() {
   try {
-    if (!audioCtx) audioCtx = new AudioContext();
-    if (audioCtx.state === "suspended") audioCtx.resume();
-
-    const now = audioCtx.currentTime;
-    // 3 toques: "pin pin pin"
-    [0, 0.15, 0.3].forEach((offset) => {
-      const osc = audioCtx!.createOscillator();
-      const gain = audioCtx!.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(1200, now + offset);
-      osc.frequency.exponentialRampToValueAtTime(800, now + offset + 0.1);
-      gain.gain.setValueAtTime(0.3, now + offset);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.12);
-      osc.connect(gain);
-      gain.connect(audioCtx!.destination);
-      osc.start(now + offset);
-      osc.stop(now + offset + 0.15);
-    });
-  } catch {}
+    if (!bellAudio) return;
+    bellAudio.currentTime = 1;
+    bellAudio.volume = 1;
+    bellAudio.play().catch(() => {});
+  } catch {
+    console.warn("Falha ao reproduzir o som de notificação.");
+  }
 }
 
-function showNotificationAction(orderId: string, title: string, body: string, serverId?: string) {
+function showNotificationAction(
+  orderId: string,
+  title: string,
+  body: string,
+  serverId?: string,
+) {
   addNotificationAction({ orderId, title, message: body, serverId });
   playOrderBell();
   // OS notification handled by Web Push (sw-push.js) — no duplicar com new Notification()
@@ -225,7 +233,9 @@ async function registerPushSubscriptionAction() {
       },
       body: JSON.stringify(subscription),
     });
-  } catch {}
+  } catch {
+    console.warn("Falha ao registrar a inscrição de push.");
+  }
 }
 
 async function requestPermissionAction() {
@@ -253,7 +263,10 @@ function startPollingAction() {
 
   sseStarted = true;
 
-  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+  if (
+    typeof Notification !== "undefined" &&
+    Notification.permission === "granted"
+  ) {
     registerPushSubscriptionAction();
   }
 
@@ -314,7 +327,9 @@ function startPollingAction() {
           data.notificationId,
         );
       }
-    } catch {}
+    } catch {
+      console.warn("Falha ao processar a mensagem SSE:", event.data);
+    }
   };
 
   es.onerror = () => {
