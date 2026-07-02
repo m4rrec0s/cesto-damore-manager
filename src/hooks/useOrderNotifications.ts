@@ -195,34 +195,21 @@ export const useOrderNotifications = () => {
         serverId?: string;
       },
     ) => {
-      // Verificar duplicata por serverId
-      if (notification.serverId) {
-        setNotifications((prev) => {
-          if (prev.some((n) => n.serverId === notification.serverId))
-            return prev;
-          const newNotification: OrderNotification = {
-            ...notification,
-            id: notification.serverId!,
-            timestamp: Date.now(),
-            seen: false,
-          };
-          const updated = [newNotification, ...prev].slice(
-            0,
-            MAX_NOTIFICATIONS,
-          );
-          saveNotifications(updated);
-          return updated;
-        });
-        return;
-      }
-
-      const newNotification: OrderNotification = {
-        ...notification,
-        id: `${Date.now()}-${Math.random()}`,
-        timestamp: Date.now(),
-        seen: false,
-      };
       setNotifications((prev) => {
+        // Deduplicar por serverId OU orderId
+        const isDuplicate = prev.some(
+          (n) =>
+            (notification.serverId && n.serverId === notification.serverId) ||
+            (notification.orderId && n.orderId === notification.orderId),
+        );
+        if (isDuplicate) return prev;
+
+        const newNotification: OrderNotification = {
+          ...notification,
+          id: notification.serverId || `${Date.now()}-${Math.random()}`,
+          timestamp: Date.now(),
+          seen: false,
+        };
         const updated = [newNotification, ...prev].slice(0, MAX_NOTIFICATIONS);
         saveNotifications(updated);
         return updated;
