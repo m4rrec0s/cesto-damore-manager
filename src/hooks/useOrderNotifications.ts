@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 
 const API_URL = import.meta.env.VITE_API_URL as string;
 
@@ -412,18 +412,6 @@ export const useOrderNotifications = () => {
   const permission = useSyncExternalStore(subscribe, getPermission);
   const enabled = useSyncExternalStore(subscribe, getEnabled);
   const unseenCount = useSyncExternalStore(subscribe, getUnseenCount);
-
-  // Start SSE on first mount
-  useEffect(() => {
-    startPollingAction();
-    return () => {
-      if (eventSourceInstance) {
-        eventSourceInstance.close();
-        eventSourceInstance = null;
-        sseStarted = false;
-      }
-    };
-  }, []);
 
   return {
     notifications,

@@ -36,32 +36,31 @@ export default function App() {
   const { user } = useAuth();
   const {
     permission,
-    enabled,
     requestPermission,
     startPolling,
+    stopPolling,
   } = useOrderNotifications();
 
   useEffect(() => {
-    // Só solicita permissão se o usuário estiver autenticado
-    if (!user) return;
+    // Se o usuário não estiver autenticado, parar o polling e retornar
+    if (!user) {
+      stopPolling();
+      return;
+    }
 
-    // Solicitar permissão apenas se ainda não foi solicitada
+    // Iniciar polling imediatamente para usuários autenticados (SSE independe de permissão de push)
+    startPolling();
+
+    // Solicitar permissão para notificações push no browser se ainda não foi solicitada
     if (permission.status === "default" && !permission.requested) {
       // Aguarda 2 segundos e solicita permissão
       const timer = setTimeout(() => {
-        requestPermission().then((granted) => {
-          if (granted) {
-            startPolling();
-          }
-        });
+        requestPermission();
       }, 2000);
 
       return () => clearTimeout(timer);
-    } else if (permission.status === "granted" && !enabled) {
-      // Se já tem permissão mas não está ativo, iniciar
-      startPolling();
     }
-  }, [user, permission.status, permission.requested, enabled, requestPermission, startPolling]);
+  }, [user, permission.status, permission.requested, startPolling, stopPolling, requestPermission]);
 
   return (
     <UIProvider>
