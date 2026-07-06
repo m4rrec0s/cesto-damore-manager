@@ -171,6 +171,7 @@ function clearNotificationsAction() {
 // ─── Sound ─────────────────────────────────────────────────────────
 let bellAudio: HTMLAudioElement | null = null;
 let audioUnlocked = false;
+let initialLoadDone = false; // suppress sound for notifications loaded on connect
 
 function ensureAudio() {
   if (bellAudio || typeof Audio === "undefined") return;
@@ -217,31 +218,47 @@ function showNotificationAction(
   serverId?: string,
 ) {
   addNotificationAction({ orderId, title, message: body, serverId });
-  playOrderBell();
+  // Only play sound for LIVE notifications (not ones loaded on initial connect)
+  if (initialLoadDone) {
+    playOrderBell();
+  }
   // OS notification handled by Web Push (sw-push.js) — no duplicar com new Notification()
 }
 
 async function registerPushSubscriptionAction() {
   try {
-    if (!("serviceWorker" in navigator)) return;
+    if (!("serviceWorker" in navigator)) {
+      console.warn("[Push] Service Worker não suportado");
+      return;
+    }
     const registration = await navigator.serviceWorker.register("/sw-push.js");
     await navigator.serviceWorker.ready;
 
     const token = getToken();
-    if (!token) return;
+    if (!token) {
+      console.warn("[Push] Token não encontrado — não autenticado");
+      return;
+    }
 
     let publicKey: string;
     try {
       const res = await fetch(`${API_URL}/push/vapid-key`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn(`[Push] VAPID key fetch failed: ${res.status}`);
+        return;
+      }
       const data = await res.json();
       publicKey = data.publicKey;
-    } catch {
+    } catch (e) {
+      console.warn("[Push] VAPID key fetch error:", e);
       return;
     }
-    if (!publicKey) return;
+    if (!publicKey) {
+      console.warn("[Push] VAPID key vazia");
+      return;
+    }
 
     const applicationServerKey = urlBase64ToUint8Array(publicKey);
     const subscription = await registration.pushManager.subscribe({
@@ -249,7 +266,7 @@ async function registerPushSubscriptionAction() {
       applicationServerKey: applicationServerKey.buffer as ArrayBuffer,
     });
 
-    await fetch(`${API_URL}/push/subscribe`, {
+    const res = await fetch(`${API_URL}/push/subscribe`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -257,8 +274,13 @@ async function registerPushSubscriptionAction() {
       },
       body: JSON.stringify(subscription),
     });
-  } catch {
-    console.warn("Falha ao registrar a inscrição de push.");
+    if (!res.ok) {
+      console.warn(`[Push] Subscribe POST failed: ${res.status}`);
+    } else {
+      console.info("[Push] Subscription registrada com sucesso");
+    }
+  } catch (e) {
+    console.warn("[Push] Falha ao registrar inscrição de push:", e);
   }
 }
 
@@ -328,8 +350,9 @@ function startPollingAction() {
           .sort((a, b) => b.timestamp - a.timestamp)
           .slice(0, MAX_NOTIFICATIONS);
       });
+      initialLoadDone = true;
     })
-    .catch(() => {});
+    .catch(() => { initialLoadDone = true; });
 
   es.onmessage = (event) => {
     sseRetries = 0;
@@ -374,6 +397,7 @@ function stopPollingAction() {
   }
   sseStarted = false;
   setEnabled(false);
+  initialLoadDone = false;
 }
 
 // ─── React hook (shared via useSyncExternalStore) ─────────────────
