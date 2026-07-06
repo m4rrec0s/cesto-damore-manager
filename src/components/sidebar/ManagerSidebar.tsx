@@ -102,6 +102,7 @@ const groups: SidebarGroupConfig[] = [
   {
     label: "Configurações",
     items: [
+      { name: "Fila de Impressão", href: "/print-queue", icon: Printer },
       { name: "Dispositivos", href: "/settings/devices", icon: Printer },
     ],
   },

@@ -31,6 +31,7 @@ import { useOrderNotifications } from "./hooks/useOrderNotifications";
 
 import { ManualPrintOrder } from "./pages/ManualPrintOrder";
 import { DevicesPage } from "./pages/DevicesPage";
+import { PrintQueuePage } from "./pages/PrintQueuePage";
 
 export default function App() {
   const { user } = useAuth();
@@ -276,6 +277,16 @@ export default function App() {
           element={
             <AdminRoute>
               <DevicesPage />
+            </AdminRoute>
+          }
+        />
+
+        {/* Print Queue */}
+        <Route
+          path="/print-queue"
+          element={
+            <AdminRoute>
+              <PrintQueuePage />
             </AdminRoute>
           }
         />
