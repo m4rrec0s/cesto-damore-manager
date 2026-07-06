@@ -546,7 +546,7 @@ export function ManualPrintOrder() {
 
   const hasMissingRequired = useMemo(() => {
     return selectedLayouts.some((layout) =>
-      (layout.slots || []).some((slot) => slot.required && !slotFiles[slot.id]),
+      (layout.slots || []).some((slot) => slot.required && !slotFiles[`${layout.id}:${slot.id}`]),
     );
   }, [selectedLayouts, slotFiles]);
 
