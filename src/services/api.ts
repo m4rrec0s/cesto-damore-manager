@@ -612,6 +612,7 @@ class ApiService {
 
   post = async (url: string, data: unknown) => this.client.post(url, data);
   put = async (url: string, data: unknown) => this.client.put(url, data);
+  patch = async (url: string, data?: unknown) => this.client.patch(url, data);
   delete = async (url: string) => this.client.delete(url);
 
   // ===== Auth =====
