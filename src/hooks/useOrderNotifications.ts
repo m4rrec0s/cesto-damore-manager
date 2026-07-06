@@ -180,17 +180,13 @@ function ensureAudio() {
 
 function unlockAudio() {
   if (audioUnlocked) return;
-  ensureAudio();
-  if (!bellAudio) return;
-  bellAudio.currentTime = 1;
-  bellAudio.volume = 0.01;
-  bellAudio
+  
+  const silentAudio = new Audio("data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==");
+  silentAudio
     .play()
     .then(() => {
       audioUnlocked = true;
-      bellAudio!.pause();
-      bellAudio!.currentTime = 1;
-      bellAudio!.volume = 1;
+      ensureAudio();
     })
     .catch(() => {});
 }
@@ -206,10 +202,6 @@ function playOrderBell() {
   try {
     ensureAudio();
     if (!bellAudio) return;
-    if (!audioUnlocked) {
-      unlockAudio();
-      return;
-    }
     bellAudio.currentTime = 1;
     bellAudio.volume = 1;
     bellAudio.play().catch(() => {});
