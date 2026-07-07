@@ -38,6 +38,18 @@ interface DevicePrinterConfig {
   letter: string;
 }
 
+interface PrintSettings {
+  paperSize?: string;
+  orientation?: string;
+  fitToPage?: boolean;
+  customFlags?: string;
+}
+
+interface DevicePrintSettings {
+  photoSettings?: PrintSettings;
+  letterSettings?: PrintSettings;
+}
+
 /* ─── Constants ────────────────────────────────────────────────────────── */
 
 const PRINTER_STATUS: Record<
@@ -65,6 +77,12 @@ export function DevicesPage() {
   >({});
   const [savingPrinter, setSavingPrinter] = useState(false);
 
+  // Per-device print settings
+  const [devicePrintSettings, setDevicePrintSettings] = useState<
+    Record<string, DevicePrintSettings>
+  >({});
+  const [savingSettings, setSavingSettings] = useState(false);
+
   /* ─── Fetch devices ──────────────────────────────────────────────────── */
 
   const fetchDevices = useCallback(async () => {
@@ -74,6 +92,7 @@ export function DevicesPage() {
       setDevices(data);
       // Pre-populate printer configs from all devices
       const configs: Record<string, DevicePrinterConfig> = {};
+      const settings: Record<string, DevicePrintSettings> = {};
       for (const d of data) {
         const photoPrinter = d.printers?.find((p) => p.role === 'photo');
         const letterPrinter = d.printers?.find((p) => p.role === 'letter');
@@ -81,8 +100,19 @@ export function DevicesPage() {
           photo: photoPrinter?.name ?? "",
           letter: letterPrinter?.name ?? "",
         };
+        // Load print settings from backend
+        try {
+          const settingsRes = await api.getPrinterConfig(d.deviceId);
+          settings[d.deviceId] = {
+            photoSettings: settingsRes.data?.photoSettings ?? undefined,
+            letterSettings: settingsRes.data?.letterSettings ?? undefined,
+          };
+        } catch {
+          settings[d.deviceId] = {};
+        }
       }
       setDeviceConfigs(configs);
+      setDevicePrintSettings(settings);
     } catch {
       // silent
     } finally {
@@ -270,6 +300,35 @@ export function DevicesPage() {
       toast.success("Configuração removida");
     } catch {
       toast.error("Erro ao remover configuração");
+    }
+  };
+
+  /* ─── Save print settings for a role ────────────────────────────────── */
+
+  const savePrintSettings = async (
+    deviceId: string,
+    role: "photo" | "letter",
+    settings: PrintSettings,
+  ) => {
+    try {
+      setSavingSettings(true);
+      await api.savePrintSettings(role, { settings, deviceId });
+
+      setDevicePrintSettings((prev) => ({
+        ...prev,
+        [deviceId]: {
+          ...prev[deviceId],
+          [role === "photo" ? "photoSettings" : "letterSettings"]: settings,
+        },
+      }));
+
+      toast.success(
+        `Configurações de impressão salvas para ${role === "photo" ? "fotos" : "cartinhas"}`,
+      );
+    } catch {
+      toast.error("Erro ao salvar configurações");
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -539,6 +598,126 @@ export function DevicesPage() {
                               </div>
                             </div>
                           </div>
+                      </div>
+                    )}
+
+                    {/* Print settings config for this device */}
+                    {device.isActive && (
+                      <div>
+                        <p className="text-xs font-semibold text-neutral-500 mb-2">
+                          CONFIGURAÇÕES DE IMPRESSÃO
+                        </p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {/* Photo settings */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs text-neutral-500">
+                              Fotos & Quadros
+                            </label>
+                            <div className="grid gap-1.5">
+                              <select
+                                className="text-sm border rounded-lg px-3 py-1.5"
+                                value={devicePrintSettings[device.deviceId]?.photoSettings?.paperSize ?? ""}
+                                onChange={(e) => {
+                                  const current = devicePrintSettings[device.deviceId]?.photoSettings ?? {};
+                                  savePrintSettings(device.deviceId, "photo", {
+                                    ...current,
+                                    paperSize: e.target.value || undefined,
+                                  });
+                                }}
+                              >
+                                <option value="">Tamanho padrão</option>
+                                <option value="PR (4x6)">PR (4x6) — 10x15cm</option>
+                                <option value="A4">A4</option>
+                                <option value="Letter">Letter</option>
+                                <option value="4x6">4x6</option>
+                              </select>
+                              <select
+                                className="text-sm border rounded-lg px-3 py-1.5"
+                                value={devicePrintSettings[device.deviceId]?.photoSettings?.orientation ?? "auto"}
+                                onChange={(e) => {
+                                  const current = devicePrintSettings[device.deviceId]?.photoSettings ?? {};
+                                  savePrintSettings(device.deviceId, "photo", {
+                                    ...current,
+                                    orientation: e.target.value,
+                                  });
+                                }}
+                              >
+                                <option value="auto">Orientação automática</option>
+                                <option value="landscape">Paisagem (landscape)</option>
+                                <option value="portrait">Retrato (portrait)</option>
+                              </select>
+                              <label className="flex items-center gap-2 text-xs text-neutral-500">
+                                <input
+                                  type="checkbox"
+                                  className="rounded"
+                                  checked={devicePrintSettings[device.deviceId]?.photoSettings?.fitToPage ?? false}
+                                  onChange={(e) => {
+                                    const current = devicePrintSettings[device.deviceId]?.photoSettings ?? {};
+                                    savePrintSettings(device.deviceId, "photo", {
+                                      ...current,
+                                      fitToPage: e.target.checked,
+                                    });
+                                  }}
+                                />
+                                Ajustar à página (fit)
+                              </label>
+                            </div>
+                          </div>
+                          {/* Letter settings */}
+                          <div className="space-y-1.5">
+                            <label className="text-xs text-neutral-500">
+                              Cartinhas
+                            </label>
+                            <div className="grid gap-1.5">
+                              <select
+                                className="text-sm border rounded-lg px-3 py-1.5"
+                                value={devicePrintSettings[device.deviceId]?.letterSettings?.paperSize ?? ""}
+                                onChange={(e) => {
+                                  const current = devicePrintSettings[device.deviceId]?.letterSettings ?? {};
+                                  savePrintSettings(device.deviceId, "letter", {
+                                    ...current,
+                                    paperSize: e.target.value || undefined,
+                                  });
+                                }}
+                              >
+                                <option value="">Tamanho padrão</option>
+                                <option value="A4">A4</option>
+                                <option value="Letter">Letter</option>
+                                <option value="PR (4x6)">PR (4x6) — 10x15cm</option>
+                              </select>
+                              <select
+                                className="text-sm border rounded-lg px-3 py-1.5"
+                                value={devicePrintSettings[device.deviceId]?.letterSettings?.orientation ?? "auto"}
+                                onChange={(e) => {
+                                  const current = devicePrintSettings[device.deviceId]?.letterSettings ?? {};
+                                  savePrintSettings(device.deviceId, "letter", {
+                                    ...current,
+                                    orientation: e.target.value,
+                                  });
+                                }}
+                              >
+                                <option value="auto">Orientação automática</option>
+                                <option value="landscape">Paisagem (landscape)</option>
+                                <option value="portrait">Retrato (portrait)</option>
+                              </select>
+                              <label className="flex items-center gap-2 text-xs text-neutral-500">
+                                <input
+                                  type="checkbox"
+                                  className="rounded"
+                                  checked={devicePrintSettings[device.deviceId]?.letterSettings?.fitToPage ?? false}
+                                  onChange={(e) => {
+                                    const current = devicePrintSettings[device.deviceId]?.letterSettings ?? {};
+                                    savePrintSettings(device.deviceId, "letter", {
+                                      ...current,
+                                      fitToPage: e.target.checked,
+                                    });
+                                  }}
+                                />
+                                Ajustar à página (fit)
+                              </label>
+                            </div>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>

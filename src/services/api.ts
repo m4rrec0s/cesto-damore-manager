@@ -1580,6 +1580,11 @@ class ApiService {
     return (await this.delete(url)).data;
   };
 
+  savePrintSettings = async (
+    role: string,
+    data: { settings: { paperSize?: string; orientation?: string; fitToPage?: boolean; customFlags?: string }; deviceId?: string },
+  ) => (await this.put(`/admin/printer-config/${role}/settings`, data)).data;
+
   getPrintJobStatus = async (orderId: string): Promise<{
     id: string;
     status: string;
