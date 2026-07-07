@@ -70,7 +70,19 @@ export function DevicesPage() {
   const fetchDevices = useCallback(async () => {
     try {
       const res = await api.get("/print-agent/devices");
-      setDevices(res.data);
+      const data = res.data as Device[];
+      setDevices(data);
+      // Pre-populate printer configs from all devices
+      const configs: Record<string, DevicePrinterConfig> = {};
+      for (const d of data) {
+        const photoPrinter = d.printers?.find((p) => p.role === 'photo');
+        const letterPrinter = d.printers?.find((p) => p.role === 'letter');
+        configs[d.deviceId] = {
+          photo: photoPrinter?.name ?? "",
+          letter: letterPrinter?.name ?? "",
+        };
+      }
+      setDeviceConfigs(configs);
     } catch {
       // silent
     } finally {
@@ -103,6 +115,18 @@ export function DevicesPage() {
             d.deviceId === update.deviceId ? { ...d, ...update } : d,
           ),
         );
+        // Sync printer configs if printers changed
+        if (update.printers) {
+          const photoPrinter = update.printers.find((p: any) => p.role === 'photo');
+          const letterPrinter = update.printers.find((p: any) => p.role === 'letter');
+          setDeviceConfigs((prev) => ({
+            ...prev,
+            [update.deviceId]: {
+              photo: photoPrinter?.name ?? prev[update.deviceId]?.photo ?? "",
+              letter: letterPrinter?.name ?? prev[update.deviceId]?.letter ?? "",
+            },
+          }));
+        }
       } catch {
         /* ignore */
       }
