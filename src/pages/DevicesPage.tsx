@@ -363,7 +363,7 @@ export function DevicesPage() {
                   </div>
 
                   <div className="flex items-center gap-1">
-                    {!device.isDefault && device.isActive && (
+                    {!device.isDefault && (
                       <Button
                         variant="ghost"
                         size="icon"

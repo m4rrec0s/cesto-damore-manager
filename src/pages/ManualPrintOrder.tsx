@@ -554,7 +554,6 @@ export function ManualPrintOrder() {
     customerName.trim().length > 0 &&
     selectedLayouts.length > 0 &&
     !hasMissingRequired &&
-    agentConnected &&
     !submitting;
 
   /* Load data */
@@ -716,7 +715,7 @@ export function ManualPrintOrder() {
             {agentConnected ? (
               <span>Agente conectado{deviceName && <span className="ml-1 font-semibold">— {deviceName}</span>}</span>
             ) : (
-              "Agente desconectado"
+              <span>Agente desconectado{deviceName && <span className="ml-1">— {deviceName}</span>}</span>
             )}
           </div>
         </div>
@@ -825,7 +824,6 @@ export function ManualPrintOrder() {
           <Button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            title={!agentConnected ? "Agente de impressão desconectado" : undefined}
             className="bg-rose-500 hover:bg-rose-600"
           >
             {submitting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Printer className="mr-1 h-4 w-4" />}

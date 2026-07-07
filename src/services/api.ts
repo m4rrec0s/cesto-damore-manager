@@ -1617,12 +1617,11 @@ class ApiService {
     printJobId?: string;
     status?: string;
     folderUrl?: string;
-  }> =>
-    (
-      await this.client.post("/api/impressao/manual", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      })
-    ).data;
+  }> => {
+    // Do NOT set Content-Type manually — axios auto-generates it with the boundary
+    // needed for multer to parse multipart/form-data body fields
+    return (await this.client.post("/api/impressao/manual", formData)).data;
+  };
 
   retryPrintJob = async (printJobId: string): Promise<{ ok: boolean; printJobId: string; orderId: string }> =>
     (await this.post(`/api/print/jobs/${printJobId}/retry`, {})).data;

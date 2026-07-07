@@ -261,6 +261,22 @@ async function registerPushSubscriptionAction() {
     }
 
     const applicationServerKey = urlBase64ToUint8Array(publicKey);
+
+    // If existing subscription has a different key, unsubscribe first
+    const existing = await registration.pushManager.getSubscription();
+    if (existing) {
+      const existingKey = existing.options.applicationServerKey;
+      const newKey = applicationServerKey.buffer as ArrayBuffer;
+      // Compare keys — if different, unsubscribe before resubscribing
+      const existingArr = new Uint8Array(existingKey);
+      const newArr = new Uint8Array(newKey);
+      const differs = existingArr.length !== newArr.length || existingArr.some((v, i) => v !== newArr[i]);
+      if (differs) {
+        console.info("[Push] applicationServerKey changed — unsubscribe antes de resubscribe");
+        await existing.unsubscribe();
+      }
+    }
+
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: applicationServerKey.buffer as ArrayBuffer,
