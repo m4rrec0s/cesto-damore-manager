@@ -102,10 +102,10 @@ export function DevicesPage() {
         };
         // Load print settings from backend
         try {
-          const settingsRes = await api.getPrinterConfig(d.deviceId);
+          const settingsData = await api.getPrinterConfig(d.deviceId);
           settings[d.deviceId] = {
-            photoSettings: settingsRes.data?.photoSettings ?? undefined,
-            letterSettings: settingsRes.data?.letterSettings ?? undefined,
+            photoSettings: settingsData.photoSettings ?? undefined,
+            letterSettings: settingsData.letterSettings ?? undefined,
           };
         } catch {
           settings[d.deviceId] = {};

@@ -1562,7 +1562,12 @@ class ApiService {
     agentConnected: boolean;
   }> => (await this.get("/api/print/available-printers")).data;
 
-  getPrinterConfig = async (deviceId?: string): Promise<Record<string, unknown>> => {
+  getPrinterConfig = async (deviceId?: string): Promise<{
+    photo: string | null;
+    letter: string | null;
+    photoSettings?: { paperSize?: string; orientation?: string; fitToPage?: boolean; customFlags?: string };
+    letterSettings?: { paperSize?: string; orientation?: string; fitToPage?: boolean; customFlags?: string };
+  }> => {
     const params = deviceId ? { deviceId } : {};
     return (await this.get("/admin/printer-config", { params })).data;
   };
