@@ -83,6 +83,11 @@ export function DevicesPage() {
   >({});
   const [savingSettings, setSavingSettings] = useState(false);
 
+  // Per-device paper sizes (loaded from device printer)
+  const [paperSizes, setPaperSizes] = useState<
+    Record<string, Record<string, Array<{ name: string; kind: number; width: number; height: number }>>>
+  >({});
+
   /* ─── Fetch devices ──────────────────────────────────────────────────── */
 
   const fetchDevices = useCallback(async () => {
@@ -190,6 +195,27 @@ export function DevicesPage() {
     [devices],
   );
 
+  /* ─── Load paper sizes from device printer ──────────────────────────── */
+
+  const loadPaperSizesForDevice = useCallback(
+    async (deviceId: string, printerName: string, role: string) => {
+      if (!printerName) return;
+      try {
+        const res = await api.getPaperSizes(deviceId, printerName);
+        setPaperSizes((prev) => ({
+          ...prev,
+          [deviceId]: {
+            ...prev[deviceId],
+            [role]: res.paperSizes ?? [],
+          },
+        }));
+      } catch {
+        // Device offline or printer not available — silently ignore
+      }
+    },
+    [api],
+  );
+
   /* ─── Handle expand device ───────────────────────────────────────────── */
 
   const handleExpandDevice = useCallback(
@@ -200,8 +226,12 @@ export function DevicesPage() {
       }
       setExpandedDevice(deviceId);
       loadDevicePrinterConfig(deviceId);
+      // Load paper sizes for assigned printers
+      const config = deviceConfigs[deviceId];
+      if (config?.photo) loadPaperSizesForDevice(deviceId, config.photo, "photo");
+      if (config?.letter) loadPaperSizesForDevice(deviceId, config.letter, "letter");
     },
-    [expandedDevice, loadDevicePrinterConfig],
+    [expandedDevice, loadDevicePrinterConfig, deviceConfigs, loadPaperSizesForDevice],
   );
 
   /* ─── Save printer config for a device ───────────────────────────────── */
@@ -252,6 +282,9 @@ export function DevicesPage() {
           [role]: printerName,
         },
       }));
+
+      // Load paper sizes for the newly assigned printer
+      loadPaperSizesForDevice(deviceId, printerName, role);
       
       toast.success(
         `Impressora de ${role === "photo" ? "fotos" : "cartinhas"} salva para este dispositivo`,
@@ -626,10 +659,18 @@ export function DevicesPage() {
                                 }}
                               >
                                 <option value="">Tamanho padrão</option>
-                                <option value="PR (4x6)">PR (4x6) — 10x15cm</option>
-                                <option value="A4">A4</option>
-                                <option value="Letter">Letter</option>
-                                <option value="4x6">4x6</option>
+                                {(paperSizes[device.deviceId]?.photo ?? []).map((ps) => (
+                                  <option key={ps.name} value={ps.name}>
+                                    {ps.name} ({ps.width}x{ps.height})
+                                  </option>
+                                ))}
+                                {(paperSizes[device.deviceId]?.photo ?? []).length === 0 && deviceConfig.photo && (
+                                  <>
+                                    <option value="PR (4x6)">PR (4x6)</option>
+                                    <option value="A4">A4</option>
+                                    <option value="Letter">Letter</option>
+                                  </>
+                                )}
                               </select>
                               <select
                                 className="text-sm border rounded-lg px-3 py-1.5"
@@ -681,9 +722,18 @@ export function DevicesPage() {
                                 }}
                               >
                                 <option value="">Tamanho padrão</option>
-                                <option value="A4">A4</option>
-                                <option value="Letter">Letter</option>
-                                <option value="PR (4x6)">PR (4x6) — 10x15cm</option>
+                                {(paperSizes[device.deviceId]?.letter ?? []).map((ps) => (
+                                  <option key={ps.name} value={ps.name}>
+                                    {ps.name} ({ps.width}x{ps.height})
+                                  </option>
+                                ))}
+                                {(paperSizes[device.deviceId]?.letter ?? []).length === 0 && deviceConfig.letter && (
+                                  <>
+                                    <option value="A4">A4</option>
+                                    <option value="Letter">Letter</option>
+                                    <option value="PR (4x6)">PR (4x6)</option>
+                                  </>
+                                )}
                               </select>
                               <select
                                 className="text-sm border rounded-lg px-3 py-1.5"

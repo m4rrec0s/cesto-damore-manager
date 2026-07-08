@@ -1590,6 +1590,11 @@ class ApiService {
     data: { settings: { paperSize?: string; orientation?: string; fitToPage?: boolean; customFlags?: string }; deviceId?: string },
   ) => (await this.put(`/admin/printer-config/${role}/settings`, data)).data;
 
+  getPaperSizes = async (deviceId: string, printerName: string): Promise<{
+    printerName: string;
+    paperSizes: Array<{ name: string; kind: number; width: number; height: number }>;
+  }> => (await this.get(`/api/print-agent/devices/${encodeURIComponent(deviceId)}/paper-sizes?printerName=${encodeURIComponent(printerName)}`)).data;
+
   getPrintJobStatus = async (orderId: string): Promise<{
     id: string;
     status: string;
