@@ -23,6 +23,17 @@ export const onlyDigits = (value?: string | null) => {
   return value ? value.replace(/\D/g, "") : "";
 };
 
+export const formatDeliverySlot = (value?: string | null) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const hour = Number(
+    date
+      .toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false })
+  );
+  return hour < 13 ? "Manhã" : "Tarde";
+};
+
 export const extractErrorMessage = (error: unknown, fallback: string) => {
   const isGenericServerMessage = (message?: string) => {
     if (!message) return false;

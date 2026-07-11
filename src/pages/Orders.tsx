@@ -28,6 +28,7 @@ import { CustomizationDisplay } from "../components/CustomizationDisplay";
 import {
   formatCurrency,
   formatDate,
+  formatDeliverySlot,
   shortId,
   onlyDigits,
   extractErrorMessage,
@@ -450,7 +451,7 @@ export function Orders() {
                                 {activeOrder.status === "DELIVERED" ||
                                 activeOrder.status === "SHIPPED"
                                   ? "OK"
-                                  : `Entrega: ${formatDate(activeOrder.delivery_date)}`}
+                                  : `Entrega: ${formatDate(activeOrder.delivery_date)} (${formatDeliverySlot(activeOrder.delivery_date)})`}
                               </span>
                             </>
                           )}
