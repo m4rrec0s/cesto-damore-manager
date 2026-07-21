@@ -141,6 +141,8 @@ type LayoutSlot = {
   id: string;
   label: string;
   position?: Record<string, unknown>;
+  width?: number;
+  height?: number;
   required: boolean;
 };
 
@@ -154,6 +156,32 @@ type DynamicLayoutOption = {
   width?: number;
   height?: number;
   slots?: LayoutSlot[];
+};
+
+const getSlotAspect = (slot?: LayoutSlot): number | undefined => {
+  if (!slot) return undefined;
+
+  const position = slot.position || {};
+  const width = Number(
+    slot.width ??
+      position.width ??
+      position.w ??
+      position.frameWidth ??
+      position.frame_width,
+  );
+  const height = Number(
+    slot.height ??
+      position.height ??
+      position.h ??
+      position.frameHeight ??
+      position.frame_height,
+  );
+
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return undefined;
+  }
+
+  return width / height;
 };
 
 type JobStatus = "PENDING" | "SENT" | "RECEIVED" | "PRINTING" | "PRINTED" | "FAILED" | null;
@@ -177,20 +205,56 @@ type CropRect = { x: number; y: number; width: number; height: number };
 
 function CropDialog({
   src,
+  aspect,
   onApply,
   onClose,
 }: {
   src: string;
+  aspect?: number;
   onApply: (cropped: Blob) => void;
   onClose: () => void;
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, width: 100, height: 100 });
-  const [dragging, setDragging] = useState(false);
+  const [dragMode, setDragMode] = useState<"draw" | "move" | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [startCrop, setStartCrop] = useState<CropRect | null>(null);
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
   const [displaySize, setDisplaySize] = useState({ w: 0, h: 0 });
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  const clampCrop = (next: CropRect): CropRect => {
+    const width = Math.max(1, Math.min(next.width, naturalSize.w));
+    const height = Math.max(1, Math.min(next.height, naturalSize.h));
+    return {
+      x: Math.max(0, Math.min(next.x, naturalSize.w - width)),
+      y: Math.max(0, Math.min(next.y, naturalSize.h - height)),
+      width,
+      height,
+    };
+  };
+
+  const buildInitialCrop = (nw: number, nh: number): CropRect => {
+    if (!aspect || aspect <= 0) return { x: 0, y: 0, width: nw, height: nh };
+
+    const imageAspect = nw / nh;
+    let width = nw;
+    let height = nh;
+
+    if (imageAspect > aspect) {
+      height = nh;
+      width = height * aspect;
+    } else {
+      width = nw;
+      height = width / aspect;
+    }
+
+    return {
+      x: (nw - width) / 2,
+      y: (nh - height) / 2,
+      width,
+      height,
+    };
+  };
 
   const handleLoad = () => {
     const img = imgRef.current;
@@ -200,34 +264,76 @@ function CropDialog({
     setNaturalSize({ w: nw, h: nh });
     const rect = img.getBoundingClientRect();
     setDisplaySize({ w: rect.width, h: rect.height });
-    setOffset({ x: rect.left, y: rect.top });
-    setCrop({ x: 0, y: 0, width: nw, height: nh });
+    setCrop(buildInitialCrop(nw, nh));
   };
 
-  const toNatural = (clientX: number, clientY: number) => ({
-    x: Math.max(0, Math.min(naturalSize.w, ((clientX - offset.x) / displaySize.w) * naturalSize.w)),
-    y: Math.max(0, Math.min(naturalSize.h, ((clientY - offset.y) / displaySize.h) * naturalSize.h)),
-  });
+  const toNatural = (clientX: number, clientY: number) => {
+    const rect = imgRef.current?.getBoundingClientRect();
+    const width = rect?.width || displaySize.w || 1;
+    const height = rect?.height || displaySize.h || 1;
+    const left = rect?.left || 0;
+    const top = rect?.top || 0;
+
+    return {
+      x: Math.max(0, Math.min(naturalSize.w, ((clientX - left) / width) * naturalSize.w)),
+      y: Math.max(0, Math.min(naturalSize.h, ((clientY - top) / height) * naturalSize.h)),
+    };
+  };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
     const p = toNatural(e.clientX, e.clientY);
-    setDragging(true);
+    setDragMode("draw");
     setDragStart(p);
+    setStartCrop(null);
     setCrop({ x: p.x, y: p.y, width: 0, height: 0 });
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!dragging) return;
+    if (!dragMode) return;
     const p = toNatural(e.clientX, e.clientY);
-    const x = Math.min(dragStart.x, p.x);
-    const y = Math.min(dragStart.y, p.y);
-    const w = Math.abs(p.x - dragStart.x);
-    const h = Math.abs(p.y - dragStart.y);
-    setCrop({ x, y, width: w, height: h });
+
+    if (dragMode === "move" && startCrop) {
+      setCrop(
+        clampCrop({
+          ...startCrop,
+          x: startCrop.x + p.x - dragStart.x,
+          y: startCrop.y + p.y - dragStart.y,
+        }),
+      );
+      return;
+    }
+
+    const rawW = Math.abs(p.x - dragStart.x);
+    const rawH = Math.abs(p.y - dragStart.y);
+    let w = rawW;
+    let h = rawH;
+
+    if (aspect && aspect > 0 && rawW > 0 && rawH > 0) {
+      if (rawW / rawH > aspect) {
+        w = rawH * aspect;
+      } else {
+        h = rawW / aspect;
+      }
+    }
+
+    const x = p.x >= dragStart.x ? dragStart.x : dragStart.x - w;
+    const y = p.y >= dragStart.y ? dragStart.y : dragStart.y - h;
+    setCrop(clampCrop({ x, y, width: w, height: h }));
   };
 
-  const handleMouseUp = () => setDragging(false);
+  const handleMouseUp = () => {
+    setDragMode(null);
+    setStartCrop(null);
+  };
+
+  const handleMoveStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragMode("move");
+    setDragStart(toNatural(e.clientX, e.clientY));
+    setStartCrop(crop);
+  };
 
   const applyCrop = async () => {
     const img = imgRef.current;
@@ -250,7 +356,7 @@ function CropDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="mx-4 max-w-lg rounded-xl border border-slate-200 bg-white p-6 shadow-2xl">
+      <div className="mx-4 flex h-[min(760px,calc(100dvh-2rem))] w-[min(900px,calc(100vw-2rem))] flex-col rounded-xl border border-slate-200 bg-white p-6 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-900">Recortar imagem</h3>
           <button onClick={onClose} className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
@@ -258,24 +364,30 @@ function CropDialog({
           </button>
         </div>
         <div
-          className="relative mb-4 overflow-hidden rounded-lg border border-slate-200 cursor-crosshair select-none"
+          className="relative mb-4 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-950 cursor-crosshair select-none"
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
-          <img ref={imgRef} src={src} onLoad={handleLoad} className="block w-full" alt="Crop" draggable={false} />
-          {naturalSize.w > 0 && (
-            <>
-              <div className="absolute inset-0 bg-black/40" />
-              <div
-                className="absolute border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]"
-                style={cropOverlay}
-              >
-                <div className="absolute inset-0 border border-dashed border-white/60" />
-              </div>
-            </>
-          )}
+          <div className="relative max-h-full max-w-full">
+            <img ref={imgRef} src={src} onLoad={handleLoad} className="block max-h-[calc(100dvh-13rem)] max-w-full object-contain" alt="Crop" draggable={false} />
+            {naturalSize.w > 0 && (
+              <>
+                <div
+                  className="absolute cursor-move border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]"
+                  style={cropOverlay}
+                  onMouseDown={handleMoveStart}
+                >
+                  <div className="absolute inset-0 border border-dashed border-white/60" />
+                  <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-1 rounded-full bg-black/55 px-2 py-1 text-[10px] font-bold text-white">
+                    <GripVertical className="h-3 w-3" />
+                    Mover
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
@@ -434,6 +546,9 @@ function LayoutPanel({
   const [cropTarget, setCropTarget] = useState<string | null>(null);
 
   const cropSrc = cropTarget ? slotPreviews[cropTarget] : undefined;
+  const cropSlot = cropTarget
+    ? (layout.slots || []).find((slot) => slot.id === cropTarget)
+    : undefined;
 
   const handleCropApply = async (blob: Blob) => {
     if (!cropTarget) return;
@@ -510,6 +625,7 @@ function LayoutPanel({
       {cropTarget && cropSrc && (
         <CropDialog
           src={cropSrc}
+          aspect={getSlotAspect(cropSlot)}
           onApply={handleCropApply}
           onClose={() => setCropTarget(null)}
         />

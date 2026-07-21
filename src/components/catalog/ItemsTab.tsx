@@ -75,7 +75,17 @@ const getDefaultCustomizationDataByType = (
 ): Record<string, unknown> => {
   switch (type) {
     case "TEXT":
-      return { fields: [] };
+      return {
+        fields: [
+          {
+            id: "text",
+            label: "Texto",
+            placeholder: "Digite o texto",
+            required: false,
+            max_length: 0,
+          },
+        ],
+      };
     case "MULTIPLE_CHOICE":
       return { options: [] };
     case "DYNAMIC_LAYOUT":
@@ -263,7 +273,7 @@ export function ItemsTab() {
       type: "TEXT",
       price: 0,
       isRequired: false,
-      customization_data: { fields: [] },
+      customization_data: getDefaultCustomizationDataByType("TEXT"),
     });
     setIsCustomizationFormOpen(true);
   };
@@ -1000,6 +1010,207 @@ export function ItemsTab() {
 
                   {/* Opções específicas por tipo */}
                   <div className="border-t border-neutral-100 pt-4">
+                    {customizationFormData.type === "TEXT" && (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between mb-3">
+                          <label className="text-xs font-black text-neutral-600 uppercase tracking-widest">
+                            📄 Campos de Texto
+                          </label>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const currentData =
+                                customizationFormData.customization_data || {
+                                  fields: [],
+                                };
+                              const fields =
+                                ((currentData as Record<string, unknown>)
+                                  .fields as Record<string, unknown>[]) || [];
+                              setCustomizationFormData({
+                                ...customizationFormData,
+                                customization_data: {
+                                  ...currentData,
+                                  fields: [
+                                    ...fields,
+                                    {
+                                      id: crypto.randomUUID(),
+                                      label: "Texto",
+                                      placeholder: "Digite o texto",
+                                      required: false,
+                                      max_length: 0,
+                                    },
+                                  ],
+                                },
+                              });
+                            }}
+                            className="h-8 px-2 bg-neutral-600 text-white rounded-lg text-[10px] font-bold"
+                          >
+                            + Adicionar
+                          </Button>
+                        </div>
+
+                        <p className="text-xs text-neutral-400">
+                          Use 0 no limite para permitir texto sem limite.
+                        </p>
+
+                        <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar">
+                          {(
+                            ((
+                              customizationFormData.customization_data as Record<
+                                string,
+                                unknown
+                              >
+                            )?.fields as Record<string, unknown>[]) || []
+                          ).map((field: Record<string, unknown>, idx: number) => (
+                            <div
+                              key={(field.id as string) || idx}
+                              className="space-y-3 bg-white p-3 rounded-xl border border-neutral-100"
+                            >
+                              <div className="grid gap-2 sm:grid-cols-2">
+                                <Input
+                                  placeholder="Rótulo"
+                                  value={(field.label as string) || ""}
+                                  onChange={(e) => {
+                                    const fields = [
+                                      ...((customizationFormData
+                                        .customization_data?.fields as Record<
+                                        string,
+                                        unknown
+                                      >[]) || []),
+                                    ];
+                                    fields[idx] = {
+                                      ...fields[idx],
+                                      label: e.target.value,
+                                    };
+                                    setCustomizationFormData({
+                                      ...customizationFormData,
+                                      customization_data: {
+                                        ...customizationFormData.customization_data,
+                                        fields,
+                                      },
+                                    });
+                                  }}
+                                  className="h-9 text-xs rounded-xl border-neutral-50"
+                                />
+                                <Input
+                                  placeholder="Placeholder"
+                                  value={(field.placeholder as string) || ""}
+                                  onChange={(e) => {
+                                    const fields = [
+                                      ...((customizationFormData
+                                        .customization_data?.fields as Record<
+                                        string,
+                                        unknown
+                                      >[]) || []),
+                                    ];
+                                    fields[idx] = {
+                                      ...fields[idx],
+                                      placeholder: e.target.value,
+                                    };
+                                    setCustomizationFormData({
+                                      ...customizationFormData,
+                                      customization_data: {
+                                        ...customizationFormData.customization_data,
+                                        fields,
+                                      },
+                                    });
+                                  }}
+                                  className="h-9 text-xs rounded-xl border-neutral-50"
+                                />
+                              </div>
+
+                              <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  placeholder="0"
+                                  value={Number(field.max_length) || 0}
+                                  onChange={(e) => {
+                                    const fields = [
+                                      ...((customizationFormData
+                                        .customization_data?.fields as Record<
+                                        string,
+                                        unknown
+                                      >[]) || []),
+                                    ];
+                                    fields[idx] = {
+                                      ...fields[idx],
+                                      max_length: Math.max(
+                                        0,
+                                        Number(e.target.value) || 0,
+                                      ),
+                                    };
+                                    setCustomizationFormData({
+                                      ...customizationFormData,
+                                      customization_data: {
+                                        ...customizationFormData.customization_data,
+                                        fields,
+                                      },
+                                    });
+                                  }}
+                                  className="h-9 text-xs rounded-xl border-neutral-50"
+                                />
+                                <label className="flex items-center gap-2 text-xs font-bold text-neutral-500">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(field.required)}
+                                    onChange={(e) => {
+                                      const fields = [
+                                        ...((customizationFormData
+                                          .customization_data?.fields as Record<
+                                          string,
+                                          unknown
+                                        >[]) || []),
+                                      ];
+                                      fields[idx] = {
+                                        ...fields[idx],
+                                        required: e.target.checked,
+                                      };
+                                      setCustomizationFormData({
+                                        ...customizationFormData,
+                                        customization_data: {
+                                          ...customizationFormData.customization_data,
+                                          fields,
+                                        },
+                                      });
+                                    }}
+                                  />
+                                  Obrigatório
+                                </label>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => {
+                                    const fields = (
+                                      customizationFormData.customization_data
+                                        ?.fields as Record<string, unknown>[]
+                                    ).filter(
+                                      (_: Record<string, unknown>, i: number) =>
+                                        i !== idx,
+                                    );
+                                    setCustomizationFormData({
+                                      ...customizationFormData,
+                                      customization_data: {
+                                        ...customizationFormData.customization_data,
+                                        fields,
+                                      },
+                                    });
+                                  }}
+                                  className="h-8 w-8 text-red-400 hover:text-red-600"
+                                >
+                                  <X size={16} />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {customizationFormData.type === "MULTIPLE_CHOICE" && (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between mb-3">
