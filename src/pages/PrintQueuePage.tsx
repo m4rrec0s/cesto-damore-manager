@@ -99,6 +99,19 @@ export function PrintQueuePage() {
     }
   };
 
+  const handleRetry = async (jobId: string) => {
+    setActionLoading(jobId);
+    try {
+      await api.retryPrintJob(jobId);
+      toast.success("Job reenviado");
+      fetchJobs();
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || "Falha ao reenviar job");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleDispatchAll = async () => {
     setActionLoading("all");
     try {
@@ -268,6 +281,17 @@ export function PrintQueuePage() {
                       <Trash2 size={14} />
                     </Button>
                   </div>
+                )}
+                {job.status === "FAILED" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleRetry(job.id)}
+                    disabled={isLoading}
+                    className="ml-4"
+                  >
+                    <RefreshCw size={14} />
+                  </Button>
                 )}
               </div>
             );
