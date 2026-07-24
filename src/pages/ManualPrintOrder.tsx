@@ -1,152 +1,254 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import {
   CheckCircle2,
-  Crop,
-  Loader2,
-  Printer,
-  RefreshCw,
-  Upload,
-  X,
-  XCircle,
-  Plus,
   Minus,
+  Upload,
+  Crop,
+  XCircle,
+  X,
   GripVertical,
+  Type,
+  AlertCircle,
+  Loader2,
+  WifiOff,
+  Wifi,
+  Printer,
+  CheckCheck,
+  RefreshCw,
+  Image as ImageIcon,
+  Send,
 } from "lucide-react";
-import { toast } from "sonner";
-import useApi from "../services/api";
-import { Button } from "../components/ui/button";
-import { Input } from "../components/ui/input";
-import { Textarea } from "../components/ui/textarea";
+import { Button } from "@/components/ui/button";
+import { useApi } from "@/services/api";
+import placeholderImg from "../assets/placeholder.png";
 
-/* ─── Helpers ──────────────────────────────────────────────────────────── */
+const CM_TO_PX = 37.795;
+const INTERNAL_DPI_MULTIPLIER = 2; // Qualidade padrão Retina (2x)
+// const VISUAL_BUFFER_DPI = 2; // REMOVIDO: Causa bugs de zoom
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(reader.error || new Error("Falha ao ler imagem"));
-    reader.readAsDataURL(file);
-  });
+const generateId = () => Math.random().toString(36).substring(2, 11);
+
+const CUSTOM_PROPS = [
+  "name",
+  "id",
+  "selectable",
+  "evented",
+  "editable", // Importante persistir se o objeto é editável ou não
+  "isCustomizable",
+  "maxChars",
+  "isFrame",
+  "backgroundColor", // Garantir que salva background se estiver no objeto
+  "customData",
+  "rx",
+  "ry",
+  "stroke",
+  "strokeWidth",
+  "strokeDashArray",
+  "radius",
+  "width",
+  "height",
+  "splitByGrapheme",
+  "objectCaching",
+  "linkedFrameId",
+  "imageSmoothing",
+  "noScaleCache",
+];
+
+// Tipagem simplificada para evitar erros de linting "any"
+interface FabricCanvas {
+  setZoom: (v: number) => void;
+  setDimensions: (
+    dim: { width: string | number; height: string | number },
+    opt?: any,
+  ) => void;
+  renderAll: () => void;
+  requestRenderAll: () => void;
+  discardActiveObject: () => void;
+  setActiveObject: (obj: any) => void;
+  add: (obj: any) => void;
+  remove: (obj: any) => void;
+  getObjects: () => any[];
+  toObject: (props?: string[]) => any;
+  toDataURL: (opt?: any) => string;
+  loadFromJSON: (json: any) => Promise<void>;
+  bringObjectToFront: (obj: any) => void;
+  sendObjectToBack: (obj: any) => void;
+  bringObjectForward: (obj: any) => void;
+  sendObjectBackwards: (obj: any) => void;
+  set: (keyOrObj: string | any, value?: any) => void;
+  backgroundColor: string | any;
+  on: (event: string, handler: (opt: any) => void) => void;
+  off: (event: string, handler?: any) => void;
+  get: (prop: string) => any;
+  calcOffset: () => void;
+  dispose: () => void;
+  viewportTransform: number[];
+  setViewportTransform: (v: number[]) => void;
 }
 
-async function composeLayoutPng(
-  fabricJsonState: object,
-  slotImages: Record<string, File>,
-  layoutWidth: number,
-  layoutHeight: number,
-): Promise<Blob> {
-  const { Canvas, FabricImage, Rect, Circle } = await import("fabric");
-  const canvasEl = document.createElement("canvas");
-  const canvas = new Canvas(canvasEl, {
-    width: layoutWidth,
-    height: layoutHeight,
-    backgroundColor: "#ffffff",
-    selection: false,
-    preserveObjectStacking: true,
+interface FabricObject {
+  id?: string;
+  name?: string;
+  type?: string;
+  left: number;
+  top: number;
+  width?: number;
+  height?: number;
+  fill?: string;
+  opacity?: number;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: string | number;
+  fontStyle?: any;
+  isFrame?: boolean;
+  isCustomizable?: boolean;
+  clone: (extraProps?: string[]) => Promise<any>;
+  set: (keyOrObj: string | any, value?: any) => void;
+  setCoords: () => void;
+  getBoundingRect: () => {
+    width: number;
+    height: number;
+    left: number;
+    top: number;
+  };
+  scaleToWidth: (w: number) => void;
+  scaleToHeight: (h: number) => void;
+  [key: string]: any;
+}
+
+interface CustomWindow extends Window {
+  __initialCanvasState?: any;
+}
+
+const loadGoogleFont = (fontFamily: string) => {
+  if (document.getElementById(`font-${fontFamily.replace(/\s+/g, "-")}`))
+    return Promise.resolve();
+
+  return new Promise<void>((resolve, reject) => {
+    const link = document.createElement("link");
+    link.id = `font-${fontFamily.replace(/\s+/g, "-")}`;
+    link.rel = "stylesheet";
+    // Adicionar display=swap e pesos para as novas fontes decorativas
+    link.href = `https://fonts.googleapis.com/css2?family=${fontFamily.replace(
+      /\s+/g,
+      "+",
+    )}:wght@400;700;900&display=swap`;
+    link.onload = () => {
+      // Aguardar o carregamento da fonte com timeout
+      Promise.race([
+        document.fonts.load(`1em "${fontFamily}"`),
+        new Promise<void>((r) => setTimeout(r, 2000)),
+      ])
+        .then(() => resolve())
+        .catch(() => resolve()); // Sempre resolver mesmo se falhar
+    };
+    link.onerror = () => {
+      resolve(); // Resolver mesmo se erro (fonte pode carregar em background)
+    };
+    document.head.appendChild(link);
   });
+};
 
-  const state = JSON.parse(JSON.stringify(fabricJsonState));
-  if (Array.isArray(state.objects)) {
-    state.objects = state.objects.map((obj: any) => ({
-      ...obj,
-      type: obj.type === "i-text" || obj.type === "IText" ? "textbox" : obj.type,
-      objectCaching: false,
-      selectable: false,
-      evented: false,
-    }));
+// Carrega todas as fontes referenciadas num estado do Fabric (ou JSON string)
+const preloadFontsFromState = async (stateOrJson: any) => {
+  try {
+    const state =
+      typeof stateOrJson === "string" ? JSON.parse(stateOrJson) : stateOrJson;
+    if (!state || !state.objects) return;
+    const fonts = new Set<string>();
+    state.objects.forEach((obj: any) => {
+      if (obj.fontFamily && obj.fontFamily !== "Arial") fonts.add(obj.fontFamily);
+    });
+    if (fonts.size > 0) {
+      await Promise.all(Array.from(fonts).map((f) => loadGoogleFont(f)));
+    }
+  } catch (e) {
+    // ignore parsing errors
+    return;
   }
+};
 
-  await canvas.loadFromJSON(state);
+const addFramePlaceholdersToExport = async (
+  exportCanvas: FabricCanvas,
+) => {
+  const { FabricImage } = await import("fabric");
+  const objects = exportCanvas.getObjects() as FabricObject[];
+  const frameObjects = objects.filter((obj) => obj.isFrame);
 
-  for (const [slotId, file] of Object.entries(slotImages)) {
-    const frame = canvas.getObjects().find((obj: any) => {
-      const name = String(obj.name || "");
-      return (
-        obj.id === slotId ||
-        name === slotId ||
-        obj.customData?.slotId === slotId
-      );
-    }) as any;
+  if (frameObjects.length === 0) return;
 
-    if (!frame) continue;
+  for (const frame of frameObjects) {
+    const hasLinkedImage = objects.some(
+      (obj) => obj.type === "image" && obj.linkedFrameId === frame.id,
+    );
 
-    const dataUrl = await fileToDataUrl(file);
-    const image = await FabricImage.fromURL(dataUrl, { crossOrigin: "anonymous" });
-    const frameWidth = Number(frame.width || 1) * Number(frame.scaleX || 1);
-    const frameHeight = Number(frame.height || 1) * Number(frame.scaleY || 1);
-    const center = frame.getCenterPoint();
-    const imageWidth = Number(image.width || 1);
-    const imageHeight = Number(image.height || 1);
-    const scale = Math.max(frameWidth / imageWidth, frameHeight / imageHeight);
+    if (hasLinkedImage) continue;
 
-    frame.set({ fill: "transparent", stroke: "transparent", opacity: 0 });
+    const placeholder = (await (FabricImage as any).fromURL(placeholderImg, {
+      crossOrigin: "anonymous",
+    })) as FabricObject;
 
-    image.set({
-      scaleX: scale,
-      scaleY: scale,
-      left: center.x,
-      top: center.y,
+    const frameRect = frame.getBoundingRect();
+    const placeholderWidth = (placeholder as any).width || 1;
+    const placeholderHeight = (placeholder as any).height || 1;
+    const coverScale = Math.max(
+      frameRect.width / placeholderWidth,
+      frameRect.height / placeholderHeight,
+    );
+
+    placeholder.set({
+      left: frameRect.left + frameRect.width / 2,
+      top: frameRect.top + frameRect.height / 2,
       originX: "center",
       originY: "center",
-      angle: frame.angle || 0,
+      scaleX: coverScale,
+      scaleY: coverScale,
+      angle: (frame as any).angle || 0,
+      flipX: (frame as any).flipX || false,
+      flipY: (frame as any).flipY || false,
+      skewX: (frame as any).skewX || 0,
+      skewY: (frame as any).skewY || 0,
+      opacity: frame.opacity ?? 1,
       selectable: false,
       evented: false,
       objectCaching: false,
-      name: `manual-uploaded-${slotId}`,
     });
 
-    const clipPath =
-      frame.type === "circle"
-        ? new Circle({
-            radius: frame.radius || frame.width / 2,
-            scaleX: frame.scaleX,
-            scaleY: frame.scaleY,
-            originX: "center",
-            originY: "center",
-            left: center.x,
-            top: center.y,
-            angle: frame.angle || 0,
-            absolutePositioned: true,
-          })
-        : new Rect({
-            width: frame.width,
-            height: frame.height,
-            rx: frame.rx,
-            ry: frame.ry,
-            scaleX: frame.scaleX,
-            scaleY: frame.scaleY,
-            originX: "center",
-            originY: "center",
-            left: center.x,
-            top: center.y,
-            angle: frame.angle || 0,
-            absolutePositioned: true,
-          });
+    try {
+      const clipPath = await frame.clone();
+      (clipPath as any).absolutePositioned = true;
+      placeholder.clipPath = clipPath as any;
+    } catch (error) {
+      // Se o clone falhar, ainda exportamos o placeholder sem clipPath.
+    }
 
-    image.set("clipPath", clipPath);
-    canvas.add(image);
-    canvas.moveObjectTo(image, canvas.getObjects().indexOf(frame) + 1);
+    placeholder.set(
+      "name",
+      `preview-placeholder-${frame.id || frame.name || Date.now()}`,
+    );
+    const frameIndex = exportCanvas.getObjects().indexOf(frame);
+    if (frameIndex >= 0) {
+      (exportCanvas as any).insertAt?.(frameIndex, placeholder);
+    } else {
+      exportCanvas.add(placeholder);
+    }
+    exportCanvas.bringObjectToFront(frame);
   }
+};
 
-  canvas.renderAll();
-  const dataUrl = canvas.toDataURL({ format: "png", multiplier: 4, enableRetinaScaling: false });
-  canvas.dispose();
-  const response = await fetch(dataUrl);
-  return await response.blob();
-}
 
-/* ─── Types ────────────────────────────────────────────────────────────── */
-
-type LayoutSlot = {
+interface LayoutSlot {
   id: string;
   label: string;
   position?: Record<string, unknown>;
   width?: number;
   height?: number;
   required: boolean;
-};
+}
 
-type DynamicLayoutOption = {
+interface DynamicLayoutOption {
   id: string;
   name: string;
   type?: string;
@@ -156,25 +258,17 @@ type DynamicLayoutOption = {
   width?: number;
   height?: number;
   slots?: LayoutSlot[];
-};
+}
 
 const getSlotAspect = (slot?: LayoutSlot): number | undefined => {
   if (!slot) return undefined;
 
   const position = slot.position || {};
   const width = Number(
-    slot.width ??
-      position.width ??
-      position.w ??
-      position.frameWidth ??
-      position.frame_width,
+    slot.width ?? position.width ?? position.w ?? position.frameWidth ?? position.frame_width,
   );
   const height = Number(
-    slot.height ??
-      position.height ??
-      position.h ??
-      position.frameHeight ??
-      position.frame_height,
+    slot.height ?? position.height ?? position.h ?? position.frameHeight ?? position.frame_height,
   );
 
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
@@ -183,6 +277,19 @@ const getSlotAspect = (slot?: LayoutSlot): number | undefined => {
 
   return width / height;
 };
+
+interface TextOptions {
+  text?: string;
+  fontFamily?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  fontStyle?: string;
+  underline?: boolean;
+  textAlign?: string;
+  fill?: string;
+  charSpacing?: number;
+  lineHeight?: number;
+}
 
 type JobStatus = "PENDING" | "SENT" | "RECEIVED" | "PRINTING" | "PRINTED" | "FAILED" | null;
 
@@ -194,10 +301,6 @@ const statusLabels: Record<Exclude<JobStatus, null>, string> = {
   PRINTED: "Impresso com sucesso",
   FAILED: "Falha na impressão",
 };
-
-function slotFieldName(slotId: string) {
-  return `slot:${slotId}`;
-}
 
 /* ─── Crop Dialog ──────────────────────────────────────────────────────── */
 
@@ -216,7 +319,7 @@ function CropDialog({
 }) {
   const imgRef = useRef<HTMLImageElement>(null);
   const [crop, setCrop] = useState<CropRect>({ x: 0, y: 0, width: 100, height: 100 });
-  const [dragMode, setDragMode] = useState<"draw" | "move" | null>(null);
+  const [dragMode, setDragMode] = useState<"draw" | "move" | "resize-ne" | "resize-se" | "resize-sw" | "resize-nw" | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [startCrop, setStartCrop] = useState<CropRect | null>(null);
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
@@ -304,6 +407,49 @@ function CropDialog({
       return;
     }
 
+    // Resize modes
+    if (dragMode?.startsWith("resize-") && startCrop) {
+      let newCrop = { ...startCrop };
+      const dx = p.x - dragStart.x;
+      const dy = p.y - dragStart.y;
+
+      if (dragMode === "resize-se") {
+        newCrop.width = Math.max(1, startCrop.width + dx);
+        newCrop.height = Math.max(1, startCrop.height + dy);
+      } else if (dragMode === "resize-sw") {
+        newCrop.x = Math.max(0, startCrop.x + dx);
+        newCrop.width = Math.max(1, startCrop.width - dx);
+        newCrop.height = Math.max(1, startCrop.height + dy);
+      } else if (dragMode === "resize-ne") {
+        newCrop.y = Math.max(0, startCrop.y + dy);
+        newCrop.width = Math.max(1, startCrop.width + dx);
+        newCrop.height = Math.max(1, startCrop.height - dy);
+      } else if (dragMode === "resize-nw") {
+        newCrop.x = Math.max(0, startCrop.x + dx);
+        newCrop.y = Math.max(0, startCrop.y + dy);
+        newCrop.width = Math.max(1, startCrop.width - dx);
+        newCrop.height = Math.max(1, startCrop.height - dy);
+      }
+
+      if (aspect && aspect > 0) {
+        const currentAspect = newCrop.width / newCrop.height;
+        if (Math.abs(currentAspect - aspect) > 0.01) {
+          if (dragMode === "resize-se") {
+            newCrop.height = newCrop.width / aspect;
+          } else if (dragMode === "resize-sw") {
+            newCrop.height = newCrop.width / aspect;
+          } else if (dragMode === "resize-ne") {
+            newCrop.width = newCrop.height * aspect;
+          } else if (dragMode === "resize-nw") {
+            newCrop.width = newCrop.height * aspect;
+          }
+        }
+      }
+
+      setCrop(clampCrop(newCrop));
+      return;
+    }
+
     const rawW = Math.abs(p.x - dragStart.x);
     const rawH = Math.abs(p.y - dragStart.y);
     let w = rawW;
@@ -371,11 +517,18 @@ function CropDialog({
           onMouseLeave={handleMouseUp}
         >
           <div className="relative max-h-full max-w-full">
-            <img ref={imgRef} src={src} onLoad={handleLoad} className="block max-h-[calc(100dvh-13rem)] max-w-full object-contain" alt="Crop" draggable={false} />
+            <img
+              ref={imgRef}
+              src={src}
+              onLoad={handleLoad}
+              className="block max-h-[calc(100dvh-13rem)] max-w-full object-contain"
+              alt="Crop"
+              draggable={false}
+            />
             {naturalSize.w > 0 && (
               <>
                 <div
-                  className="absolute cursor-move border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]"
+                  className={`absolute cursor-move border-2 border-white shadow-[0_0_0_9999px_rgba(0,0,0,0.4)]`}
                   style={cropOverlay}
                   onMouseDown={handleMoveStart}
                 >
@@ -384,6 +537,31 @@ function CropDialog({
                     <GripVertical className="h-3 w-3" />
                     Mover
                   </div>
+
+                  {/* Resize handles */}
+                  {[
+                    { corner: "nw", cursor: "nwse-resize", top: "-4px", left: "-4px" },
+                    { corner: "ne", cursor: "nesw-resize", top: "-4px", right: "-4px" },
+                    { corner: "sw", cursor: "nesw-resize", bottom: "-4px", left: "-4px" },
+                    { corner: "se", cursor: "nwse-resize", bottom: "-4px", right: "-4px" },
+                  ].map(({ corner, cursor, ...pos }) => (
+                    <div
+                      key={corner}
+                      className="absolute h-2 w-2 rounded-full bg-white shadow-lg hover:h-3 hover:w-3 transition-all"
+                      style={{
+                        cursor,
+                        ...pos,
+                        transform: "translate(-50%, -50%)",
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDragMode(`resize-${corner}` as any);
+                        setDragStart(toNatural(e.clientX, e.clientY));
+                        setStartCrop(crop);
+                      }}
+                    />
+                  ))}
                 </div>
               </>
             )}
@@ -434,7 +612,8 @@ function LayoutCard({
       <div className="min-w-0 flex-1">
         <div className="line-clamp-2 text-sm font-semibold text-slate-900">{layout.name}</div>
         <div className="mt-1 text-xs text-slate-500">
-          {layout.width && layout.height ? `${layout.width}×${layout.height}` : ""}{" "}
+          {layout.width && layout.height ? `${layout.width}x${layout.height}` : ""}
+          {" "}
           {layout.slots?.length || 0} slot(s)
         </div>
       </div>
@@ -495,7 +674,7 @@ function SlotUploader({
         )}
       </div>
       <label
-        className="flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/50 p-4 text-center text-sm text-slate-400 transition-all hover:border-rose-300 hover:bg-rose-50/50 hover:text-rose-500"
+        className={`flex min-h-32 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/50 p-4 text-center text-sm text-slate-400 transition-all hover:border-rose-300 hover:bg-rose-50/50 hover:text-rose-500`}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
@@ -526,49 +705,334 @@ function SlotUploader({
   );
 }
 
+/* ─── Text Edit Dialog ─────────────────────────────────────────────────── */
+
 /* ─── Selected Layout Panel ────────────────────────────────────────────── */
 
 function LayoutPanel({
   layout,
   slotFiles,
   slotPreviews,
+  slotTextOptions,
   onSlotFile,
+  onSlotTextChange,
   onRemoveLayout,
   layoutIndex,
+  setCropTarget,
+  setSlotPreviews,
+  setSlotFiles,
 }: {
   layout: DynamicLayoutOption;
   slotFiles: Record<string, File | undefined>;
   slotPreviews: Record<string, string | undefined>;
+  slotTextOptions: Record<string, TextOptions>;
   onSlotFile: (layoutId: string, slotId: string, file?: File) => void;
+  onSlotTextChange: (layoutId: string, slotId: string, options: TextOptions) => void;
   onRemoveLayout: () => void;
   layoutIndex: number;
+  setCropTarget: (target: { layoutId: string; slotId: string } | null) => void;
+  setSlotPreviews: (val: any) => void;
+  setSlotFiles: (val: any) => void;
 }) {
-  const [cropTarget, setCropTarget] = useState<string | null>(null);
+  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const fabricRef = useRef<any>(null);
+  const [previewReady, setPreviewReady] = useState(false);
 
-  const cropSrc = cropTarget ? slotPreviews[cropTarget] : undefined;
-  const cropSlot = cropTarget
-    ? (layout.slots || []).find((slot) => slot.id === cropTarget)
-    : undefined;
-
-  const handleCropApply = async (blob: Blob) => {
-    if (!cropTarget) return;
-    const file = new File([blob], `cropped-${cropTarget}.png`, { type: "image/png" });
-    onSlotFile(layout.id, cropTarget, file);
-    setCropTarget(null);
+  // Retorna os objetos isCustomizable (texto) do fabricJsonState do layout
+  const getCustomizableTextObjects = (): Array<{ id: string; name: string; label: string; text?: string; maxChars?: number; fontFamily?: string; fontSize?: number }> => {
+    if (!layout.fabricJsonState || !Array.isArray((layout.fabricJsonState as any).objects)) {
+      return [];
+    }
+    const objects = (layout.fabricJsonState as any).objects as any[];
+    const result: Array<{ id: string; name: string; label: string; text?: string; maxChars?: number; fontFamily?: string; fontSize?: number }> = [];
+    const seen = new Set<string>();
+    for (const obj of objects) {
+      const typeNorm = (obj.type || "").toLowerCase();
+      if (
+        obj.isCustomizable === true &&
+        (typeNorm === "i-text" || typeNorm === "textbox" || typeNorm === "text")
+      ) {
+        const key = obj.id || obj.name;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          result.push({ 
+            id: key, 
+            name: obj.name || key, 
+            label: obj.name || key, 
+            text: obj.text,
+            maxChars: obj.maxChars || 50,
+            fontFamily: obj.fontFamily || "Arial",
+            fontSize: obj.fontSize || 14
+          });
+        }
+      }
+    }
+    return result;
   };
+
+  // Inicializa o canvas Fabric com o fabricJsonState
+  useEffect(() => {
+    if (!layout.fabricJsonState || !canvasContainerRef.current) return;
+
+    let isMounted = true;
+
+    const initCanvas = async () => {
+      try {
+        const { Canvas } = await import("fabric");
+
+        if (!isMounted || !canvasContainerRef.current) return;
+
+        // Limpar canvas anterior
+        if (fabricRef.current) {
+          fabricRef.current.dispose();
+        }
+
+        canvasContainerRef.current.innerHTML = "";
+        const canvasEl = document.createElement("canvas");
+        canvasContainerRef.current.appendChild(canvasEl);
+
+        const w = layout.width || 378;
+        const h = layout.height || 567;
+        
+        // Calcular zoom para preencher o container
+        const containerWidth = canvasContainerRef.current.clientWidth || 400;
+        const zoom = Math.min(containerWidth / w, 0.8);
+
+        const canvas = new Canvas(canvasEl, {
+          backgroundColor: "#ffffff",
+          selection: false,
+          interactive: false,
+          preserveObjectStacking: true,
+        }) as any;
+
+        // Dimensões do canvas - usar 2x para qualidade
+        canvas.setDimensions(
+          { width: w * 2, height: h * 2 },
+          { backstoreOnly: true }
+        );
+        
+        // Dimensões visuais - aplicar zoom
+        canvas.setDimensions(
+          { width: `${w * zoom}px`, height: `${h * zoom}px` },
+          { cssOnly: true }
+        );
+        
+        canvas.setViewportTransform([2, 0, 0, 2, 0, 0]);
+
+        const state = typeof layout.fabricJsonState === "string" 
+          ? JSON.parse(layout.fabricJsonState as unknown as string)
+          : layout.fabricJsonState;
+
+        console.log("📥 Carregando state do canvas:", state);
+
+        // Se tem estrutura multi-página, usar o canvasState da primeira página
+        const canvasStateToLoad = state.pages && state.pages[0]?.canvasState 
+          ? state.pages[0].canvasState 
+          : state;
+
+        console.log("📋 Canvas state para carregar:", canvasStateToLoad);
+
+        // loadFromJSON precisa de um callback de sucesso
+        await new Promise<void>((resolve) => {
+          canvas.loadFromJSON(canvasStateToLoad, () => {
+            resolve();
+          });
+        });
+
+        console.log("✅ State carregado. Objetos no canvas:", canvas.getObjects().length);
+
+        // Desabilitar qualquer interação e renderizar
+        for (const obj of canvas.getObjects() as any[]) {
+          obj.set({
+            selectable: false,
+            evented: false,
+            lockMovementX: true,
+            lockMovementY: true,
+            lockScalingX: true,
+            lockScalingY: true,
+            lockRotation: true,
+            hasControls: false,
+            hoverCursor: "default",
+          });
+          
+          if (obj.isFrame) {
+            obj.set({ fill: "transparent", stroke: "transparent", opacity: 0 });
+          }
+        }
+
+        canvas.renderAll();
+        fabricRef.current = canvas;
+
+        if (isMounted) {
+          setPreviewReady(true);
+        }
+      } catch (err) {
+        console.error("Erro ao inicializar canvas preview:", err);
+      }
+    };
+
+    initCanvas();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [layout]);
+
+  // Atualizar preview quando imagens mudam
+  useEffect(() => {
+    if (!fabricRef.current || !previewReady) return;
+
+    const updatePreview = async () => {
+      const { FabricImage, Rect, Circle } = await import("fabric");
+      const canvas = fabricRef.current;
+      const objects = canvas.getObjects() as any[];
+
+      console.log("📋 Todos os objetos do canvas:", objects.map((o: any) => ({
+        id: o.id,
+        name: o.name,
+        type: o.type,
+        isFrame: o.isFrame,
+      })));
+
+      // Limpar imagens antigas
+      const oldImages = objects.filter((o: any) => o.name?.startsWith("preview-img-"));
+      oldImages.forEach((img: any) => canvas.remove(img));
+
+      // Adicionar novas imagens
+      for (const slot of layout.slots || []) {
+        const preview = slotPreviews[`${layout.id}:${slot.id}`];
+        console.log(`🖼️ Verificando slot ${slot.id}: preview =`, !!preview);
+        
+        if (!preview) continue;
+
+        // Encontra o frame correspondente - tenta múltiplas estratégias
+        let frame = objects.find((o: any) => 
+          o.isFrame && (o.id === slot.id || o.name === slot.label || o.name === slot.id)
+        );
+        
+        console.log(`🔍 Procurando frame com isFrame=true: encontrado =`, !!frame);
+        
+        // Se não encontrar por isFrame, procurar por tipo/nome
+        if (!frame) {
+          frame = objects.find((o: any) => 
+            (o.type === "rect" || o.type === "Rect" || o.name?.includes("frame")) &&
+            (o.id === slot.id || o.name === slot.label || o.name === slot.id)
+          );
+          console.log(`🔍 Procurando frame por tipo/nome: encontrado =`, !!frame, frame?.name);
+        }
+        
+        if (!frame) {
+          console.warn(`⚠️ Frame não encontrado para slot ${slot.id}`);
+          continue;
+        }
+
+        try {
+          const img = await (FabricImage as any).fromURL(preview, {
+            crossOrigin: "anonymous",
+          });
+
+          const frameRect = frame.getBoundingRect();
+          const imgW = img.width || 1;
+          const imgH = img.height || 1;
+          const coverScale = Math.max(frameRect.width / imgW, frameRect.height / imgH);
+
+          console.log(`✅ Renderizando imagem para slot ${slot.id} com scale ${coverScale}`);
+
+          img.set({
+            left: frameRect.left + frameRect.width / 2,
+            top: frameRect.top + frameRect.height / 2,
+            originX: "center",
+            originY: "center",
+            scaleX: coverScale,
+            scaleY: coverScale,
+            angle: frame.angle || 0,
+            selectable: false,
+            evented: false,
+            objectCaching: false,
+            name: `preview-img-${slot.id}`,
+          });
+
+          // Criar clipPath
+          try {
+            let mask: any;
+            if (frame.type === "circle") {
+              const Circle_ = Circle;
+              mask = new Circle_({
+                radius: frame.radius || frame.width / 2,
+                scaleX: frame.scaleX,
+                scaleY: frame.scaleY,
+                originX: "center",
+                originY: "center",
+                left: frameRect.left + frameRect.width / 2,
+                top: frameRect.top + frameRect.height / 2,
+                angle: frame.angle || 0,
+                absolutePositioned: true,
+              });
+            } else {
+              const Rect_ = Rect;
+              mask = new Rect_({
+                width: frame.width,
+                height: frame.height,
+                rx: frame.rx,
+                ry: frame.ry,
+                scaleX: frame.scaleX,
+                scaleY: frame.scaleY,
+                originX: "center",
+                originY: "center",
+                left: frameRect.left + frameRect.width / 2,
+                top: frameRect.top + frameRect.height / 2,
+                angle: frame.angle || 0,
+                absolutePositioned: true,
+              });
+            }
+            img.set("clipPath", mask);
+          } catch (err) {
+            console.warn("⚠️ Erro ao criar clipPath:", err);
+          }
+
+          canvas.add(img);
+          canvas.moveObjectTo(img, canvas.getObjects().indexOf(frame) + 1);
+          console.log(`🎨 Imagem adicionada ao canvas para slot ${slot.id}`);
+        } catch (err) {
+          console.error("❌ Erro ao adicionar imagem ao preview:", err);
+        }
+      }
+
+      // Atualizar textos
+      for (const obj of objects) {
+        if (!obj.isCustomizable) continue;
+        if (!["textbox", "i-text", "text"].includes(obj.type?.toLowerCase())) continue;
+        
+        const objKey = obj.id || obj.name;
+        if (!objKey) continue;
+        const textKey = `${layout.id}:${objKey}`;
+        const opts = slotTextOptions[textKey];
+        if (opts?.text !== undefined) {
+          obj.set("text", opts.text);
+        }
+      }
+
+      canvas.renderAll();
+    };
+
+    updatePreview();
+  }, [slotPreviews, slotTextOptions, layout, previewReady]);
+
+  const customizableTextObjects = getCustomizableTextObjects();
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
       <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/80 px-5 py-3">
         <div className="flex items-center gap-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-rose-500 text-xs font-bold text-white">
+          <span className={`flex h-7 w-7 items-center justify-center rounded-lg bg-rose-500 text-xs font-bold text-white`}>
             {layoutIndex + 1}
           </span>
           <div>
             <div className="text-sm font-semibold text-slate-900">{layout.name}</div>
-            <div className="text-xs text-slate-400">
-              {layout.width && layout.height ? `${layout.width}×${layout.height}` : ""} •{" "}
-              {(layout.slots || []).length} slot(s)
+            <div className="text-xs text-slate-500">
+              {layout.width && layout.height ? `${layout.width}x${layout.height}` : ""}
+              {" "}
+              {layout.slots?.length || 0} slot(s)
             </div>
           </div>
         </div>
@@ -582,54 +1046,142 @@ function LayoutPanel({
         </button>
       </div>
 
-      {/* Mini-preview do layout */}
-      <div className="border-b border-slate-100 bg-slate-50/50 px-5 py-3">
-        <div className="text-xs font-medium text-slate-500 mb-2">Preview</div>
-        <div className="relative mx-auto h-48 w-32 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-inner">
-          {(layout.previewImageUrl || layout.baseImageUrl) && (
-            <img
-              src={layout.previewImageUrl || layout.baseImageUrl || ""}
-              alt={layout.name}
-              className="h-full w-full object-cover opacity-60"
+      {/* Conteúdo em 2 colunas em desktop, 1 coluna em mobile */}
+      <div className="grid gap-5 p-5 lg:grid-cols-2">
+        {/* Coluna 1: Preview */}
+        <div>
+          <div className="text-xs font-medium text-slate-500 mb-2">Preview</div>
+          <div className="rounded-lg border border-slate-200 bg-white shadow-inner p-4 flex items-center justify-center">
+            <div
+              ref={canvasContainerRef}
+              className="w-full h-auto pointer-events-none"
+              style={{ touchAction: "none" }}
             />
-          )}
-          {/* Overlays das imagens nos slots */}
-          {(layout.slots || []).map((slot) => {
-            const preview = slotPreviews[slot.id];
-            if (!preview) return null;
-            return (
-              <div key={slot.id} className="absolute inset-0">
-                <img src={preview} alt={slot.label} className="h-full w-full object-cover" />
+          </div>
+        </div>
+
+        {/* Coluna 2: Inputs de slots e textos */}
+        <div className="space-y-5">
+          {/* Upload de slots */}
+          {(layout.slots || []).length > 0 && (
+            <div>
+              <div className="text-xs font-medium text-slate-500 mb-3">Fotos</div>
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+                {(layout.slots || []).map((slot) => {
+                  const preview = slotPreviews[`${layout.id}:${slot.id}`];
+                  const file = slotFiles[`${layout.id}:${slot.id}`];
+                  const aspect = getSlotAspect(slot);
+                  
+                  return (
+                    <div key={slot.id} className="flex flex-col gap-2">
+                      <label className="text-xs font-medium text-slate-600">
+                        {slot.label}
+                        {slot.required && <span className="text-rose-500"> *</span>}
+                      </label>
+                      <div
+                        className={`cursor-pointer aspect-square rounded-lg border-2 overflow-hidden flex items-center justify-center transition-all ${
+                          preview
+                            ? "border-rose-400 bg-rose-50"
+                            : "border-dashed border-slate-300 bg-slate-50 hover:border-rose-300"
+                        }`}
+                        onClick={() => {
+                          const input = document.createElement("input");
+                          input.type = "file";
+                          input.accept = "image/*";
+                          input.onchange = (e) => {
+                            const f = (e.target as HTMLInputElement).files?.[0];
+                            if (f) {
+                              const url = URL.createObjectURL(f);
+                              setSlotPreviews((prev: any) => ({ ...prev, [`${layout.id}:${slot.id}`]: url }));
+                              setSlotFiles((prev: any) => ({ ...prev, [`${layout.id}:${slot.id}`]: f }));
+                              setCropTarget({ layoutId: layout.id, slotId: slot.id });
+                            }
+                          };
+                          input.click();
+                        }}
+                      >
+                        {preview ? (
+                          <img src={preview} alt={slot.label} className="w-full h-full object-cover" />
+                        ) : (
+                          <Upload className="h-5 w-5 text-slate-300" />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* Campos de texto isCustomizable */}
+          {customizableTextObjects.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Type className="h-4 w-4 text-rose-500" />
+                <span className="text-xs font-medium text-slate-600">Textos personalizáveis</span>
+              </div>
+              <div className="space-y-3">
+                {customizableTextObjects.map((obj) => {
+                  const key = `${layout.id}:${obj.id}`;
+                  const currentText = slotTextOptions[key]?.text ?? obj.text ?? "";
+                  const maxChars = obj.maxChars || 50;
+                  const isLongText = maxChars > 20;
+
+                  return (
+                    <div key={key} className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium text-slate-600">
+                          {obj.label}
+                        </label>
+                        {obj.fontFamily && (
+                          <span className="text-[10px] text-slate-400" style={{ fontFamily: obj.fontFamily }}>
+                            {obj.fontFamily}
+                          </span>
+                        )}
+                      </div>
+                      {isLongText ? (
+                        <textarea
+                          value={currentText}
+                          onChange={(e) =>
+                            onSlotTextChange(layout.id, obj.id, {
+                              ...(slotTextOptions[key] ?? {}),
+                              text: e.target.value.slice(0, maxChars),
+                            })
+                          }
+                          maxLength={maxChars}
+                          placeholder={`Digite o texto (máx ${maxChars} caracteres)`}
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100 resize-none min-h-20"
+                          style={{ fontFamily: obj.fontFamily || "Arial" }}
+                        />
+                      ) : (
+                        <input
+                          type="text"
+                          value={currentText}
+                          onChange={(e) =>
+                            onSlotTextChange(layout.id, obj.id, {
+                              ...(slotTextOptions[key] ?? {}),
+                              text: e.target.value.slice(0, maxChars),
+                            })
+                          }
+                          maxLength={maxChars}
+                          placeholder={`Digite o texto (máx ${maxChars} caracteres)`}
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                          style={{ fontFamily: obj.fontFamily || "Arial" }}
+                        />
+                      )}
+                      <div className="text-right text-xs text-slate-400">
+                        <span className={currentText.length === maxChars ? "font-medium text-rose-500" : ""}>
+                          {currentText.length}/{maxChars}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Upload de slots */}
-      <div className="grid gap-3 p-5 sm:grid-cols-2">
-        {(layout.slots || []).map((slot) => (
-          <SlotUploader
-            key={slot.id}
-            slotId={slot.id}
-            label={slot.label}
-            required={slot.required}
-            file={slotFiles[slot.id]}
-            preview={slotPreviews[slot.id]}
-            onFile={(f) => onSlotFile(layout.id, slot.id, f)}
-            onCropOpen={() => setCropTarget(slot.id)}
-          />
-        ))}
-      </div>
-
-      {cropTarget && cropSrc && (
-        <CropDialog
-          src={cropSrc}
-          aspect={getSlotAspect(cropSlot)}
-          onApply={handleCropApply}
-          onClose={() => setCropTarget(null)}
-        />
-      )}
     </div>
   );
 }
@@ -638,8 +1190,8 @@ function LayoutPanel({
 
 export function ManualPrintOrder() {
   const api = useApi();
+  const navigate = useNavigate();
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const allPreviewsRef = useRef<Record<string, string | undefined>>({});
 
   const [customerName, setCustomerName] = useState("");
   const [giftMessage, setGiftMessage] = useState("");
@@ -647,6 +1199,7 @@ export function ManualPrintOrder() {
   const [selectedLayoutIds, setSelectedLayoutIds] = useState<string[]>([]);
   const [slotFiles, setSlotFiles] = useState<Record<string, File | undefined>>({});
   const [slotPreviews, setSlotPreviews] = useState<Record<string, string | undefined>>({});
+  const [slotTextOptions, setSlotTextOptions] = useState<Record<string, TextOptions>>({});
   const [agentConnected, setAgentConnected] = useState(false);
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -654,322 +1207,616 @@ export function ManualPrintOrder() {
   const [jobStatus, setJobStatus] = useState<JobStatus>(null);
   const [jobError, setJobError] = useState<string | null>(null);
   const [printJobId, setPrintJobId] = useState<string | null>(null);
+  const [cropTarget, setCropTarget] = useState<{ layoutId: string; slotId: string } | null>(null);
 
   const selectedLayouts = useMemo(
     () => layouts.filter((l) => selectedLayoutIds.includes(l.id)),
     [layouts, selectedLayoutIds],
   );
 
+  // Checa se algum slot obrigatório de imagem está vazio
   const hasMissingRequired = useMemo(() => {
     return selectedLayouts.some((layout) =>
-      (layout.slots || []).some((slot) => slot.required && !slotFiles[`${layout.id}:${slot.id}`]),
+      (layout.slots || []).some(
+        (slot) => slot.required && !slotFiles[`${layout.id}:${slot.id}`],
+      ),
     );
   }, [selectedLayouts, slotFiles]);
 
-  const canSubmit =
-    customerName.trim().length > 0 &&
-    selectedLayouts.length > 0 &&
-    !hasMissingRequired &&
-    !submitting;
-
-  /* Load data */
+  // Carrega layouts disponíveis
   useEffect(() => {
-    let mounted = true;
-    async function load() {
+    let cancelled = false;
+    setLoading(true);
+
+    const load = async () => {
       try {
-        const [layoutResponse, agentStatus] = await Promise.all([
-          api.getDynamicLayouts({ type: "frame" }),
-          api.getAgentStatus(),
-        ]);
-        if (!mounted) return;
-        const layoutData = Array.isArray(layoutResponse?.data) ? layoutResponse.data : layoutResponse;
-        setLayouts((Array.isArray(layoutData) ? layoutData : []).filter((l) => l.type === "frame"));
-        setAgentConnected(Boolean(agentStatus.connected));
-        setDeviceName(agentStatus.deviceName || null);
-      } catch {
-        toast.error("Erro ao carregar dados de impressão manual");
+        const data = await api.getDynamicLayouts();
+        if (!cancelled) {
+          const items: DynamicLayoutOption[] = (data || [])
+            .filter((l: any) => l.type === "frame") // Apenas quadros
+            .map((l: any) => ({
+              id: l.id,
+              name: l.name,
+              type: l.type,
+              previewImageUrl: l.previewImageUrl || l.preview_image_url || null,
+              baseImageUrl: l.baseImageUrl || l.base_image_url || null,
+              fabricJsonState: l.fabricJsonState || l.fabric_json_state || null,
+              width: l.width,
+              height: l.height,
+              slots: (l.slots || []).map((s: any) => ({
+                id: s.id,
+                label: s.label || s.name || s.id,
+                position: s.position || s.placeholderPosition || {},
+                width: s.width,
+                height: s.height,
+                required: s.required ?? true,
+              })),
+            }));
+          setLayouts(items);
+        }
+      } catch (err) {
+        console.error("❌ Erro ao carregar layouts:", err);
+        if (!cancelled) toast.error("Erro ao carregar layouts");
       } finally {
-        if (mounted) setLoading(false);
+        if (!cancelled) setLoading(false);
       }
-    }
+    };
+
     load();
-    return () => { mounted = false; };
+    return () => { cancelled = true; };
+  }, []);
+
+  // Verifica status do agente de impressão
+  useEffect(() => {
+    const checkAgent = async () => {
+      try {
+        const status = await api.getAgentStatus();
+        setAgentConnected(status.connected);
+        setDeviceName(status.deviceName);
+      } catch {
+        setAgentConnected(false);
+      }
+    };
+    checkAgent();
+    const interval = setInterval(checkAgent, 15_000);
+    return () => clearInterval(interval);
   }, [api]);
 
-  /* Cleanup previews on unmount */
+  // Polling do status do job após submit
   useEffect(() => {
-    allPreviewsRef.current = slotPreviews;
-  }, [slotPreviews]);
-
-  useEffect(() => {
-    return () => {
+    if (!printJobId || jobStatus === "PRINTED" || jobStatus === "FAILED") {
       if (pollingRef.current) clearInterval(pollingRef.current);
-      Object.values(allPreviewsRef.current).forEach((url) => {
-        if (url) URL.revokeObjectURL(url);
-      });
-    };
-  }, []);
+      return;
+    }
 
-  /* Slot file management (keyed by layoutId:slotId) */
-  const updateSlotFile = useCallback((layoutId: string, slotId: string, file?: File) => {
-    const key = `${layoutId}:${slotId}`;
-    setSlotFiles((prev) => ({ ...prev, [key]: file }));
-    setSlotPreviews((prev) => {
-      if (prev[key]) URL.revokeObjectURL(prev[key]);
-      return { ...prev, [key]: file ? URL.createObjectURL(file) : undefined };
-    });
-  }, []);
-
-  /* Layout selection */
-  const toggleLayout = useCallback((layoutId: string) => {
-    setSelectedLayoutIds((prev) => {
-      if (prev.includes(layoutId)) {
-        return prev.filter((id) => id !== layoutId);
-      }
-      return [...prev, layoutId];
-    });
-  }, []);
-
-  const removeLayout = useCallback((layoutId: string) => {
-    setSelectedLayoutIds((prev) => prev.filter((id) => id !== layoutId));
-  }, []);
-
-  /* Polling */
-  const startPolling = (orderId: string) => {
     if (pollingRef.current) clearInterval(pollingRef.current);
     pollingRef.current = setInterval(async () => {
       try {
-        const job = await api.getPrintJobStatus(orderId);
-        setJobStatus(job.status as JobStatus);
-        setJobError(job.lastError ?? null);
-        if (["PRINTED", "FAILED"].includes(job.status)) {
-          if (pollingRef.current) clearInterval(pollingRef.current);
-          pollingRef.current = null;
+        const result = await api.getPrintJobStatus(printJobId);
+        setJobStatus(result.status as JobStatus);
+        if (result.lastError) setJobError(result.lastError);
+        if (result.status === "PRINTED" || result.status === "FAILED") {
+          clearInterval(pollingRef.current!);
         }
       } catch {
-        /* still creating */
+        // ignore polling errors
       }
-    }, 2000);
+    }, 3000);
+
+    return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
+  }, [printJobId, jobStatus, api]);
+
+  // Handler: arquivo de slot alterado — abre crop automaticamente
+  const handleSlotFile = useCallback((layoutId: string, slotId: string, file?: File) => {
+    const key = `${layoutId}:${slotId}`;
+    setSlotFiles((prev) => ({ ...prev, [key]: file }));
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setSlotPreviews((prev) => ({ ...prev, [key]: url }));
+      // Abre o crop automaticamente
+      setCropTarget({ layoutId, slotId });
+    } else {
+      setSlotPreviews((prev) => {
+        const next = { ...prev };
+        if (next[key]) URL.revokeObjectURL(next[key]!);
+        delete next[key];
+        return next;
+      });
+    }
+  }, []);
+
+  // Handler: opções de texto alteradas
+  const handleSlotTextChange = useCallback(
+    (layoutId: string, slotId: string, options: TextOptions) => {
+      const key = `${layoutId}:${slotId}`;
+      setSlotTextOptions((prev) => ({ ...prev, [key]: options }));
+    },
+    [],
+  );
+
+  // Toggle seleção de layout
+  const handleToggleLayout = useCallback((layoutId: string) => {
+    setSelectedLayoutIds((prev) =>
+      prev.includes(layoutId) ? prev.filter((id) => id !== layoutId) : [...prev, layoutId],
+    );
+  }, []);
+
+  // Carrega fabricJsonState completo quando um layout é selecionado
+  useEffect(() => {
+    const loadCompleteLayouts = async () => {
+      for (const layoutId of selectedLayoutIds) {
+        const existing = layouts.find(l => l.id === layoutId);
+        if (existing && !existing.fabricJsonState) {
+          try {
+            const complete = await api.getLayoutById(layoutId);
+            setLayouts(prev =>
+              prev.map(l => l.id === layoutId ? { ...l, ...complete } : l)
+            );
+
+            // Extrai textos padrão dos objetos customizáveis
+            if (complete.fabricJsonState && Array.isArray((complete.fabricJsonState as any).objects)) {
+              const objects = (complete.fabricJsonState as any).objects as any[];
+              for (const obj of objects) {
+                if (
+                  obj.isCustomizable === true &&
+                  (obj.type?.toLowerCase() === "textbox" || obj.type?.toLowerCase() === "i-text" || obj.type?.toLowerCase() === "text") &&
+                  obj.text
+                ) {
+                  const key = `${layoutId}:${obj.id || obj.name}`;
+                  setSlotTextOptions(prev => {
+                    if (!prev[key]) {
+                      return { ...prev, [key]: { text: obj.text } };
+                    }
+                    return prev;
+                  });
+                }
+              }
+            }
+          } catch (err) {
+            console.error("❌ Erro ao carregar layout completo:", err);
+          }
+        }
+      }
+    };
+    if (selectedLayoutIds.length > 0) {
+      loadCompleteLayouts();
+    }
+  }, [selectedLayoutIds, api, layouts]);
+
+  // Gera a arte final para um layout: carrega o fabricJsonState num canvas off-screen,
+  // injeta as imagens nos frames e os textos nos objetos isCustomizable, depois exporta PNG
+  const generateArtwork = async (layout: DynamicLayoutOption): Promise<Blob | null> => {
+    if (!layout.fabricJsonState) return null;
+
+    try {
+      const { StaticCanvas, FabricImage } = await import("fabric");
+
+      const exportCanvas = new StaticCanvas(document.createElement("canvas"), {
+        preserveObjectStacking: true,
+        enableRetinaScaling: false,
+      }) as any;
+
+      const state =
+        typeof layout.fabricJsonState === "string"
+          ? JSON.parse(layout.fabricJsonState as unknown as string)
+          : layout.fabricJsonState;
+
+      // Pré-carregar fontes referenciadas
+      await preloadFontsFromState(state);
+
+      await exportCanvas.loadFromJSON(state);
+
+      const w = layout.width || 378;
+      const h = layout.height || 567;
+      exportCanvas.setDimensions({ width: w * 2, height: h * 2 });
+      exportCanvas.setViewportTransform([2, 0, 0, 2, 0, 0]);
+      exportCanvas.set({ backgroundColor: "#ffffff" });
+
+      const objects: any[] = exportCanvas.getObjects();
+
+      // 1. Injetar imagens nos frames
+      for (const obj of objects) {
+        if (!obj.isFrame) continue;
+        const frameId = obj.id || obj.name;
+        if (!frameId) continue;
+
+        // Encontra slot correspondente pelo id ou nome
+        const slot = (layout.slots || []).find(
+          (s) => s.id === frameId || s.label === frameId,
+        );
+        if (!slot) continue;
+
+        const file = slotFiles[`${layout.id}:${slot.id}`];
+        if (!file) continue;
+
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target!.result as string);
+          reader.readAsDataURL(file);
+        });
+
+        const img = (await (FabricImage as any).fromURL(dataUrl, {
+          crossOrigin: "anonymous",
+        })) as any;
+
+        const frameRect = obj.getBoundingRect();
+        const imgW = img.width || 1;
+        const imgH = img.height || 1;
+        const coverScale = Math.max(frameRect.width / imgW, frameRect.height / imgH);
+
+        img.set({
+          left: frameRect.left + frameRect.width / 2,
+          top: frameRect.top + frameRect.height / 2,
+          originX: "center",
+          originY: "center",
+          scaleX: coverScale,
+          scaleY: coverScale,
+          angle: obj.angle || 0,
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+        });
+
+        try {
+          const clip = await obj.clone();
+          clip.absolutePositioned = true;
+          img.clipPath = clip;
+        } catch { /* ignore */ }
+
+        img.set("name", `uploaded-img-${frameId}`);
+        const idx = exportCanvas.getObjects().indexOf(obj);
+        if (idx >= 0) {
+          exportCanvas.insertAt?.(idx + 1, img) ?? exportCanvas.add(img);
+        } else {
+          exportCanvas.add(img);
+        }
+        exportCanvas.bringObjectToFront(obj);
+      }
+
+      // 2. Aplicar textos nos objetos isCustomizable
+      for (const obj of exportCanvas.getObjects() as any[]) {
+        if (!obj.isCustomizable) continue;
+        if (obj.type !== "textbox" && obj.type !== "i-text" && obj.type !== "text") continue;
+        const objKey = obj.id || obj.name;
+        if (!objKey) continue;
+        const textKey = `${layout.id}:${objKey}`;
+        const opts = slotTextOptions[textKey];
+        if (!opts) continue;
+        if (opts.text !== undefined) obj.set("text", opts.text);
+        if (opts.fontFamily) obj.set("fontFamily", opts.fontFamily);
+        if (opts.fontSize) obj.set("fontSize", opts.fontSize);
+        if (opts.fontWeight) obj.set("fontWeight", opts.fontWeight);
+        if (opts.fontStyle) obj.set("fontStyle", opts.fontStyle);
+        if (opts.underline !== undefined) obj.set("underline", opts.underline);
+        if (opts.textAlign) obj.set("textAlign", opts.textAlign);
+        if (opts.fill) obj.set("fill", opts.fill);
+        if (opts.charSpacing !== undefined) obj.set("charSpacing", opts.charSpacing);
+        if (opts.lineHeight !== undefined) obj.set("lineHeight", opts.lineHeight);
+      }
+
+      exportCanvas.renderAll();
+
+      const dataUrl: string = exportCanvas.toDataURL({
+        format: "png",
+        multiplier: 1,
+        enableRetinaScaling: false,
+      });
+
+      exportCanvas.dispose?.();
+
+      const res = await fetch(dataUrl);
+      return await res.blob();
+    } catch (err) {
+      console.error("Erro ao gerar arte:", err);
+      return null;
+    }
   };
 
-  /* Submit */
+  // Submit do pedido manual
   const handleSubmit = async () => {
-    if (selectedLayouts.length === 0 || !canSubmit) return;
+    if (selectedLayouts.length === 0) {
+      toast.error("Selecione ao menos um layout");
+      return;
+    }
+    if (hasMissingRequired) {
+      toast.error("Preencha todas as imagens obrigatórias");
+      return;
+    }
 
     setSubmitting(true);
     setJobStatus("PENDING");
     setJobError(null);
 
     try {
-      for (const layout of selectedLayouts) {
-        const formData = new FormData();
-        formData.append("customerName", customerName.trim());
-        formData.append("layoutId", layout.id);
-        if (giftMessage.trim()) formData.append("giftMessage", giftMessage.trim());
+      const formData = new FormData();
 
-        const slotImageFiles: Record<string, File> = {};
-        for (const slot of layout.slots || []) {
-          const key = `${layout.id}:${slot.id}`;
-          const file = slotFiles[key];
-          if (file) slotImageFiles[slot.id] = file;
+      if (customerName.trim()) formData.append("customerName", customerName.trim());
+      if (giftMessage.trim()) formData.append("giftMessage", giftMessage.trim());
+
+      // Enviar artes geradas + metadados por layout
+      for (let li = 0; li < selectedLayouts.length; li++) {
+        const layout = selectedLayouts[li];
+        formData.append(`layouts[${li}][id]`, layout.id);
+        formData.append(`layouts[${li}][name]`, layout.name);
+
+        // Arte final gerada
+        const artworkBlob = await generateArtwork(layout);
+        if (artworkBlob) {
+          formData.append(
+            `artworks`,
+            new File([artworkBlob], `artwork-${layout.id}.png`, { type: "image/png" }),
+            `artwork-${layout.id}.png`,
+          );
         }
 
-        if (layout.fabricJsonState) {
-          const composedImage = await composeLayoutPng(
-            layout.fabricJsonState,
-            slotImageFiles,
-            layout.width || 1000,
-            layout.height || 1500,
-          );
-          formData.append("composedImage", composedImage, `pedido-manual-${layout.id}-${Date.now()}.png`);
-        } else {
-          for (const [slotId, file] of Object.entries(slotImageFiles)) {
-            formData.append(slotFieldName(slotId), file);
+        // Imagens por slot
+        for (const slot of layout.slots || []) {
+          const file = slotFiles[`${layout.id}:${slot.id}`];
+          if (file) {
+            formData.append(
+              `slots`,
+              file,
+              `${layout.id}__${slot.id}__${file.name}`,
+            );
           }
         }
 
-        const response = await api.createManualPrintOrder(formData);
-        setPrintJobId(response.printJobId || null);
-        setJobStatus((response.status as JobStatus) || "PENDING");
-        startPolling(response.orderId);
+        // Textos personalizáveis
+        const textEntries: Record<string, string> = {};
+        for (const [key, opts] of Object.entries(slotTextOptions)) {
+          if (key.startsWith(`${layout.id}:`) && opts.text) {
+            const objId = key.slice(layout.id.length + 1);
+            textEntries[objId] = opts.text;
+          }
+        }
+        if (Object.keys(textEntries).length > 0) {
+          formData.append(`layouts[${li}][texts]`, JSON.stringify(textEntries));
+        }
       }
 
-      toast.success(`${selectedLayouts.length} layout(s) enviado(s) para impressão`);
-    } catch (error: any) {
-      console.error("Erro ao enviar pedido manual", error);
+      const result = await api.createManualPrintOrder(formData);
+
+      if (result.ok) {
+        setJobStatus(result.status as JobStatus ?? "SENT");
+        if (result.printJobId) setPrintJobId(result.printJobId);
+        toast.success("Pedido enviado para impressão!");
+      } else {
+        throw new Error("Resposta inválida do servidor");
+      }
+    } catch (err: any) {
       setJobStatus("FAILED");
-      setJobError(error?.response?.data?.error || error.message || "Erro ao enviar impressão");
-      toast.error("Erro ao gerar pedido manual");
+      setJobError(err?.message || "Erro ao enviar pedido");
+      toast.error(err?.message || "Erro ao enviar pedido");
     } finally {
       setSubmitting(false);
     }
   };
 
-  const retryPrint = async () => {
-    if (!printJobId) return;
-    await api.retryPrintJob(printJobId);
-    setJobStatus("PENDING");
+  // Reset do formulário
+  const handleReset = () => {
+    setCustomerName("");
+    setGiftMessage("");
+    setSelectedLayoutIds([]);
+    setSlotFiles({});
+    setSlotPreviews({});
+    setSlotTextOptions({});
+    setJobStatus(null);
     setJobError(null);
-    startPolling(printJobId);
+    setPrintJobId(null);
+    if (pollingRef.current) clearInterval(pollingRef.current);
   };
 
+  // ── JSX ───────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-rose-400" />
+        <span className="ml-3 text-sm text-slate-500">Carregando layouts...</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-rose-50/30 p-6">
-      <div className="mx-auto flex max-w-5xl flex-col gap-6">
-        {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-950">Pedido Manual</h1>
-            <p className="text-sm text-slate-500">Artes de pedidos recebidos pelo WhatsApp</p>
-          </div>
-          <div className={`flex items-center gap-2.5 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors ${
+    <div className="mx-auto max-w-5xl space-y-6 p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Pedido Manual de Impressão</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            Selecione um layout, envie as fotos e personalize o texto.
+          </p>
+        </div>
+        {/* Status do agente */}
+        <div
+          className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium ${
             agentConnected
               ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-              : "border-red-200 bg-red-50 text-red-600"
-          }`}>
-            <span className={`h-2 w-2 rounded-full ${agentConnected ? "bg-emerald-500" : "bg-red-400"}`} />
-            {agentConnected ? (
-              <span>Agente conectado{deviceName && <span className="ml-1 font-semibold">— {deviceName}</span>}</span>
-            ) : (
-              <span>Agente desconectado{deviceName && <span className="ml-1">— {deviceName}</span>}</span>
-            )}
-          </div>
-        </div>
-
-        {/* 1. Cliente */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-base font-semibold text-slate-900">1. Cliente</h2>
-            <p className="text-sm text-slate-400">Nome usado na pasta do Drive e no job de impressão.</p>
-          </div>
-          <Input
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-            placeholder="Nome do cliente"
-            className="max-w-md"
-          />
-        </section>
-
-        {/* 2. Layouts */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-base font-semibold text-slate-900">2. Layouts</h2>
-            <p className="text-sm text-slate-400">
-              Selecione uma ou mais artes para impressão.
-              {selectedLayoutIds.length > 0 && (
-                <span className="ml-1 font-medium text-rose-600">
-                  {selectedLayoutIds.length} selecionado(s)
-                </span>
-              )}
-            </p>
-          </div>
-          {loading ? (
-            <div className="flex items-center gap-2 text-sm text-slate-500">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Carregando layouts...
-            </div>
-          ) : layouts.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-12 text-center text-sm text-slate-400">
-              Nenhum layout disponível
-            </div>
+              : "border-slate-200 bg-slate-50 text-slate-500"
+          }`}
+        >
+          {agentConnected ? (
+            <>
+              <Wifi className="h-4 w-4" />
+              {deviceName || "Agente conectado"}
+            </>
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {layouts.map((layout) => (
-                <LayoutCard
-                  key={layout.id}
-                  layout={layout}
-                  selected={selectedLayoutIds.includes(layout.id)}
-                  onSelect={() => toggleLayout(layout.id)}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* 3. Customização por Layout */}
-        {selectedLayouts.length > 0 && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-5">
-              <h2 className="text-base font-semibold text-slate-900">3. Personalização</h2>
-              <p className="text-sm text-slate-400">
-                Envie as fotos para cada layout. Use o botão de recorte para ajustar a imagem.
-              </p>
-            </div>
-            <div className="flex flex-col gap-5">
-              {selectedLayouts.map((layout, idx) => (
-                <LayoutPanel
-                  key={layout.id}
-                  layout={layout}
-                  layoutIndex={idx}
-                  slotFiles={Object.fromEntries(
-                    Object.entries(slotFiles)
-                      .filter(([k]) => k.startsWith(`${layout.id}:`))
-                      .map(([k, v]) => [k.split(":")[1], v]),
-                  )}
-                  slotPreviews={Object.fromEntries(
-                    Object.entries(slotPreviews)
-                      .filter(([k]) => k.startsWith(`${layout.id}:`))
-                      .map(([k, v]) => [k.split(":")[1], v]),
-                  )}
-                  onSlotFile={(lid, sid, f) => updateSlotFile(lid, sid, f)}
-                  onRemoveLayout={() => removeLayout(layout.id)}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* 4. Cartinha */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="mb-4">
-            <h2 className="text-base font-semibold text-slate-900">
-              {selectedLayouts.length > 0 ? "4" : "3"}. Cartinha
-            </h2>
-            <p className="text-sm text-slate-400">A mensagem será gerada como .docx separado.</p>
-          </div>
-          <Textarea
-            value={giftMessage}
-            onChange={(e) => setGiftMessage(e.target.value)}
-            placeholder="Mensagem da cartinha (opcional)"
-            className="min-h-28"
-          />
-        </section>
-
-        {/* Actions */}
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="bg-rose-500 hover:bg-rose-600"
-          >
-            {submitting ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Printer className="mr-1 h-4 w-4" />}
-            {selectedLayouts.length > 1
-              ? `Imprimir ${selectedLayouts.length} layouts`
-              : "Gerar e Imprimir"}
-          </Button>
-          {jobStatus && (
-            <div className="flex items-center gap-2 text-sm text-slate-700">
-              {jobStatus === "PRINTED" ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              ) : jobStatus === "FAILED" ? (
-                <XCircle className="h-4 w-4 text-red-600" />
-              ) : (
-                <Loader2 className="h-4 w-4 animate-spin text-slate-500" />
-              )}
-              <span>{statusLabels[jobStatus]}</span>
-            </div>
-          )}
-          {jobStatus === "FAILED" && printJobId && (
-            <Button variant="outline" onClick={retryPrint}>
-              <RefreshCw className="mr-1 h-4 w-4" />
-              Tentar novamente
-            </Button>
+            <>
+              <WifiOff className="h-4 w-4" />
+              Agente desconectado
+            </>
           )}
         </div>
-        {jobError && (
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{jobError}</div>
+      </div>
+
+      {/* Dados do pedido */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-base font-semibold text-slate-800">Dados do pedido</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Nome do cliente
+            </label>
+            <input
+              type="text"
+              value={customerName}
+              onChange={(e) => setCustomerName(e.target.value)}
+              placeholder="Ex: Maria Silva"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+            />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Mensagem do cartão
+            </label>
+            <textarea
+              value={giftMessage}
+              onChange={(e) => setGiftMessage(e.target.value)}
+              placeholder="Ex: Feliz Aniversário!"
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100 resize-none min-h-20"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Seleção de layouts */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-base font-semibold text-slate-800">
+          Layouts disponíveis
+        </h2>
+        {layouts.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-8 text-slate-400">
+            <ImageIcon className="h-10 w-10 opacity-30" />
+            <p className="text-sm">Nenhum layout encontrado</p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {layouts.map((layout) => (
+              <LayoutCard
+                key={layout.id}
+                layout={layout}
+                selected={selectedLayoutIds.includes(layout.id)}
+                onSelect={() => handleToggleLayout(layout.id)}
+              />
+            ))}
+          </div>
         )}
       </div>
+
+      {/* Painéis dos layouts selecionados */}
+      {selectedLayouts.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-base font-semibold text-slate-800">
+            Personalização — {selectedLayouts.length} layout(s) selecionado(s)
+          </h2>
+          {selectedLayouts.map((layout, index) => (
+            <LayoutPanel
+              key={layout.id}
+              layout={layout}
+              layoutIndex={index}
+              slotFiles={slotFiles}
+              slotPreviews={slotPreviews}
+              slotTextOptions={slotTextOptions}
+              onSlotFile={handleSlotFile}
+              onSlotTextChange={handleSlotTextChange}
+              onRemoveLayout={() => handleToggleLayout(layout.id)}
+              setCropTarget={setCropTarget}
+              setSlotPreviews={setSlotPreviews}
+              setSlotFiles={setSlotFiles}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Crop Dialog Global */}
+      {cropTarget && (() => {
+        const layout = layouts.find(l => l.id === cropTarget.layoutId);
+        const slot = layout?.slots?.find(s => s.id === cropTarget.slotId);
+        const src = slotPreviews[`${cropTarget.layoutId}:${cropTarget.slotId}`];
+        
+        if (!src || !layout || !slot) return null;
+
+        return (
+          <CropDialog
+            src={src}
+            aspect={getSlotAspect(slot)}
+            onApply={(blob) => {
+              const file = new File([blob], `cropped-${cropTarget.slotId}.png`, {
+                type: "image/png",
+              });
+              handleSlotFile(cropTarget.layoutId, cropTarget.slotId, file);
+              setCropTarget(null);
+            }}
+            onClose={() => setCropTarget(null)}
+          />
+        );
+      })()}
+
+      {/* Status do job */}
+      {jobStatus && (
+        <div
+          className={`flex items-start gap-3 rounded-2xl border p-4 ${
+            jobStatus === "PRINTED"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : jobStatus === "FAILED"
+              ? "border-red-200 bg-red-50 text-red-800"
+              : "border-blue-200 bg-blue-50 text-blue-800"
+          }`}
+        >
+          {jobStatus === "PRINTED" ? (
+            <CheckCheck className="mt-0.5 h-5 w-5 flex-shrink-0" />
+          ) : jobStatus === "FAILED" ? (
+            <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0" />
+          ) : (
+            <Loader2 className="mt-0.5 h-5 w-5 flex-shrink-0 animate-spin" />
+          )}
+          <div className="flex-1">
+            <p className="font-medium text-sm">{statusLabels[jobStatus]}</p>
+            {jobError && (
+              <p className="mt-1 text-xs opacity-80">{jobError}</p>
+            )}
+          </div>
+          {(jobStatus === "PRINTED" || jobStatus === "FAILED") && (
+            <button
+              onClick={handleReset}
+              className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium hover:bg-black/5"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Novo pedido
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Botão de submit */}
+      {!jobStatus && (
+        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-sm text-slate-500">
+            {selectedLayouts.length === 0
+              ? "Selecione ao menos um layout acima"
+              : hasMissingRequired
+              ? "Preencha todas as imagens obrigatórias"
+              : `${selectedLayouts.length} layout(s) prontos para imprimir`}
+          </div>
+          <Button
+            onClick={handleSubmit}
+            disabled={
+              submitting ||
+              selectedLayouts.length === 0 ||
+              hasMissingRequired ||
+              !agentConnected
+            }
+            className="flex items-center gap-2 bg-rose-500 px-6 hover:bg-rose-600 disabled:opacity-50"
+          >
+            {submitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {submitting ? "Enviando..." : "Enviar para impressão"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

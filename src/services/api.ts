@@ -1024,13 +1024,41 @@ class ApiService {
   getLayout = async (id: string) => (await this.get(`/layouts/${id}`)).data;
 
   // ===== Dynamic Layouts (para customizações) =====
-  getDynamicLayouts = async (params?: { type?: string }) => {
+  getDynamicLayouts = async (params?: { type?: string }): Promise<any> => {
     try {
-      const response = await this.get("/layouts/dynamic", { params });
-      return response.data;
-    } catch (error) {
+      // Usar o mesmo padrão do frontend - adicionar ngrok-skip-browser-warning
+      const response = await this.get("/layouts/dynamic", {
+        params,
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+        },
+      });
+      // Backend retorna { data: Array(...), count: number }
+      const layouts = response.data?.data || response.data || [];
+      return Array.isArray(layouts) ? layouts : [];
+    } catch (error: any) {
+      console.error("❌ getDynamicLayouts error:", error);
+      // Se for 304, não é realmente um erro - apenas retorna vazio
+      if (error.response?.status === 304) {
+        console.warn("⚠️ Layouts em cache (304 Not Modified)");
+        return [];
+      }
       console.error("Erro ao carregar layouts dinâmicos:", error);
       return [];
+    }
+  };
+
+  getLayoutById = async (layoutId: string) => {
+    try {
+      const response = await this.get(`/layouts/dynamic/${layoutId}`, {
+        headers: {
+          "ngrok-skip-browser-warning": "true",
+        },
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error("❌ getLayoutById error:", error);
+      return null;
     }
   };
 
