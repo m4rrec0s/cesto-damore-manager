@@ -119,6 +119,54 @@ function SortableSectionItem({
   );
 }
 
+function SortableProductItem({ item, product, onRemove }: any) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`bg-white p-3 rounded-xl border flex items-center gap-3 ${
+        isDragging ? "shadow-lg border-blue-200" : "border-neutral-100"
+      }`}
+    >
+      <button
+        {...attributes}
+        {...listeners}
+        className="p-1 text-neutral-300 hover:text-neutral-500 cursor-grab active:cursor-grabbing rounded-lg hover:bg-neutral-100 shrink-0"
+      >
+        <GripVertical className="w-4 h-4" />
+      </button>
+      <div className="w-10 h-10 bg-neutral-100 rounded-lg shrink-0 overflow-hidden">
+        {product?.image_url && (
+          <img src={product.image_url} alt="" className="w-full h-full object-cover" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-neutral-900 truncate">
+          {product?.name || "Produto não encontrado"}
+        </p>
+        <p className="text-xs text-neutral-500">
+          R$ {product?.price?.toFixed(2)}
+        </p>
+      </div>
+      <Button
+        onClick={() => onRemove(item.id)}
+        variant="ghost" size="icon"
+        className="text-red-400 hover:text-red-600"
+      >
+        <Trash2 className="w-4 h-4" />
+      </Button>
+    </div>
+  );
+}
+
 export function Feed() {
   const api = useApi();
   const [data, setData] = useState({
@@ -518,6 +566,25 @@ export function Feed() {
       await loadFeedData(true);
     } catch (error) {
       toast.error("Erro ao remover produto");
+    }
+  };
+
+  const handleDragEndItems = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const items = [...(managingSection?.items || [])];
+    const oldIndex = items.findIndex((i) => i.id === active.id);
+    const newIndex = items.findIndex((i) => i.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const reordered = arrayMove(items, oldIndex, newIndex);
+    const updated = { ...managingSection!, items: reordered };
+    setManagingSection(updated);
+    for (const [index, item] of reordered.entries()) {
+      try {
+        await api.updateFeedSectionItem(item.id, { display_order: index });
+      } catch (error) {
+        console.error(`Erro ao atualizar ordem do item ${item.id}:`, error);
+      }
     }
   };
 
@@ -1259,41 +1326,30 @@ export function Feed() {
                       Nenhum produto adicionado.
                     </div>
                   ) : (
-                    managingSection.items?.map((item: any) => {
-                      const product = data.products.find(
-                        (p) => p.id === item.item_id,
-                      );
-                      return (
-                        <div
-                          key={item.id}
-                          className="bg-white p-3 rounded-xl border border-neutral-100 flex items-center gap-3"
-                        >
-                          <div className="w-10 h-10 bg-neutral-100 rounded-lg shrink-0 overflow-hidden">
-                            {product?.image_url && (
-                              <img
-                                src={product.image_url}
-                                alt=""
-                                className="w-full h-full object-cover"
-                              />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-neutral-900 truncate">
-                              {product?.name || "Produto não encontrado"}
-                            </p>
-                            <p className="text-xs text-neutral-500">
-                              R$ {product?.price?.toFixed(2)}
-                            </p>
-                          </div>
-                          <Button
-                            onClick={() => handleRemoveItemFromSection(item.id)}
-                            className="p-2 text-red-400 hover:text-red-600 rounded-lg transition-all"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      );
-                    })
+                    <DndContext
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEndItems}
+                    >
+                      <SortableContext
+                        items={managingSection.items.map((i: any) => i.id)}
+                        strategy={verticalListSortingStrategy}
+                      >
+                        {managingSection.items?.map((item: any) => {
+                          const product = data.products.find(
+                            (p) => p.id === item.item_id,
+                          );
+                          return (
+                            <SortableProductItem
+                              key={item.id}
+                              item={item}
+                              product={product}
+                              onRemove={handleRemoveItemFromSection}
+                            />
+                          );
+                        })}
+                      </SortableContext>
+                    </DndContext>
                   )}
                 </div>
               </div>

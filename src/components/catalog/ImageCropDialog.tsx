@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import ReactCrop, { type PixelCrop, centerCrop } from "react-image-crop";
+import ReactCrop, { type PercentCrop, type PixelCrop, centerCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { Crop, X } from "lucide-react";
 import { Button } from "../ui/button";
@@ -58,13 +58,20 @@ export function ImageCropDialog({ open, imageUrl, onComplete, onClose }: ImageCr
     (e: React.SyntheticEvent<HTMLImageElement>) => {
       const { width, height } = e.currentTarget;
       imgRef.current = e.currentTarget;
-      const newCrop = centerCrop(
+      const percentCrop = centerCrop(
         { unit: "%", x: 5, y: 5, width: 90, height: 90 },
         width,
         height,
       );
-      setCrop(newCrop);
-      setCompletedCrop(newCrop);
+      const pixelCrop: PixelCrop = {
+        unit: "px",
+        x: (percentCrop.x / 100) * width,
+        y: (percentCrop.y / 100) * height,
+        width: (percentCrop.width / 100) * width,
+        height: (percentCrop.height / 100) * height,
+      };
+      setCrop(pixelCrop);
+      setCompletedCrop(pixelCrop);
     },
     [],
   );
