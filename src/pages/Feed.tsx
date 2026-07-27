@@ -36,8 +36,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-type Tab = "banners" | "sections" | "configurations";
-
 // Componente para item sortável de seção
 function SortableSectionItem({
   section,
@@ -64,41 +62,41 @@ function SortableSectionItem({
     <div
       ref={setNodeRef}
       style={style}
-      className={`p-4 flex items-center gap-4 hover:bg-neutral-50 transition-colors border-b border-neutral-100 last:border-b-0 ${
-        isDragging ? "bg-blue-50" : ""
+      className={`p-3 flex items-center gap-3 bg-neutral-50/50 rounded-xl hover:bg-neutral-50 transition-colors border border-neutral-100 ${
+        isDragging ? "bg-blue-50 !shadow-lg !border-blue-200" : ""
       }`}
     >
       <button
         {...attributes}
         {...listeners}
-        className="p-2 text-neutral-400 hover:text-neutral-600 cursor-grab active:cursor-grabbing"
+        className="p-1.5 text-neutral-400 hover:text-neutral-600 cursor-grab active:cursor-grabbing rounded-lg hover:bg-neutral-100 shrink-0"
       >
-        <GripVertical className="w-5 h-5" />
+        <GripVertical className="w-4 h-4" />
       </button>
 
-      <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 shrink-0">
-        <Layers className="w-5 h-5" />
+      <div className="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 shrink-0">
+        <Layers className="w-4 h-4" />
       </div>
 
       <div className="flex-1 min-w-0">
-        <h4 className="font-bold text-neutral-950 truncate">{section.title}</h4>
+        <h4 className="font-bold text-neutral-950 truncate text-sm">{section.title}</h4>
         <div className="flex items-center gap-2">
           <p className="text-xs text-neutral-500 truncate">
             {section.section_type}
           </p>
           {section.section_type === "CUSTOM_PRODUCTS" && (
-            <span className="text-[10px] bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">
+            <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full font-bold">
               {section.items?.length || 0} produtos
             </span>
           )}
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1 shrink-0">
         {section.section_type === "CUSTOM_PRODUCTS" && (
           <Button
             onClick={() => onManageItems(section)}
-            className="p-2 text-neutral-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-all"
+            variant="ghost" size="icon"
             title="Gerenciar Produtos"
           >
             <Package className="w-4 h-4" />
@@ -106,13 +104,13 @@ function SortableSectionItem({
         )}
         <Button
           onClick={() => onEdit(section)}
-          className="p-2 text-neutral-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+          variant="ghost" size="icon"
         >
           <Edit2 className="w-4 h-4" />
         </Button>
         <Button
           onClick={() => onDelete(section.id)}
-          className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+          variant="ghost" size="icon"
         >
           <Trash2 className="w-4 h-4" />
         </Button>
@@ -123,7 +121,6 @@ function SortableSectionItem({
 
 export function Feed() {
   const api = useApi();
-  const [activeTab, setActiveTab] = useState<Tab>("banners");
   const [data, setData] = useState({
     banners: [] as any[],
     sections: [] as any[],
@@ -132,8 +129,8 @@ export function Feed() {
     products: [] as any[],
   });
   const [loading, setLoading] = useState(true);
+  const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
 
-  // Sensors para drag and drop
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -141,7 +138,6 @@ export function Feed() {
     }),
   );
 
-  // Modal states
   const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<any>(null);
   const [bannerForm, setBannerForm] = useState({
@@ -183,7 +179,6 @@ export function Feed() {
     total: 0,
   });
   const [isSearchingProducts, setIsSearchingProducts] = useState(false);
-
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -206,6 +201,16 @@ export function Feed() {
     }
   }, [searchProduct, isItemsModalOpen]);
 
+  const selectedConfig = data.configurations.find(
+    (c) => c.id === selectedConfigId,
+  );
+  const configBanners = data.banners.filter(
+    (b) => b.feed_config_id === selectedConfigId,
+  );
+  const configSections = data.sections.filter(
+    (s) => s.feed_config_id === selectedConfigId,
+  );
+
   const loadFeedData = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
@@ -218,13 +223,20 @@ export function Feed() {
           api.getProducts({ perPage: 1000 }),
         ]);
 
-      setData({
+      const newData = {
         banners: banners.data,
         sections: sections.data,
         configurations: configs.data,
         sectionTypes: sectionTypes,
         products: products.products || [],
-      });
+      };
+
+      setData(newData);
+
+      if (!selectedConfigId && newData.configurations.length > 0) {
+        const active = newData.configurations.find((c: any) => c.is_active);
+        setSelectedConfigId(active?.id || newData.configurations[0].id);
+      }
     } catch (error) {
       console.error("Erro ao carregar feed:", error);
       toast.error("Erro ao carregar dados do feed");
@@ -257,22 +269,24 @@ export function Feed() {
 
   const handleDragEndSections = async (event: DragEndEvent) => {
     const { active, over } = event;
-
     if (over && active.id !== over.id) {
-      const oldIndex = data.sections.findIndex((s) => s.id === active.id);
-      const newIndex = data.sections.findIndex((s) => s.id === over.id);
-
-      const newSections = arrayMove(data.sections, oldIndex, newIndex);
-
-      // Update display order
-      const updates = newSections.map((section, index) => ({
+      const allSections = [...data.sections];
+      const filteredIds = configSections.map((s: any) => s.id);
+      const filteredSections = allSections.filter((s) =>
+        filteredIds.includes(s.id),
+      );
+      const oldIndex = filteredSections.findIndex((s) => s.id === active.id);
+      const newIndex = filteredSections.findIndex((s) => s.id === over.id);
+      const reordered = arrayMove(filteredSections, oldIndex, newIndex);
+      const updates = reordered.map((section, index) => ({
         ...section,
         display_order: index,
       }));
-
-      setData({ ...data, sections: updates });
-
-      // Save to backend
+      const updatedAll = allSections.map(
+        (s) =>
+          updates.find((u) => u.id === s.id) || s,
+      );
+      setData({ ...data, sections: updatedAll } as any);
       for (const section of updates) {
         try {
           await api.updateFeedSection(section.id, {
@@ -285,7 +299,6 @@ export function Feed() {
           );
         }
       }
-
       toast.success("Ordem atualizada com sucesso");
     }
   };
@@ -299,6 +312,7 @@ export function Feed() {
       try {
         await api.deleteFeedConfiguration(id);
         toast.success("Configuração excluída com sucesso");
+        setSelectedConfigId(null);
         loadFeedData();
       } catch (error) {
         toast.error("Erro ao excluir configuração");
@@ -316,7 +330,7 @@ export function Feed() {
         display_order: banner.display_order || 0,
         is_active: banner.is_active ?? true,
         feed_config_id:
-          banner.feed_config_id || data.configurations[0]?.id || "",
+          banner.feed_config_id || selectedConfigId || data.configurations[0]?.id || "",
         image: null,
         image_preview: banner.image_url || "",
       });
@@ -328,7 +342,7 @@ export function Feed() {
         link_url: "",
         display_order: data.banners.length,
         is_active: true,
-        feed_config_id: data.configurations[0]?.id || "",
+        feed_config_id: selectedConfigId || data.configurations[0]?.id || "",
         image: null,
         image_preview: "",
       });
@@ -346,11 +360,9 @@ export function Feed() {
       toast.error("A imagem é obrigatória para novos banners");
       return;
     }
-
     try {
       setSaving(true);
       const { image, image_preview, ...payload } = bannerForm;
-
       if (editingBanner) {
         await api.updateFeedBanner(
           editingBanner.id,
@@ -381,7 +393,7 @@ export function Feed() {
         display_order: section.display_order || 0,
         is_visible: section.is_visible ?? true,
         feed_config_id:
-          section.feed_config_id || data.configurations[0]?.id || "",
+          section.feed_config_id || selectedConfigId || data.configurations[0]?.id || "",
         max_items: section.max_items || 6,
       });
     } else {
@@ -391,7 +403,7 @@ export function Feed() {
         section_type: data.sectionTypes[0]?.value || "RECOMMENDED_PRODUCTS",
         display_order: data.sections.length,
         is_visible: true,
-        feed_config_id: data.configurations[0]?.id || "",
+        feed_config_id: selectedConfigId || data.configurations[0]?.id || "",
         max_items: 6,
       });
     }
@@ -470,7 +482,6 @@ export function Feed() {
         perPage: 8,
         search,
       });
-
       setModalProducts(response.products);
       setModalPagination({
         page: response.pagination.page,
@@ -489,7 +500,7 @@ export function Feed() {
     try {
       await api.post(`/admin/feed/sections/${managingSection.id}/items`, {
         feed_section_id: managingSection.id,
-        item_type: "PRODUCT",
+        item_type: "product",
         item_id: product.id,
         display_order: managingSection.items?.length || 0,
       });
@@ -522,223 +533,294 @@ export function Feed() {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-neutral-950">
-          Gerenciamento de Feed
-        </h1>
+    <div className="min-h-screen flex flex-col p-4 md:p-6 gap-4 md:gap-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 shrink-0">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-bold text-neutral-950">
+            Gerenciamento de Feed
+          </h1>
+          <p className="text-xs md:text-sm text-neutral-500 mt-0.5 md:mt-1">
+            Configurações de banners e seções da página inicial
+          </p>
+        </div>
         <Button
           onClick={() => {
-            if (activeTab === "banners") openBannerModal();
-            if (activeTab === "sections") openSectionModal();
-            if (activeTab === "configurations") openConfigModal();
+            setEditingConfig(null);
+            setConfigForm({ name: "", is_active: true });
+            setIsConfigModalOpen(true);
           }}
-          className="flex items-center gap-2 px-4 py-2 bg-neutral-900 text-white rounded-xl hover:bg-neutral-800 transition-colors font-medium"
+          variant="outline" className="font-medium w-full sm:w-auto"
         >
           <Plus className="w-4 h-4" />
-          {activeTab === "banners"
-            ? "Novo Banner"
-            : activeTab === "sections"
-              ? "Nova Seção"
-              : "Nova Configuração"}
+          Nova Configuração
         </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 p-1 bg-neutral-100 rounded-2xl w-fit">
-        <Button
-          onClick={() => setActiveTab("banners")}
-          className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all ${
-            activeTab === "banners"
-              ? "bg-white text-neutral-950 shadow-sm"
-              : "text-neutral-500 hover:text-neutral-700"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <ImageIcon className="w-4 h-4" />
-            Banners ({data.banners.length})
-          </div>
-        </Button>
-        <Button
-          onClick={() => setActiveTab("sections")}
-          className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all ${
-            activeTab === "sections"
-              ? "bg-white text-neutral-950 shadow-sm"
-              : "text-neutral-500 hover:text-neutral-700"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4" />
-            Seções ({data.sections.length})
-          </div>
-        </Button>
-        <Button
-          onClick={() => setActiveTab("configurations")}
-          className={`px-6 py-2 rounded-xl text-sm font-semibold transition-all ${
-            activeTab === "configurations"
-              ? "bg-white text-neutral-950 shadow-sm"
-              : "text-neutral-500 hover:text-neutral-700"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4" />
-            Configurações ({data.configurations.length})
-          </div>
-        </Button>
-      </div>
-
-      {/* Content */}
-      <div className="bg-white rounded-[2rem] border border-neutral-100 shadow-sm overflow-hidden">
-        {activeTab === "banners" && (
-          <div className="divide-y divide-neutral-50">
-            {data.banners.length === 0 ? (
-              <div className="p-12 text-center">
-                <p className="text-neutral-400">Nenhum banner cadastrado.</p>
-              </div>
-            ) : (
-              data.banners.map((banner) => (
-                <div
-                  key={banner.id}
-                  className="p-4 flex items-center gap-4 hover:bg-neutral-50 transition-colors"
-                >
-                  <div className="w-32 h-20 bg-neutral-100 rounded-lg overflow-hidden shrink-0">
-                    {banner.image_url ? (
-                      <img
-                        src={banner.image_url}
-                        alt={banner.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-neutral-300">
-                        <ImageIcon className="w-8 h-8" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-neutral-950 truncate">
-                      {banner.title || "Sem título"}
-                    </h4>
-                    <p className="text-sm text-neutral-500 truncate">
-                      {banner.subtitle || "Sem subtítulo"}
-                    </p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span
-                        className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${banner.is_active ? "bg-green-50 text-green-600" : "bg-red-50 text-red-600"}`}
-                      >
-                        {banner.is_active ? "Ativo" : "Inativo"}
-                      </span>
-                      <span className="text-[10px] text-neutral-400 uppercase font-bold">
-                        Ordem: {banner.display_order}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={() => openBannerModal(banner)}
-                      className="p-2 text-neutral-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                    >
-                      <Edit2 className="w-5 h-5" />
-                    </Button>
-                    <Button
-                      onClick={() => handleDeleteBanner(banner.id)}
-                      className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </Button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        )}
-
-        {activeTab === "sections" && (
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEndSections}
-          >
-            <div className="divide-y divide-neutral-100">
-              {data.sections.length === 0 ? (
-                <div className="p-12 text-center">
-                  <Layers className="w-12 h-12 text-neutral-200 mx-auto mb-3" />
-                  <p className="text-neutral-400 font-medium">
-                    Nenhuma seção cadastrada.
-                  </p>
-                  <p className="text-sm text-neutral-500 mt-1">
-                    Comece criando sua primeira seção
-                  </p>
-                </div>
-              ) : (
-                <SortableContext
-                  items={data.sections.map((s) => s.id)}
-                  strategy={verticalListSortingStrategy}
-                >
-                  {data.sections.map((section) => (
-                    <SortableSectionItem
-                      key={section.id}
-                      section={section}
-                      onEdit={openSectionModal}
-                      onDelete={handleDeleteSection}
-                      onManageItems={openManageItems}
-                    />
-                  ))}
-                </SortableContext>
-              )}
-            </div>
-          </DndContext>
-        )}
-
-        {activeTab === "configurations" && (
-          <div className="divide-y divide-neutral-50">
-            {data.configurations.length === 0 ? (
-              <div className="p-12 text-center">
-                <p className="text-neutral-400">
-                  Nenhuma configuração cadastrada.
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0 overflow-y-auto">
+        {/* Sidebar: Config List */}
+        <div className="w-full lg:w-64 xl:w-72 shrink-0 flex flex-row lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible">
+          {data.configurations.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center p-6">
+                <Settings className="w-10 h-10 text-neutral-300 mx-auto mb-3" />
+                <p className="text-sm text-neutral-500 font-medium">
+                  Nenhuma configuração
+                </p>
+                <p className="text-xs text-neutral-400 mt-1">
+                  Crie sua primeira configuração de feed
                 </p>
               </div>
-            ) : (
-              data.configurations.map((config) => (
-                <div
+            </div>
+          ) : (
+            data.configurations.map((config) => {
+              const bCount = data.banners.filter(
+                (b) => b.feed_config_id === config.id,
+              ).length;
+              const sCount = data.sections.filter(
+                (s) => s.feed_config_id === config.id,
+              ).length;
+              const isSelected = selectedConfigId === config.id;
+              return (
+                <button
                   key={config.id}
-                  className="p-4 flex items-center gap-4 hover:bg-neutral-50 transition-colors"
+                  onClick={() => setSelectedConfigId(config.id)}
+                  className={`shrink-0 lg:w-full text-left p-3 lg:p-4 rounded-xl lg:rounded-2xl border-2 transition-all ${
+                    isSelected
+                      ? "border-neutral-900 bg-neutral-50 shadow-sm"
+                      : "border-transparent bg-white hover:bg-neutral-50 hover:border-neutral-200"
+                  }`}
                 >
-                  <div className="w-12 h-12 bg-neutral-100 rounded-xl flex items-center justify-center text-neutral-500 shrink-0">
-                    <Settings className="w-6 h-6" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-neutral-950 truncate">
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <h3 className="font-bold text-neutral-950 truncate text-sm">
                       {config.name}
-                    </h4>
-                    <p className="text-sm text-neutral-500 truncate">
-                      {config.is_active ? "Configuração Ativa" : "Inativa"}
-                    </p>
+                    </h3>
+                    <span
+                      className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                        config.is_active
+                          ? "bg-green-50 text-green-600"
+                          : "bg-neutral-100 text-neutral-400"
+                      }`}
+                    >
+                      {config.is_active ? "Ativa" : "Inativa"}
+                    </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      onClick={() => openConfigModal(config)}
-                      className="p-2 text-neutral-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                  <div className="flex items-center gap-2 text-xs text-neutral-400">
+                    <span>{bCount} banner{bCount !== 1 ? "s" : ""}</span>
+                    <span>{sCount} seçã{sCount !== 1 ? "ões" : "o"}</span>
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        {/* Main: Config Detail */}
+        <div className="flex-1 bg-white rounded-xl md:rounded-[2rem] border border-neutral-100 shadow-sm flex flex-col min-w-0">
+          {!selectedConfig ? (
+            <div className="flex-1 flex items-center justify-center p-12">
+              <div className="text-center">
+                <Settings className="w-16 h-16 text-neutral-200 mx-auto mb-4" />
+                <h2 className="text-xl font-bold text-neutral-900 mb-2">
+                  Selecione uma configuração
+                </h2>
+                <p className="text-neutral-400 text-sm">
+                  Escolha uma configuração ao lado para gerenciar seus banners e seções
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col min-h-0">
+              {/* Config Header */}
+              <div className="px-6 py-4 border-b border-neutral-100 flex items-center justify-between bg-neutral-50/50 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 bg-neutral-900 rounded-xl flex items-center justify-center text-white shrink-0">
+                    <Settings className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-lg font-bold text-neutral-950 truncate">
+                      {selectedConfig.name}
+                    </h2>
+                    <span
+                      className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${
+                        selectedConfig.is_active
+                          ? "bg-green-50 text-green-600"
+                          : "bg-red-50 text-red-600"
+                      }`}
                     >
-                      <Edit2 className="w-5 h-5" />
-                    </Button>
-                    <Button
-                      onClick={() => handleDeleteConfig(config.id)}
-                      className="p-2 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </Button>
+                      {selectedConfig.is_active ? "Ativa" : "Inativa"}
+                    </span>
                   </div>
                 </div>
-              ))
-            )}
-          </div>
-        )}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    onClick={() => {
+                      setEditingConfig(selectedConfig);
+                      setConfigForm({
+                        name: selectedConfig.name || "",
+                        is_active: selectedConfig.is_active ?? true,
+                      });
+                      setIsConfigModalOpen(true);
+                    }}
+                    variant="ghost" size="icon"
+                  >
+                    <Edit2 className="w-5 h-5" />
+                  </Button>
+                  <Button
+                    onClick={() => handleDeleteConfig(selectedConfig.id)}
+                    variant="ghost" size="icon"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Scrollable Content */}
+              <div className="flex-1">
+                {/* Banners */}
+                <div className="border-b border-neutral-100">
+                  <div className="px-6 py-4 flex items-center justify-between">
+                    <h3 className="font-bold text-neutral-800 flex items-center gap-2 text-sm">
+                      <ImageIcon className="w-4 h-4 text-rose-500" />
+                      Banners ({configBanners.length})
+                    </h3>
+                    <Button
+                      onClick={() => openBannerModal()}
+                      variant="outline" size="sm"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Adicionar
+                    </Button>
+                  </div>
+                  {configBanners.length === 0 ? (
+                    <div className="px-6 pb-4">
+                      <div className="border-2 border-dashed border-neutral-100 rounded-xl p-8 text-center">
+                        <ImageIcon className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
+                        <p className="text-sm text-neutral-400 font-medium">
+                          Nenhum banner nesta configuração
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="px-6 pb-4 space-y-2">
+                      {configBanners.map((banner) => (
+                        <div
+                          key={banner.id}
+                          className="p-3 flex items-center gap-3 bg-neutral-50/50 rounded-xl hover:bg-neutral-50 transition-colors border border-neutral-100"
+                        >
+                          <div className="w-28 h-16 bg-neutral-100 rounded-lg overflow-hidden shrink-0">
+                            {banner.image_url ? (
+                              <img
+                                src={banner.image_url}
+                                alt={banner.title}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-neutral-300">
+                                <ImageIcon className="w-6 h-6" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-bold text-neutral-900 truncate text-sm">
+                              {banner.title || "Sem título"}
+                            </h4>
+                            <p className="text-xs text-neutral-500 truncate">
+                              {banner.subtitle || "Sem subtítulo"}
+                            </p>
+                            <div className="flex items-center gap-3 mt-1">
+                              <span
+                                className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full ${
+                                  banner.is_active
+                                    ? "bg-green-50 text-green-600"
+                                    : "bg-red-50 text-red-600"
+                                }`}
+                              >
+                                {banner.is_active ? "Ativo" : "Inativo"}
+                              </span>
+                              <span className="text-[10px] text-neutral-400 uppercase font-bold">
+                                Ordem: {banner.display_order}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Button
+                              onClick={() => openBannerModal(banner)}
+                              variant="ghost" size="icon"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              onClick={() => handleDeleteBanner(banner.id)}
+                              variant="ghost" size="icon"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Sections */}
+                <div>
+                  <div className="px-6 py-4 flex items-center justify-between">
+                    <h3 className="font-bold text-neutral-800 flex items-center gap-2 text-sm">
+                      <Layers className="w-4 h-4 text-blue-500" />
+                      Seções ({configSections.length})
+                    </h3>
+                    <Button
+                      onClick={() => openSectionModal()}
+                      variant="outline" size="sm"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Adicionar
+                    </Button>
+                  </div>
+                  {configSections.length === 0 ? (
+                    <div className="px-6 pb-6">
+                      <div className="border-2 border-dashed border-neutral-100 rounded-xl p-8 text-center">
+                        <Layers className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
+                        <p className="text-sm text-neutral-400 font-medium">
+                          Nenhuma seção nesta configuração
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="px-6 pb-6 space-y-2">
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEndSections}
+                      >
+                        <SortableContext
+                          items={configSections.map((s: any) => s.id)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          {configSections.map((section) => (
+                            <SortableSectionItem
+                              key={section.id}
+                              section={section}
+                              onEdit={openSectionModal}
+                              onDelete={handleDeleteSection}
+                              onManageItems={openManageItems}
+                            />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Banner Modal */}
       {isBannerModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-xl md:rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50">
               <h2 className="text-xl font-bold text-neutral-950">
                 {editingBanner ? "Editar Banner" : "Novo Banner"}
@@ -750,7 +832,6 @@ export function Feed() {
                 <X className="w-5 h-5 text-neutral-500" />
               </Button>
             </div>
-
             <form onSubmit={handleSaveBanner} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
@@ -777,11 +858,8 @@ export function Feed() {
                     ))}
                   </select>
                 </div>
-
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-neutral-700 mb-1">
-                    Título
-                  </label>
+                  <label className="block text-sm font-bold text-neutral-700 mb-1">Título</label>
                   <input
                     type="text"
                     value={bannerForm.title}
@@ -793,11 +871,8 @@ export function Feed() {
                     required
                   />
                 </div>
-
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-neutral-700 mb-1">
-                    Subtítulo
-                  </label>
+                  <label className="block text-sm font-bold text-neutral-700 mb-1">Subtítulo</label>
                   <input
                     type="text"
                     value={bannerForm.subtitle}
@@ -808,11 +883,8 @@ export function Feed() {
                     placeholder="Ex: Até 50% de desconto"
                   />
                 </div>
-
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-neutral-700 mb-1">
-                    Link (URL)
-                  </label>
+                  <label className="block text-sm font-bold text-neutral-700 mb-1">Link (URL)</label>
                   <input
                     type="text"
                     value={bannerForm.link_url}
@@ -823,11 +895,8 @@ export function Feed() {
                     placeholder="Ex: /produtos/promocao"
                   />
                 </div>
-
                 <div>
-                  <label className="block text-sm font-bold text-neutral-700 mb-1">
-                    Ordem
-                  </label>
+                  <label className="block text-sm font-bold text-neutral-700 mb-1">Ordem</label>
                   <input
                     title="Ordem"
                     type="number"
@@ -842,7 +911,6 @@ export function Feed() {
                     required
                   />
                 </div>
-
                 <div className="flex items-end pb-2">
                   <label className="flex items-center gap-2 cursor-pointer group">
                     <input
@@ -861,11 +929,8 @@ export function Feed() {
                     </span>
                   </label>
                 </div>
-
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-neutral-700 mb-1">
-                    Imagem do Banner
-                  </label>
+                  <label className="block text-sm font-bold text-neutral-700 mb-1">Imagem do Banner</label>
                   <div className="mt-1 flex items-center gap-4">
                     {bannerForm.image_preview && (
                       <div className="w-24 h-16 rounded-lg overflow-hidden bg-neutral-100 shrink-0 border border-neutral-200">
@@ -902,19 +967,18 @@ export function Feed() {
                   </div>
                 </div>
               </div>
-
               <div className="pt-4 flex gap-3">
                 <Button
                   type="button"
                   onClick={() => setIsBannerModalOpen(false)}
-                  className="flex-1 px-4 py-3 bg-neutral-100 text-neutral-700 rounded-xl font-bold hover:bg-neutral-200 transition-all"
+                  variant="ghost" className="flex-1 font-bold"
                 >
                   Cancelar
                 </Button>
                 <Button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 px-4 py-3 bg-neutral-900 text-white rounded-xl font-bold hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  variant="outline" className="flex-1 font-bold"
                 >
                   {saving ? (
                     <Loader className="w-5 h-5 animate-spin" />
@@ -932,7 +996,7 @@ export function Feed() {
       {/* Section Modal */}
       {isSectionModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-xl md:rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50">
               <h2 className="text-xl font-bold text-neutral-950">
                 {editingSection ? "Editar Seção" : "Nova Seção"}
@@ -944,7 +1008,6 @@ export function Feed() {
                 <X className="w-5 h-5 text-neutral-500" />
               </Button>
             </div>
-
             <form onSubmit={handleSaveSection} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
@@ -971,11 +1034,8 @@ export function Feed() {
                     ))}
                   </select>
                 </div>
-
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-neutral-700 mb-1">
-                    Título da Seção
-                  </label>
+                  <label className="block text-sm font-bold text-neutral-700 mb-1">Título da Seção</label>
                   <input
                     type="text"
                     value={sectionForm.title}
@@ -987,11 +1047,8 @@ export function Feed() {
                     required
                   />
                 </div>
-
                 <div className="col-span-2">
-                  <label className="block text-sm font-bold text-neutral-700 mb-1">
-                    Tipo de Seção
-                  </label>
+                  <label className="block text-sm font-bold text-neutral-700 mb-1">Tipo de Seção</label>
                   <select
                     title="Tipo de seção"
                     value={sectionForm.section_type}
@@ -1012,11 +1069,8 @@ export function Feed() {
                     ))}
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-sm font-bold text-neutral-700 mb-1">
-                    Ordem
-                  </label>
+                  <label className="block text-sm font-bold text-neutral-700 mb-1">Ordem</label>
                   <input
                     title="Ordem"
                     type="number"
@@ -1031,11 +1085,8 @@ export function Feed() {
                     required
                   />
                 </div>
-
                 <div>
-                  <label className="block text-sm font-bold text-neutral-700 mb-1">
-                    Máx. Itens
-                  </label>
+                  <label className="block text-sm font-bold text-neutral-700 mb-1">Máx. Itens</label>
                   <input
                     title="Máx. Itens"
                     type="number"
@@ -1050,7 +1101,6 @@ export function Feed() {
                     required
                   />
                 </div>
-
                 <div className="col-span-2 flex items-center gap-2 cursor-pointer group">
                   <input
                     type="checkbox"
@@ -1072,19 +1122,18 @@ export function Feed() {
                   </label>
                 </div>
               </div>
-
               <div className="pt-4 flex gap-3">
                 <Button
                   type="button"
                   onClick={() => setIsSectionModalOpen(false)}
-                  className="flex-1 px-4 py-3 bg-neutral-100 text-neutral-700 rounded-xl font-bold hover:bg-neutral-200 transition-all"
+                  variant="ghost" className="flex-1 font-bold"
                 >
                   Cancelar
                 </Button>
                 <Button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 px-4 py-3 bg-neutral-900 text-white rounded-xl font-bold hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  variant="outline" className="flex-1 font-bold"
                 >
                   {saving ? (
                     <Loader className="w-5 h-5 animate-spin" />
@@ -1099,10 +1148,10 @@ export function Feed() {
         </div>
       )}
 
-      {/* Configuration Modal */}
+      {/* Config Modal */}
       {isConfigModalOpen && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-xl md:rounded-[2rem] w-full max-w-lg overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50">
               <h2 className="text-xl font-bold text-neutral-950">
                 {editingConfig ? "Editar Configuração" : "Nova Configuração"}
@@ -1114,13 +1163,10 @@ export function Feed() {
                 <X className="w-5 h-5 text-neutral-500" />
               </Button>
             </div>
-
             <form onSubmit={handleSaveConfig} className="p-6 space-y-4">
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-bold text-neutral-700 mb-1">
-                    Nome da Configuração
-                  </label>
+                  <label className="block text-sm font-bold text-neutral-700 mb-1">Nome da Configuração</label>
                   <input
                     type="text"
                     value={configForm.name}
@@ -1132,7 +1178,6 @@ export function Feed() {
                     required
                   />
                 </div>
-
                 <div className="flex items-center gap-2 cursor-pointer group">
                   <input
                     type="checkbox"
@@ -1154,19 +1199,18 @@ export function Feed() {
                   </label>
                 </div>
               </div>
-
               <div className="pt-4 flex gap-3">
                 <Button
                   type="button"
                   onClick={() => setIsConfigModalOpen(false)}
-                  className="flex-1 px-4 py-3 bg-neutral-100 text-neutral-700 rounded-xl font-bold hover:bg-neutral-200 transition-all"
+                  variant="ghost" className="flex-1 font-bold"
                 >
                   Cancelar
                 </Button>
                 <Button
                   type="submit"
                   disabled={saving}
-                  className="flex-1 px-4 py-3 bg-neutral-900 text-white rounded-xl font-bold hover:bg-neutral-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  variant="outline" className="flex-1 font-bold"
                 >
                   {saving ? (
                     <Loader className="w-5 h-5 animate-spin" />
@@ -1184,7 +1228,7 @@ export function Feed() {
       {/* Gerenciar Produtos Modal */}
       {isItemsModalOpen && managingSection && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-xl md:rounded-[2rem] w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col animate-in fade-in zoom-in duration-200">
             <div className="p-6 border-b border-neutral-100 flex justify-between items-center bg-neutral-50/50">
               <div>
                 <h2 className="text-xl font-bold text-neutral-950">
@@ -1201,9 +1245,7 @@ export function Feed() {
                 <X className="w-5 h-5 text-neutral-500" />
               </Button>
             </div>
-
             <div className="flex-1 overflow-hidden flex divide-x divide-neutral-100">
-              {/* Produtos Atuais */}
               <div className="w-1/2 flex flex-col bg-neutral-50/30">
                 <div className="p-4 border-b border-neutral-100 flex justify-between items-center">
                   <h3 className="font-bold text-neutral-800 flex items-center gap-2">
@@ -1255,8 +1297,6 @@ export function Feed() {
                   )}
                 </div>
               </div>
-
-              {/* Buscar/Adicionar Produtos */}
               <div className="w-1/2 flex flex-col">
                 <div className="p-4 border-b border-neutral-100">
                   <div className="relative">
@@ -1311,7 +1351,7 @@ export function Feed() {
                           </div>
                           <Button
                             onClick={() => handleAddItemToSection(product)}
-                            className="p-2 bg-neutral-900 text-white rounded-lg hover:bg-neutral-800 transition-all"
+                            variant="outline" size="icon"
                           >
                             <Plus className="w-4 h-4" />
                           </Button>
@@ -1319,8 +1359,6 @@ export function Feed() {
                       ))
                   )}
                 </div>
-
-                {/* Paginação Modal */}
                 {modalPagination.totalPages > 1 && (
                   <div className="p-4 border-t border-neutral-100 flex items-center justify-between bg-neutral-50/50">
                     <p className="text-xs text-neutral-500 font-medium">

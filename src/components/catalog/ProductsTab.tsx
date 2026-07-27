@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Plus,
   Search,
@@ -15,6 +15,7 @@ import {
   Eye,
   EyeOff,
   Layers,
+  Crop,
 } from "lucide-react";
 import { useApi } from "../../services/api";
 import type { Product, Category, Type, Item, ProductInput } from "../../types";
@@ -43,6 +44,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "../../components/ui/alert-dialog";
+import { ImageCropDialog } from "./ImageCropDialog";
 
 export function ProductsTab() {
   const api = useApi();
@@ -74,8 +76,11 @@ export function ProductsTab() {
     is_active: true,
   });
 
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageFile, setImageFile] = useState<File | Blob | null>(null);
   const [imagePreview, setImagePreview] = useState<string>("");
+  const [cropDialogOpen, setCropDialogOpen] = useState(false);
+  const [cropImageUrl, setCropImageUrl] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [components, setComponents] = useState<
     { item_id: string; quantity: number }[]
@@ -274,6 +279,26 @@ export function ProductsTab() {
       setImageFile(null);
       setIsModalOpen(true);
     }
+  };
+
+  const revokeBlobUrl = (url: string) => {
+    if (url?.startsWith("blob:")) URL.revokeObjectURL(url);
+  };
+
+  const handleImageSelected = (file: File) => {
+    revokeBlobUrl(cropImageUrl);
+    setCropImageUrl(URL.createObjectURL(file));
+    setCropDialogOpen(true);
+  };
+
+  const handleCropComplete = (blob: Blob) => {
+    revokeBlobUrl(imagePreview);
+    setImageFile(blob);
+    setImagePreview(URL.createObjectURL(blob));
+  };
+
+  const handleCropClose = () => {
+    setCropDialogOpen(false);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -708,6 +733,23 @@ export function ProductsTab() {
                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <Upload className="text-white" size={32} />
                                   </div>
+                                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      size="sm"
+                                      className="bg-white/90 hover:bg-white text-neutral-700 shadow-sm rounded-lg text-xs"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        revokeBlobUrl(cropImageUrl);
+                                        setCropImageUrl(imagePreview);
+                                        setCropDialogOpen(true);
+                                      }}
+                                    >
+                                      <Crop className="h-3.5 w-3.5 mr-1" />
+                                      Recortar
+                                    </Button>
+                                  </div>
                                 </>
                               ) : (
                                 <div className="flex flex-col items-center gap-3 text-neutral-300 group-hover:text-neutral-500 transition-colors">
@@ -728,10 +770,10 @@ export function ProductsTab() {
                                 onChange={(e) => {
                                   const file = e.target.files?.[0];
                                   if (file) {
-                                    setImageFile(file);
-                                    setImagePreview(URL.createObjectURL(file));
+                                    handleImageSelected(file);
                                   }
                                 }}
+                                ref={fileInputRef}
                               />
                             </div>
                           </div>
@@ -1277,6 +1319,13 @@ export function ProductsTab() {
           </div>
         )}
       </AnimatePresence>
+
+      <ImageCropDialog
+        open={cropDialogOpen}
+        imageUrl={cropImageUrl}
+        onComplete={handleCropComplete}
+        onClose={handleCropClose}
+      />
     </div>
   );
 }

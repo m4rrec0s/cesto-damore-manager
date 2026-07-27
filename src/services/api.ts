@@ -905,8 +905,14 @@ class ApiService {
     category_id?: string;
     type_id?: string;
   }): Promise<ProductsResponse> => {
+    const mappedParams: Record<string, any> = {};
+    if (params?.page !== undefined) mappedParams.page = params.page;
+    if (params?.perPage !== undefined) mappedParams.per_page = params.perPage;
+    if (params?.search) mappedParams.search = params.search;
+    if (params?.category_id) mappedParams.category_id = params.category_id;
+    if (params?.type_id) mappedParams.type_id = params.type_id;
     const response = await this.client.get("/products", {
-      params,
+      params: mappedParams,
     });
     return response.data;
   };
@@ -915,7 +921,7 @@ class ApiService {
 
   createProduct = async (
     payload: Partial<ProductInput>,
-    imageFile?: File,
+    imageFile?: Blob,
   ): Promise<Product> => {
     this.clearCache("products");
     if (!imageFile) {
@@ -944,7 +950,7 @@ class ApiService {
   updateProduct = async (
     id: string,
     payload: Partial<ProductInput>,
-    imageFile?: File,
+    imageFile?: Blob,
   ): Promise<Product> => {
     this.clearCache("products");
     if (!imageFile) {
