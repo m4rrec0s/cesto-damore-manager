@@ -250,6 +250,7 @@ export function ItemsTab() {
         allows_customization: item.allows_customization,
       });
       setImagePreview(item.image_url || "");
+      setImageFile(null);
       fetchItemCustomizations(item.id);
     } else {
       setEditingItem(null);
@@ -261,6 +262,7 @@ export function ItemsTab() {
         allows_customization: false,
       });
       setImagePreview("");
+      setImageFile(null);
       setItemCustomizations([]);
     }
     setIsModalOpen(true);

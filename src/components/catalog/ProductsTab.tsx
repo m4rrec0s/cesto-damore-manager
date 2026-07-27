@@ -239,6 +239,7 @@ export function ProductsTab() {
           is_active: fullProduct.is_active ?? true,
         });
         setImagePreview(fullProduct.image_url || "");
+        setImageFile(null);
         setComponents(
           fullProduct.components?.map((c: any) => ({
             item_id: c.item_id || c.item?.id,
