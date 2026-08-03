@@ -1208,12 +1208,14 @@ export function ManualPrintOrder() {
   const [summaryDeliveryZipCode, setSummaryDeliveryZipCode] = useState("");
   const [summaryDeliveryRecipientPhone, setSummaryDeliveryRecipientPhone] = useState("");
   const [summaryDeliveryDate, setSummaryDeliveryDate] = useState("");
-  const [summaryPaymentOrderMethod, setSummaryPaymentOrderMethod] = useState("manual");
-  const [summaryPaymentConfirmedMethod, setSummaryPaymentConfirmedMethod] = useState("manual");
+  const [summaryPaymentOrderMethod, setSummaryPaymentOrderMethod] = useState("pix");
+  const [summaryPaymentConfirmedMethod, setSummaryPaymentConfirmedMethod] = useState("pix");
   const [summaryAmountItems, setSummaryAmountItems] = useState("");
   const [summaryAmountShipping, setSummaryAmountShipping] = useState("");
   const [summaryAmountDiscount, setSummaryAmountDiscount] = useState("");
   const [summaryAmountTotal, setSummaryAmountTotal] = useState("");
+  const [summaryProductId, setSummaryProductId] = useState("");
+  const [summaryProducts, setSummaryProducts] = useState<Array<{ id: string; name: string; price: number }>>([]);
   const [layouts, setLayouts] = useState<DynamicLayoutOption[]>([]);
   const [selectedLayoutIds, setSelectedLayoutIds] = useState<string[]>([]);
   const [slotFiles, setSlotFiles] = useState<Record<string, File | undefined>>({});
@@ -1403,6 +1405,19 @@ export function ManualPrintOrder() {
   }, [selectedLayoutIds, api, layouts]);
 
   // Gera a arte final para um layout: carrega o fabricJsonState num canvas off-screen,
+  useEffect(() => {
+    if (includeSummary) {
+      api.getProducts({ perPage: 100 }).then((data) => {
+        const products = (data.products || []).map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          price: Number(p.variants?.[0]?.price || p.price || 0),
+        }));
+        setSummaryProducts(products);
+      }).catch(() => setSummaryProducts([]));
+    }
+  }, [includeSummary, api]);
+
   // injeta as imagens nos frames e os textos nos objetos isCustomizable, depois exporta PNG
   const generateArtwork = async (layout: DynamicLayoutOption): Promise<Blob | null> => {
     if (!layout.fabricJsonState) return null;
@@ -1433,20 +1448,28 @@ export function ManualPrintOrder() {
 
       const objects: any[] = exportCanvas.getObjects();
 
-      // 1. Injetar imagens nos frames
-      for (const obj of objects) {
-        if (!obj.isFrame) continue;
-        const frameId = obj.id || obj.name;
-        if (!frameId) continue;
-
-        // Encontra slot correspondente pelo id ou nome
-        const slot = (layout.slots || []).find(
-          (s) => s.id === frameId || s.label === frameId,
-        );
-        if (!slot) continue;
-
+      // 1. Injetar imagens nos frames - usando múltiplas estratégias como no LayoutPanel
+      for (const slot of layout.slots || []) {
         const file = slotFiles[`${layout.id}:${slot.id}`];
         if (!file) continue;
+
+        // Encontra o frame correspondente - tenta múltiplas estratégias
+        let frame = objects.find((o: any) =>
+          o.isFrame && (o.id === slot.id || o.name === slot.label || o.name === slot.id),
+        );
+
+        // Se não encontrar por isFrame, procurar por tipo/nome
+        if (!frame) {
+          frame = objects.find((o: any) =>
+            (o.type === "rect" || o.type === "Rect" || o.name?.includes("frame")) &&
+            (o.id === slot.id || o.name === slot.label || o.name === slot.id),
+          );
+        }
+
+        if (!frame) {
+          console.warn(`⚠️ Frame não encontrado para slot ${slot.id}`);
+          continue;
+        }
 
         const dataUrl = await new Promise<string>((resolve) => {
           const reader = new FileReader();
@@ -1458,7 +1481,7 @@ export function ManualPrintOrder() {
           crossOrigin: "anonymous",
         })) as any;
 
-        const frameRect = obj.getBoundingRect();
+        const frameRect = frame.getBoundingRect();
         const imgW = img.width || 1;
         const imgH = img.height || 1;
         const coverScale = Math.max(frameRect.width / imgW, frameRect.height / imgH);
@@ -1470,26 +1493,26 @@ export function ManualPrintOrder() {
           originY: "center",
           scaleX: coverScale,
           scaleY: coverScale,
-          angle: obj.angle || 0,
+          angle: frame.angle || 0,
           selectable: false,
           evented: false,
           objectCaching: false,
         });
 
         try {
-          const clip = await obj.clone();
+          const clip = await frame.clone();
           clip.absolutePositioned = true;
           img.clipPath = clip;
         } catch { /* ignore */ }
 
-        img.set("name", `uploaded-img-${frameId}`);
-        const idx = exportCanvas.getObjects().indexOf(obj);
+        img.set("name", `uploaded-img-${slot.id}`);
+        const idx = exportCanvas.getObjects().indexOf(frame);
         if (idx >= 0) {
           exportCanvas.insertAt?.(idx + 1, img) ?? exportCanvas.add(img);
         } else {
           exportCanvas.add(img);
         }
-        exportCanvas.bringObjectToFront(obj);
+        exportCanvas.bringObjectToFront(frame);
       }
 
       // 2. Aplicar textos nos objetos isCustomizable
@@ -1581,6 +1604,25 @@ export function ManualPrintOrder() {
 
       // Gerar arte composta e enviar como composedImage
       const artworkBlob = await generateArtwork(layout);
+      let artworkPreviewDataUrl: string | null = null;
+      if (artworkBlob) {
+        artworkPreviewDataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(artworkBlob);
+        });
+      }
+
+      // Layout info for summary generation
+      if (includeSummary) {
+        formData.append("layouts[0][id]", layout.id);
+        formData.append("layouts[0][name]", layout.name);
+        if (artworkPreviewDataUrl) {
+          formData.append("layouts[0][artworkPreview]", artworkPreviewDataUrl);
+        }
+      }
+
+      // Gerar arte composta e enviar como composedImage
       if (artworkBlob) {
         formData.append(
           "composedImage",
@@ -1632,12 +1674,13 @@ export function ManualPrintOrder() {
     setSummaryDeliveryZipCode("");
     setSummaryDeliveryRecipientPhone("");
     setSummaryDeliveryDate("");
-    setSummaryPaymentOrderMethod("manual");
-    setSummaryPaymentConfirmedMethod("manual");
+    setSummaryPaymentOrderMethod("pix");
+    setSummaryPaymentConfirmedMethod("pix");
     setSummaryAmountItems("");
     setSummaryAmountShipping("");
     setSummaryAmountDiscount("");
     setSummaryAmountTotal("");
+    setSummaryProductId("");
     setSelectedLayoutIds([]);
     setSlotFiles({});
     setSlotPreviews({});
@@ -1882,10 +1925,8 @@ export function ManualPrintOrder() {
                     onChange={(e) => setSummaryPaymentOrderMethod(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
                   >
-                    <option value="manual">Manual</option>
                     <option value="pix">PIX</option>
                     <option value="credit_card">Cartão de crédito</option>
-                    <option value="boleto">Boleto</option>
                   </select>
                 </div>
                 <div>
@@ -1895,10 +1936,8 @@ export function ManualPrintOrder() {
                     onChange={(e) => setSummaryPaymentConfirmedMethod(e.target.value)}
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
                   >
-                    <option value="manual">Manual</option>
                     <option value="pix">PIX</option>
                     <option value="credit_card">Cartão de crédito</option>
-                    <option value="boleto">Boleto</option>
                   </select>
                 </div>
               </div>
@@ -1906,6 +1945,33 @@ export function ManualPrintOrder() {
 
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <p className="text-xs font-medium text-emerald-700 mb-3">Valores (R$)</p>
+              {summaryProducts.length > 0 && (
+                <div className="mb-4">
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Produto</label>
+                  <select
+                    value={summaryProductId}
+                    onChange={(e) => {
+                      const selected = summaryProducts.find(p => p.id === e.target.value);
+                      if (selected) {
+                        setSummaryProductId(selected.id);
+                        setSummaryAmountItems(selected.price.toFixed(2));
+                        const itemsVal = selected.price;
+                        const shippingVal = Number(summaryAmountShipping) || 0;
+                        const discountVal = Number(summaryAmountDiscount) || 0;
+                        setSummaryAmountTotal((itemsVal + shippingVal - discountVal).toFixed(2));
+                      }
+                    }}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  >
+                    <option value="">Selecione um produto</option>
+                    {summaryProducts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} - R$ {p.price.toFixed(2)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="grid gap-4 sm:grid-cols-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">Itens</label>
@@ -1913,7 +1979,7 @@ export function ManualPrintOrder() {
                     type="number"
                     step="0.01"
                     value={summaryAmountItems}
-                    onChange={(e) => setSummaryAmountItems(e.target.value)}
+                    onChange={(e) => { const v = e.target.value; setSummaryAmountItems(v); const items = Number(v) || 0; const shipping = Number(summaryAmountShipping) || 0; const discount = Number(summaryAmountDiscount) || 0; setSummaryAmountTotal((items + shipping - discount).toFixed(2)); }}
                     placeholder="0.00"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
                   />
@@ -1924,7 +1990,7 @@ export function ManualPrintOrder() {
                     type="number"
                     step="0.01"
                     value={summaryAmountShipping}
-                    onChange={(e) => setSummaryAmountShipping(e.target.value)}
+                    onChange={(e) => { const v = e.target.value; setSummaryAmountShipping(v); const items = Number(summaryAmountItems) || 0; const shipping = Number(v) || 0; const discount = Number(summaryAmountDiscount) || 0; setSummaryAmountTotal((items + shipping - discount).toFixed(2)); }}
                     placeholder="0.00"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
                   />
@@ -1935,7 +2001,7 @@ export function ManualPrintOrder() {
                     type="number"
                     step="0.01"
                     value={summaryAmountDiscount}
-                    onChange={(e) => setSummaryAmountDiscount(e.target.value)}
+                    onChange={(e) => { const v = e.target.value; setSummaryAmountDiscount(v); const items = Number(summaryAmountItems) || 0; const shipping = Number(summaryAmountShipping) || 0; const discount = Number(v) || 0; setSummaryAmountTotal((items + shipping - discount).toFixed(2)); }}
                     placeholder="0.00"
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
                   />
