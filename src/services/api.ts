@@ -1591,6 +1591,20 @@ class ApiService {
   getAgentStatus = async (): Promise<{ connected: boolean; deviceName: string | null; deviceId: string | null }> =>
     (await this.get("/api/print/agent-status")).data;
 
+  getPrintDevices = async (): Promise<
+    Array<{
+      deviceId: string;
+      deviceName: string;
+      ip: string;
+      isDefault: boolean;
+      isActive: boolean;
+      lastSeenAt: string;
+    }>
+  > => (await this.get("/print-agent/devices")).data;
+
+  getStoreInfo = async (): Promise<{ address: string; mapsUrl: string }> =>
+    (await this.get("/api/store-info")).data;
+
   getAvailablePrinters = async (): Promise<{
     printers: string[];
     agentConnected: boolean;

@@ -19,6 +19,9 @@ import {
   RefreshCw,
   Image as ImageIcon,
   Send,
+  MapPin,
+  Wrench,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/services/api";
@@ -1196,7 +1199,6 @@ export function ManualPrintOrder() {
   const [customerName, setCustomerName] = useState("");
   const [giftMessage, setGiftMessage] = useState("");
   const [includeSummary, setIncludeSummary] = useState(false);
-  const [summaryCustomerName, setSummaryCustomerName] = useState("");
   const [summaryCustomerEmail, setSummaryCustomerEmail] = useState("");
   const [summaryCustomerPhone, setSummaryCustomerPhone] = useState("");
   const [summaryCustomerDocument, setSummaryCustomerDocument] = useState("");
@@ -1216,6 +1218,9 @@ export function ManualPrintOrder() {
   const [summaryAmountTotal, setSummaryAmountTotal] = useState("");
   const [summaryProductId, setSummaryProductId] = useState("");
   const [summaryProducts, setSummaryProducts] = useState<Array<{ id: string; name: string; price: number }>>([]);
+  const [storeInfo, setStoreInfo] = useState<{ address: string; mapsUrl: string } | null>(null);
+  const [devices, setDevices] = useState<Array<{ deviceId: string; deviceName: string; isDefault: boolean; isActive: boolean }>>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [layouts, setLayouts] = useState<DynamicLayoutOption[]>([]);
   const [selectedLayoutIds, setSelectedLayoutIds] = useState<string[]>([]);
   const [slotFiles, setSlotFiles] = useState<Record<string, File | undefined>>({});
@@ -1243,6 +1248,27 @@ export function ManualPrintOrder() {
       ),
     );
   }, [selectedLayouts, slotFiles]);
+
+  // Carrega endereço da loja (para retirada na loja) e dispositivos de impressão
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const info = await api.getStoreInfo();
+        if (!cancelled && info) setStoreInfo(info);
+      } catch {
+        // ignora — sem endereço da loja
+      }
+      try {
+        const devs = await api.getPrintDevices();
+        if (!cancelled) setDevices(devs);
+      } catch {
+        // ignora — sem dispositivos
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [api]);
 
   // Carrega layouts disponíveis
   useEffect(() => {
@@ -1423,7 +1449,7 @@ export function ManualPrintOrder() {
     if (!layout.fabricJsonState) return null;
 
     try {
-      const { StaticCanvas, FabricImage } = await import("fabric");
+      const { StaticCanvas, FabricImage, Rect, Circle } = await import("fabric");
 
       const exportCanvas = new StaticCanvas(document.createElement("canvas"), {
         preserveObjectStacking: true,
@@ -1500,9 +1526,36 @@ export function ManualPrintOrder() {
         });
 
         try {
-          const clip = await frame.clone();
-          clip.absolutePositioned = true;
-          img.clipPath = clip;
+          let mask: any;
+          if (frame.type === "circle") {
+            mask = new Circle({
+              radius: frame.radius || frame.width / 2,
+              scaleX: frame.scaleX,
+              scaleY: frame.scaleY,
+              originX: "center",
+              originY: "center",
+              left: frameRect.left + frameRect.width / 2,
+              top: frameRect.top + frameRect.height / 2,
+              angle: frame.angle || 0,
+              absolutePositioned: true,
+            });
+          } else {
+            mask = new Rect({
+              width: frame.width,
+              height: frame.height,
+              rx: frame.rx,
+              ry: frame.ry,
+              scaleX: frame.scaleX,
+              scaleY: frame.scaleY,
+              originX: "center",
+              originY: "center",
+              left: frameRect.left + frameRect.width / 2,
+              top: frameRect.top + frameRect.height / 2,
+              angle: frame.angle || 0,
+              absolutePositioned: true,
+            });
+          }
+          img.set("clipPath", mask);
         } catch { /* ignore */ }
 
         img.set("name", `uploaded-img-${slot.id}`);
@@ -1574,11 +1627,12 @@ export function ManualPrintOrder() {
 
       if (customerName.trim()) formData.append("customerName", customerName.trim());
       if (giftMessage.trim()) formData.append("giftMessage", giftMessage.trim());
+      if (selectedDeviceId) formData.append("deviceId", selectedDeviceId);
 
       // Resumo de impressão (opcional)
       if (includeSummary) {
         formData.append("includeSummary", "true");
-        if (summaryCustomerName.trim()) formData.append("summaryCustomerName", summaryCustomerName.trim());
+        if (customerName.trim()) formData.append("summaryCustomerName", customerName.trim());
         if (summaryCustomerEmail.trim()) formData.append("summaryCustomerEmail", summaryCustomerEmail.trim());
         if (summaryCustomerPhone.trim()) formData.append("summaryCustomerPhone", summaryCustomerPhone.trim());
         if (summaryCustomerDocument.trim()) formData.append("summaryCustomerDocument", summaryCustomerDocument.trim());
@@ -1662,7 +1716,6 @@ export function ManualPrintOrder() {
     setCustomerName("");
     setGiftMessage("");
     setIncludeSummary(false);
-    setSummaryCustomerName("");
     setSummaryCustomerEmail("");
     setSummaryCustomerPhone("");
     setSummaryCustomerDocument("");
@@ -1783,17 +1836,10 @@ export function ManualPrintOrder() {
           <div className="space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
             <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
               <p className="text-xs font-medium text-rose-700 mb-3">Dados do cliente (para o resumo)</p>
+              <p className="mb-3 rounded-lg bg-rose-100/60 px-3 py-2 text-xs text-rose-600">
+                Nome do cliente: <span className="font-medium">{customerName || "—"}</span> (usado dos dados do pedido)
+              </p>
               <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Nome</label>
-                  <input
-                    type="text"
-                    value={summaryCustomerName}
-                    onChange={(e) => setSummaryCustomerName(e.target.value)}
-                    placeholder="Ex: Maria Silva"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
-                  />
-                </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">E-mail</label>
                   <input
@@ -1851,67 +1897,91 @@ export function ManualPrintOrder() {
                     className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
                   />
                 </div>
-                <div className="sm:col-span-2">
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Endereço</label>
-                  <input
-                    type="text"
-                    value={summaryDeliveryAddress}
-                    onChange={(e) => setSummaryDeliveryAddress(e.target.value)}
-                    placeholder="Rua das Flores, 123"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Complemento</label>
-                  <input
-                    type="text"
-                    value={summaryDeliveryComplement}
-                    onChange={(e) => setSummaryDeliveryComplement(e.target.value)}
-                    placeholder="Apto 45"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Cidade</label>
-                  <input
-                    type="text"
-                    value={summaryDeliveryCity}
-                    onChange={(e) => setSummaryDeliveryCity(e.target.value)}
-                    placeholder="São Paulo"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Estado</label>
-                  <input
-                    type="text"
-                    value={summaryDeliveryState}
-                    onChange={(e) => setSummaryDeliveryState(e.target.value)}
-                    placeholder="SP"
-                    maxLength={2}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">CEP</label>
-                  <input
-                    type="text"
-                    value={summaryDeliveryZipCode}
-                    onChange={(e) => setSummaryDeliveryZipCode(e.target.value)}
-                    placeholder="01001-000"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Telefone do destinatário</label>
-                  <input
-                    type="tel"
-                    value={summaryDeliveryRecipientPhone}
-                    onChange={(e) => setSummaryDeliveryRecipientPhone(e.target.value)}
-                    placeholder="(11) 99999-0001"
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
-                  />
-                </div>
+                {summaryDeliveryMethod === "pickup" ? (
+                  <div className="sm:col-span-2">
+                    <div className="rounded-lg border border-blue-100 bg-white/70 p-3">
+                      <p className="mb-1 text-xs font-medium text-blue-700">Endereço da loja</p>
+                      <p className="text-sm text-slate-800">
+                        {storeInfo?.address || "Rua José de Alencar, 480, Prata, Campina Grande - PB, 58400-515"}
+                      </p>
+                      {storeInfo?.mapsUrl && (
+                        <a
+                          href={storeInfo.mapsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline"
+                        >
+                          <MapPin className="h-3.5 w-3.5" />
+                          Abrir no Google Maps
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="sm:col-span-2">
+                      <label className="mb-1.5 block text-sm font-medium text-slate-700">Endereço</label>
+                      <input
+                        type="text"
+                        value={summaryDeliveryAddress}
+                        onChange={(e) => setSummaryDeliveryAddress(e.target.value)}
+                        placeholder="Rua das Flores, 123"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-slate-700">Complemento</label>
+                      <input
+                        type="text"
+                        value={summaryDeliveryComplement}
+                        onChange={(e) => setSummaryDeliveryComplement(e.target.value)}
+                        placeholder="Apto 45"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-slate-700">Cidade</label>
+                      <input
+                        type="text"
+                        value={summaryDeliveryCity}
+                        onChange={(e) => setSummaryDeliveryCity(e.target.value)}
+                        placeholder="São Paulo"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-slate-700">Estado</label>
+                      <input
+                        type="text"
+                        value={summaryDeliveryState}
+                        onChange={(e) => setSummaryDeliveryState(e.target.value)}
+                        placeholder="SP"
+                        maxLength={2}
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-slate-700">CEP</label>
+                      <input
+                        type="text"
+                        value={summaryDeliveryZipCode}
+                        onChange={(e) => setSummaryDeliveryZipCode(e.target.value)}
+                        placeholder="01001-000"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-sm font-medium text-slate-700">Telefone do destinatário</label>
+                      <input
+                        type="tel"
+                        value={summaryDeliveryRecipientPhone}
+                        onChange={(e) => setSummaryDeliveryRecipientPhone(e.target.value)}
+                        placeholder="(11) 99999-0001"
+                        className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -2130,6 +2200,49 @@ export function ManualPrintOrder() {
             </button>
           )}
         </div>
+      )}
+
+      {/* Opções de desenvolvedor */}
+      {!jobStatus && (
+        <details className="group rounded-2xl border border-dashed border-slate-300 bg-slate-50/50 p-5">
+          <summary className="flex cursor-pointer items-center justify-between text-sm font-medium text-slate-600">
+            <span className="flex items-center gap-2">
+              <Wrench className="h-4 w-4" />
+              Opções de desenvolvedor
+            </span>
+            <ChevronDown className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Dispositivo de impressão
+              </label>
+              <select
+                value={selectedDeviceId}
+                onChange={(e) => setSelectedDeviceId(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+              >
+                <option value="">Dispositivo padrão configurado</option>
+                {devices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.deviceName || d.deviceId}
+                    {d.isDefault ? " (padrão)" : ""}
+                    {d.isActive ? " • online" : " • offline"}
+                  </option>
+                ))}
+              </select>
+              {devices.length === 0 && (
+                <p className="mt-1 text-xs text-slate-400">
+                  Nenhum dispositivo cadastrado encontrado.
+                </p>
+              )}
+              <p className="mt-2 text-xs text-slate-400">
+                Por padrão o pedido usa o dispositivo padrão. Aqui você pode escolher para qual
+                dispositivo cadastrado enviar esta impressão.
+              </p>
+            </div>
+          </div>
+        </details>
       )}
 
       {/* Botão de submit */}
