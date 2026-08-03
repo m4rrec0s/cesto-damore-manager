@@ -327,6 +327,21 @@ function CropDialog({
   const [startCrop, setStartCrop] = useState<CropRect | null>(null);
   const [naturalSize, setNaturalSize] = useState({ w: 0, h: 0 });
   const [displaySize, setDisplaySize] = useState({ w: 0, h: 0 });
+  const areaRef = useRef<HTMLDivElement>(null);
+  const [areaSize, setAreaSize] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = areaRef.current;
+    if (!el) return;
+    const update = () => {
+      const r = el.getBoundingClientRect();
+      setAreaSize({ w: Math.max(1, r.width), h: Math.max(1, r.height) });
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const clampCrop = (next: CropRect): CropRect => {
     const width = Math.max(1, Math.min(next.width, naturalSize.w));
@@ -513,6 +528,7 @@ function CropDialog({
           </button>
         </div>
         <div
+          ref={areaRef}
           className="relative mb-4 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-950 cursor-crosshair select-none"
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
@@ -524,7 +540,11 @@ function CropDialog({
               ref={imgRef}
               src={src}
               onLoad={handleLoad}
-              className="block max-h-[calc(100dvh-13rem)] max-w-full object-contain"
+              className="block object-contain"
+              style={{
+                maxWidth: areaSize.w > 0 ? areaSize.w : undefined,
+                maxHeight: areaSize.h > 0 ? areaSize.h : undefined,
+              }}
               alt="Crop"
               draggable={false}
             />
