@@ -1195,6 +1195,25 @@ export function ManualPrintOrder() {
 
   const [customerName, setCustomerName] = useState("");
   const [giftMessage, setGiftMessage] = useState("");
+  const [includeSummary, setIncludeSummary] = useState(false);
+  const [summaryCustomerName, setSummaryCustomerName] = useState("");
+  const [summaryCustomerEmail, setSummaryCustomerEmail] = useState("");
+  const [summaryCustomerPhone, setSummaryCustomerPhone] = useState("");
+  const [summaryCustomerDocument, setSummaryCustomerDocument] = useState("");
+  const [summaryDeliveryMethod, setSummaryDeliveryMethod] = useState("pickup");
+  const [summaryDeliveryAddress, setSummaryDeliveryAddress] = useState("");
+  const [summaryDeliveryComplement, setSummaryDeliveryComplement] = useState("");
+  const [summaryDeliveryCity, setSummaryDeliveryCity] = useState("");
+  const [summaryDeliveryState, setSummaryDeliveryState] = useState("");
+  const [summaryDeliveryZipCode, setSummaryDeliveryZipCode] = useState("");
+  const [summaryDeliveryRecipientPhone, setSummaryDeliveryRecipientPhone] = useState("");
+  const [summaryDeliveryDate, setSummaryDeliveryDate] = useState("");
+  const [summaryPaymentOrderMethod, setSummaryPaymentOrderMethod] = useState("manual");
+  const [summaryPaymentConfirmedMethod, setSummaryPaymentConfirmedMethod] = useState("manual");
+  const [summaryAmountItems, setSummaryAmountItems] = useState("");
+  const [summaryAmountShipping, setSummaryAmountShipping] = useState("");
+  const [summaryAmountDiscount, setSummaryAmountDiscount] = useState("");
+  const [summaryAmountTotal, setSummaryAmountTotal] = useState("");
   const [layouts, setLayouts] = useState<DynamicLayoutOption[]>([]);
   const [selectedLayoutIds, setSelectedLayoutIds] = useState<string[]>([]);
   const [slotFiles, setSlotFiles] = useState<Record<string, File | undefined>>({});
@@ -1533,6 +1552,29 @@ export function ManualPrintOrder() {
       if (customerName.trim()) formData.append("customerName", customerName.trim());
       if (giftMessage.trim()) formData.append("giftMessage", giftMessage.trim());
 
+      // Resumo de impressão (opcional)
+      if (includeSummary) {
+        formData.append("includeSummary", "true");
+        if (summaryCustomerName.trim()) formData.append("summaryCustomerName", summaryCustomerName.trim());
+        if (summaryCustomerEmail.trim()) formData.append("summaryCustomerEmail", summaryCustomerEmail.trim());
+        if (summaryCustomerPhone.trim()) formData.append("summaryCustomerPhone", summaryCustomerPhone.trim());
+        if (summaryCustomerDocument.trim()) formData.append("summaryCustomerDocument", summaryCustomerDocument.trim());
+        formData.append("summaryDeliveryMethod", summaryDeliveryMethod);
+        if (summaryDeliveryAddress.trim()) formData.append("summaryDeliveryAddress", summaryDeliveryAddress.trim());
+        if (summaryDeliveryComplement.trim()) formData.append("summaryDeliveryComplement", summaryDeliveryComplement.trim());
+        if (summaryDeliveryCity.trim()) formData.append("summaryDeliveryCity", summaryDeliveryCity.trim());
+        if (summaryDeliveryState.trim()) formData.append("summaryDeliveryState", summaryDeliveryState.trim());
+        if (summaryDeliveryZipCode.trim()) formData.append("summaryDeliveryZipCode", summaryDeliveryZipCode.trim());
+        if (summaryDeliveryRecipientPhone.trim()) formData.append("summaryDeliveryRecipientPhone", summaryDeliveryRecipientPhone.trim());
+        if (summaryDeliveryDate) formData.append("summaryDeliveryDate", summaryDeliveryDate);
+        formData.append("summaryPaymentOrderMethod", summaryPaymentOrderMethod);
+        formData.append("summaryPaymentConfirmedMethod", summaryPaymentConfirmedMethod);
+        if (summaryAmountItems) formData.append("summaryAmountItems", summaryAmountItems);
+        if (summaryAmountShipping) formData.append("summaryAmountShipping", summaryAmountShipping);
+        if (summaryAmountDiscount) formData.append("summaryAmountDiscount", summaryAmountDiscount);
+        if (summaryAmountTotal) formData.append("summaryAmountTotal", summaryAmountTotal);
+      }
+
       // Enviar artes geradas + metadados por layout
       for (let li = 0; li < selectedLayouts.length; li++) {
         const layout = selectedLayouts[li];
@@ -1596,6 +1638,25 @@ export function ManualPrintOrder() {
   const handleReset = () => {
     setCustomerName("");
     setGiftMessage("");
+    setIncludeSummary(false);
+    setSummaryCustomerName("");
+    setSummaryCustomerEmail("");
+    setSummaryCustomerPhone("");
+    setSummaryCustomerDocument("");
+    setSummaryDeliveryMethod("pickup");
+    setSummaryDeliveryAddress("");
+    setSummaryDeliveryComplement("");
+    setSummaryDeliveryCity("");
+    setSummaryDeliveryState("");
+    setSummaryDeliveryZipCode("");
+    setSummaryDeliveryRecipientPhone("");
+    setSummaryDeliveryDate("");
+    setSummaryPaymentOrderMethod("manual");
+    setSummaryPaymentConfirmedMethod("manual");
+    setSummaryAmountItems("");
+    setSummaryAmountShipping("");
+    setSummaryAmountDiscount("");
+    setSummaryAmountTotal("");
     setSelectedLayoutIds([]);
     setSlotFiles({});
     setSlotPreviews({});
@@ -1677,6 +1738,242 @@ export function ManualPrintOrder() {
             />
           </div>
         </div>
+      </div>
+
+      {/* Resumo de impressão (opcional) */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-base font-semibold text-slate-800">Resumo de impressão</h2>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={includeSummary}
+              onChange={(e) => setIncludeSummary(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-rose-500 focus:ring-rose-400"
+            />
+            <span className="text-sm font-medium text-slate-700">Gerar resumo do pedido (DOCX A4)</span>
+          </label>
+        </div>
+
+        {includeSummary && (
+          <div className="space-y-5 animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-4">
+              <p className="text-xs font-medium text-rose-700 mb-3">Dados do cliente (para o resumo)</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Nome</label>
+                  <input
+                    type="text"
+                    value={summaryCustomerName}
+                    onChange={(e) => setSummaryCustomerName(e.target.value)}
+                    placeholder="Ex: Maria Silva"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">E-mail</label>
+                  <input
+                    type="email"
+                    value={summaryCustomerEmail}
+                    onChange={(e) => setSummaryCustomerEmail(e.target.value)}
+                    placeholder="maria@email.com"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Telefone</label>
+                  <input
+                    type="tel"
+                    value={summaryCustomerPhone}
+                    onChange={(e) => setSummaryCustomerPhone(e.target.value)}
+                    placeholder="(11) 99999-0001"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">CPF/CNPJ</label>
+                  <input
+                    type="text"
+                    value={summaryCustomerDocument}
+                    onChange={(e) => setSummaryCustomerDocument(e.target.value)}
+                    placeholder="123.456.789-00"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+              <p className="text-xs font-medium text-blue-700 mb-3">Entrega</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Método</label>
+                  <select
+                    value={summaryDeliveryMethod}
+                    onChange={(e) => setSummaryDeliveryMethod(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  >
+                    <option value="pickup">Retirada na loja</option>
+                    <option value="delivery">Entrega</option>
+                    <option value="shipping">Envio</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Data prevista</label>
+                  <input
+                    type="date"
+                    value={summaryDeliveryDate}
+                    onChange={(e) => setSummaryDeliveryDate(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Endereço</label>
+                  <input
+                    type="text"
+                    value={summaryDeliveryAddress}
+                    onChange={(e) => setSummaryDeliveryAddress(e.target.value)}
+                    placeholder="Rua das Flores, 123"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Complemento</label>
+                  <input
+                    type="text"
+                    value={summaryDeliveryComplement}
+                    onChange={(e) => setSummaryDeliveryComplement(e.target.value)}
+                    placeholder="Apto 45"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Cidade</label>
+                  <input
+                    type="text"
+                    value={summaryDeliveryCity}
+                    onChange={(e) => setSummaryDeliveryCity(e.target.value)}
+                    placeholder="São Paulo"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Estado</label>
+                  <input
+                    type="text"
+                    value={summaryDeliveryState}
+                    onChange={(e) => setSummaryDeliveryState(e.target.value)}
+                    placeholder="SP"
+                    maxLength={2}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">CEP</label>
+                  <input
+                    type="text"
+                    value={summaryDeliveryZipCode}
+                    onChange={(e) => setSummaryDeliveryZipCode(e.target.value)}
+                    placeholder="01001-000"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Telefone do destinatário</label>
+                  <input
+                    type="tel"
+                    value={summaryDeliveryRecipientPhone}
+                    onChange={(e) => setSummaryDeliveryRecipientPhone(e.target.value)}
+                    placeholder="(11) 99999-0001"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-xs font-medium text-amber-700 mb-3">Pagamento</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Método do pedido</label>
+                  <select
+                    value={summaryPaymentOrderMethod}
+                    onChange={(e) => setSummaryPaymentOrderMethod(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  >
+                    <option value="manual">Manual</option>
+                    <option value="pix">PIX</option>
+                    <option value="credit_card">Cartão de crédito</option>
+                    <option value="boleto">Boleto</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Método confirmado</label>
+                  <select
+                    value={summaryPaymentConfirmedMethod}
+                    onChange={(e) => setSummaryPaymentConfirmedMethod(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  >
+                    <option value="manual">Manual</option>
+                    <option value="pix">PIX</option>
+                    <option value="credit_card">Cartão de crédito</option>
+                    <option value="boleto">Boleto</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-xs font-medium text-emerald-700 mb-3">Valores (R$)</p>
+              <div className="grid gap-4 sm:grid-cols-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Itens</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={summaryAmountItems}
+                    onChange={(e) => setSummaryAmountItems(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Frete</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={summaryAmountShipping}
+                    onChange={(e) => setSummaryAmountShipping(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Desconto</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={summaryAmountDiscount}
+                    onChange={(e) => setSummaryAmountDiscount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Total</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={summaryAmountTotal}
+                    onChange={(e) => setSummaryAmountTotal(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Seleção de layouts */}
