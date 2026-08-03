@@ -1575,44 +1575,25 @@ export function ManualPrintOrder() {
         if (summaryAmountTotal) formData.append("summaryAmountTotal", summaryAmountTotal);
       }
 
-      // Enviar artes geradas + metadados por layout
-      for (let li = 0; li < selectedLayouts.length; li++) {
-        const layout = selectedLayouts[li];
-        formData.append(`layouts[${li}][id]`, layout.id);
-        formData.append(`layouts[${li}][name]`, layout.name);
+      // Usar apenas o primeiro layout selecionado (backend suporta um layout por pedido)
+      const layout = selectedLayouts[0];
+      formData.append("layoutId", layout.id);
 
-        // Arte final gerada
-        const artworkBlob = await generateArtwork(layout);
-        if (artworkBlob) {
-          formData.append(
-            `artworks`,
-            new File([artworkBlob], `artwork-${layout.id}.png`, { type: "image/png" }),
-            `artwork-${layout.id}.png`,
-          );
-        }
+      // Gerar arte composta e enviar como composedImage
+      const artworkBlob = await generateArtwork(layout);
+      if (artworkBlob) {
+        formData.append(
+          "composedImage",
+          new File([artworkBlob], `artwork-${layout.id}.png`, { type: "image/png" }),
+          `artwork-${layout.id}.png`,
+        );
+      }
 
-        // Imagens por slot
-        for (const slot of layout.slots || []) {
-          const file = slotFiles[`${layout.id}:${slot.id}`];
-          if (file) {
-            formData.append(
-              `slots`,
-              file,
-              `${layout.id}__${slot.id}__${file.name}`,
-            );
-          }
-        }
-
-        // Textos personalizáveis
-        const textEntries: Record<string, string> = {};
-        for (const [key, opts] of Object.entries(slotTextOptions)) {
-          if (key.startsWith(`${layout.id}:`) && opts.text) {
-            const objId = key.slice(layout.id.length + 1);
-            textEntries[objId] = opts.text;
-          }
-        }
-        if (Object.keys(textEntries).length > 0) {
-          formData.append(`layouts[${li}][texts]`, JSON.stringify(textEntries));
+      // Imagens por slot (fallback se não tiver composedImage)
+      for (const slot of layout.slots || []) {
+        const file = slotFiles[`${layout.id}:${slot.id}`];
+        if (file) {
+          formData.append(`slots.${slot.id}`, file);
         }
       }
 
