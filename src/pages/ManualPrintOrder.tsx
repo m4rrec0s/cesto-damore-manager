@@ -1482,15 +1482,24 @@ export function ManualPrintOrder() {
       // Pré-carregar fontes referenciadas
       await preloadFontsFromState(state);
 
-      await exportCanvas.loadFromJSON(state);
-
       const w = layout.width || 378;
       const h = layout.height || 567;
       exportCanvas.setDimensions({ width: w * 2, height: h * 2 });
       exportCanvas.setViewportTransform([2, 0, 0, 2, 0, 0]);
       exportCanvas.set({ backgroundColor: "#ffffff" });
 
+      // Layouts de múltiplas páginas armazenam arte dentro de pages[0].canvasState.
+      const canvasState = state.pages?.[0]?.canvasState || state;
+      await exportCanvas.loadFromJSON(canvasState);
+
       const objects: any[] = exportCanvas.getObjects();
+
+      // Frames são máscaras de edição. Mantê-los visíveis cobria a foto na exportação.
+      for (const object of objects) {
+        if (object.isFrame) {
+          object.set({ fill: "transparent", stroke: "transparent", opacity: 0 });
+        }
+      }
 
       // 1. Injetar imagens nos frames - usando múltiplas estratégias como no LayoutPanel
       for (const slot of layout.slots || []) {
