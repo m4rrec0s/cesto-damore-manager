@@ -1452,17 +1452,15 @@ export function ManualPrintOrder() {
 
   // Gera a arte final para um layout: carrega o fabricJsonState num canvas off-screen,
   useEffect(() => {
-    if (includeSummary) {
-      api.getProducts({ perPage: 100 }).then((data) => {
-        const products = (data.products || []).map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          price: Number(p.variants?.[0]?.price || p.price || 0),
-        }));
-        setSummaryProducts(products);
-      }).catch(() => setSummaryProducts([]));
-    }
-  }, [includeSummary, api]);
+    api.getProducts({ perPage: 100 }).then((data) => {
+      const products = (data.products || []).map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        price: Number(p.variants?.[0]?.price || p.price || 0),
+      }));
+      setSummaryProducts(products);
+    }).catch(() => setSummaryProducts([]));
+  }, [api]);
 
   // injeta as imagens nos frames e os textos nos objetos isCustomizable, depois exporta PNG
   const generateArtwork = async (layout: DynamicLayoutOption): Promise<Blob | null> => {
@@ -1633,6 +1631,10 @@ export function ManualPrintOrder() {
       toast.error("Selecione ao menos um layout");
       return;
     }
+    if (!summaryProductId) {
+      toast.error("Selecione o produto associado");
+      return;
+    }
     if (hasMissingRequired) {
       toast.error("Preencha todas as imagens obrigatórias");
       return;
@@ -1646,6 +1648,7 @@ export function ManualPrintOrder() {
       const formData = new FormData();
 
       if (customerName.trim()) formData.append("customerName", customerName.trim());
+      formData.append("productId", summaryProductId);
       if (giftMessage.trim()) formData.append("giftMessage", giftMessage.trim());
       if (selectedDeviceId) formData.append("deviceId", selectedDeviceId);
 
@@ -1833,6 +1836,30 @@ export function ManualPrintOrder() {
               placeholder="Ex: Feliz Aniversário!"
               className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100 resize-none min-h-20"
             />
+          </div>
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Produto associado</label>
+            <select
+              value={summaryProductId}
+              onChange={(e) => {
+                const selected = summaryProducts.find((p) => p.id === e.target.value);
+                setSummaryProductId(e.target.value);
+                if (selected) {
+                  setSummaryAmountItems(selected.price.toFixed(2));
+                  const shipping = Number(summaryAmountShipping) || 0;
+                  const discount = Number(summaryAmountDiscount) || 0;
+                  setSummaryAmountTotal((selected.price + shipping - discount).toFixed(2));
+                }
+              }}
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
+            >
+              <option value="">Selecione um produto</option>
+              {summaryProducts.map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name} - R$ {product.price.toFixed(2)}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -2035,34 +2062,7 @@ export function ManualPrintOrder() {
 
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <p className="text-xs font-medium text-emerald-700 mb-3">Valores (R$)</p>
-              {summaryProducts.length > 0 && (
-                <div className="mb-4">
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Produto</label>
-                  <select
-                    value={summaryProductId}
-                    onChange={(e) => {
-                      const selected = summaryProducts.find(p => p.id === e.target.value);
-                      if (selected) {
-                        setSummaryProductId(selected.id);
-                        setSummaryAmountItems(selected.price.toFixed(2));
-                        const itemsVal = selected.price;
-                        const shippingVal = Number(summaryAmountShipping) || 0;
-                        const discountVal = Number(summaryAmountDiscount) || 0;
-                        setSummaryAmountTotal((itemsVal + shippingVal - discountVal).toFixed(2));
-                      }
-                    }}
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-900 outline-none transition-colors focus:border-rose-400 focus:bg-white focus:ring-2 focus:ring-rose-100"
-                  >
-                    <option value="">Selecione um produto</option>
-                    {summaryProducts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} - R$ {p.price.toFixed(2)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="grid gap-4 sm:grid-cols-4">
+               <div className="grid gap-4 sm:grid-cols-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium text-slate-700">Itens</label>
                   <input
