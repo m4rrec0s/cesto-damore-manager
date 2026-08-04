@@ -1479,18 +1479,17 @@ export function ManualPrintOrder() {
           ? JSON.parse(layout.fabricJsonState as unknown as string)
           : layout.fabricJsonState;
 
-      // Pré-carregar fontes referenciadas
-      await preloadFontsFromState(state);
-
       const w = layout.width || 378;
       const h = layout.height || 567;
-      exportCanvas.setDimensions({ width: w * 2, height: h * 2 });
-      exportCanvas.setViewportTransform([2, 0, 0, 2, 0, 0]);
-      exportCanvas.set({ backgroundColor: "#ffffff" });
-
       // Layouts de múltiplas páginas armazenam arte dentro de pages[0].canvasState.
       const canvasState = state.pages?.[0]?.canvasState || state;
+      await preloadFontsFromState(canvasState);
       await exportCanvas.loadFromJSON(canvasState);
+      // JSON salva coordenadas no tamanho original. Qualidade vem do multiplier na exportação,
+      // sem alterar coordenadas dos objetos ou do frame.
+      exportCanvas.setDimensions({ width: w, height: h });
+      exportCanvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+      exportCanvas.set({ backgroundColor: "#ffffff" });
 
       const objects: any[] = exportCanvas.getObjects();
 
@@ -1502,26 +1501,32 @@ export function ManualPrintOrder() {
       }
 
       // 1. Injetar imagens nos frames - usando múltiplas estratégias como no LayoutPanel
+      let insertedSlots = 0;
       for (const slot of layout.slots || []) {
         const file = slotFiles[`${layout.id}:${slot.id}`];
         if (!file) continue;
 
         // Encontra o frame correspondente - tenta múltiplas estratégias
         let frame = objects.find((o: any) =>
-          o.isFrame && (o.id === slot.id || o.name === slot.label || o.name === slot.id),
+          (o.isFrame || o.customData?.isFrame) &&
+          (o.id === slot.id || o.name === slot.label || o.name === slot.id),
         );
 
         // Se não encontrar por isFrame, procurar por tipo/nome
         if (!frame) {
           frame = objects.find((o: any) =>
-            (o.type === "rect" || o.type === "Rect" || o.name?.includes("frame")) &&
+            (o.type === "rect" || o.type === "Rect" || o.name?.toLowerCase().includes("frame")) &&
             (o.id === slot.id || o.name === slot.label || o.name === slot.id),
           );
         }
 
+        // API gera slots a partir dos frames na mesma ordem; cobre layouts legados sem id.
         if (!frame) {
-          console.warn(`⚠️ Frame não encontrado para slot ${slot.id}`);
-          continue;
+          frame = objects.filter((o: any) => o.isFrame || o.customData?.isFrame)[insertedSlots];
+        }
+
+        if (!frame) {
+          throw new Error(`Frame não encontrado para slot ${slot.label}`);
         }
 
         const dataUrl = await new Promise<string>((resolve) => {
@@ -1593,6 +1598,14 @@ export function ManualPrintOrder() {
           exportCanvas.add(img);
         }
         exportCanvas.bringObjectToFront(frame);
+        insertedSlots += 1;
+      }
+
+      const uploadedSlotCount = (layout.slots || []).filter(
+        (slot) => slotFiles[`${layout.id}:${slot.id}`],
+      ).length;
+      if (insertedSlots !== uploadedSlotCount) {
+        throw new Error("Nem todas as fotos foram inseridas na arte final");
       }
 
       // 2. Aplicar textos nos objetos isCustomizable
@@ -1620,7 +1633,7 @@ export function ManualPrintOrder() {
 
       const dataUrl: string = exportCanvas.toDataURL({
         format: "png",
-        multiplier: 1,
+        multiplier: 2,
         enableRetinaScaling: false,
       });
 
@@ -1630,7 +1643,7 @@ export function ManualPrintOrder() {
       return await res.blob();
     } catch (err) {
       console.error("Erro ao gerar arte:", err);
-      return null;
+      throw err;
     }
   };
 
@@ -1717,12 +1730,8 @@ export function ManualPrintOrder() {
         );
       }
 
-      // Imagens por slot (fallback se não tiver composedImage)
-      for (const slot of layout.slots || []) {
-        const file = slotFiles[`${layout.id}:${slot.id}`];
-        if (file) {
-          formData.append(`slots.${slot.id}`, file);
-        }
+      if (!artworkBlob) {
+        throw new Error("Não foi possível gerar a arte final");
       }
 
       const result = await api.createManualPrintOrder(formData);
