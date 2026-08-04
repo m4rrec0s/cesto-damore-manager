@@ -846,14 +846,10 @@ function LayoutPanel({
           ? JSON.parse(layout.fabricJsonState as unknown as string)
           : layout.fabricJsonState;
 
-        console.log("📥 Carregando state do canvas:", state);
-
         // Se tem estrutura multi-página, usar o canvasState da primeira página
         const canvasStateToLoad = state.pages && state.pages[0]?.canvasState 
           ? state.pages[0].canvasState 
           : state;
-
-        console.log("📋 Canvas state para carregar:", canvasStateToLoad);
 
         // loadFromJSON precisa de um callback de sucesso
         await new Promise<void>((resolve) => {
@@ -861,8 +857,6 @@ function LayoutPanel({
             resolve();
           });
         });
-
-        console.log("✅ State carregado. Objetos no canvas:", canvas.getObjects().length);
 
         // Desabilitar qualquer interação e renderizar
         for (const obj of canvas.getObjects() as any[]) {
@@ -910,13 +904,6 @@ function LayoutPanel({
       const canvas = fabricRef.current;
       const objects = canvas.getObjects() as any[];
 
-      console.log("📋 Todos os objetos do canvas:", objects.map((o: any) => ({
-        id: o.id,
-        name: o.name,
-        type: o.type,
-        isFrame: o.isFrame,
-      })));
-
       // Limpar imagens antigas
       const oldImages = objects.filter((o: any) => o.name?.startsWith("preview-img-"));
       oldImages.forEach((img: any) => canvas.remove(img));
@@ -924,8 +911,6 @@ function LayoutPanel({
       // Adicionar novas imagens
       for (const slot of layout.slots || []) {
         const preview = slotPreviews[`${layout.id}:${slot.id}`];
-        console.log(`🖼️ Verificando slot ${slot.id}: preview =`, !!preview);
-        
         if (!preview) continue;
 
         // Encontra o frame correspondente - tenta múltiplas estratégias
@@ -933,15 +918,12 @@ function LayoutPanel({
           o.isFrame && (o.id === slot.id || o.name === slot.label || o.name === slot.id)
         );
         
-        console.log(`🔍 Procurando frame com isFrame=true: encontrado =`, !!frame);
-        
         // Se não encontrar por isFrame, procurar por tipo/nome
         if (!frame) {
           frame = objects.find((o: any) => 
             (o.type === "rect" || o.type === "Rect" || o.name?.includes("frame")) &&
             (o.id === slot.id || o.name === slot.label || o.name === slot.id)
           );
-          console.log(`🔍 Procurando frame por tipo/nome: encontrado =`, !!frame, frame?.name);
         }
         
         if (!frame) {
@@ -958,8 +940,6 @@ function LayoutPanel({
           const imgW = img.width || 1;
           const imgH = img.height || 1;
           const coverScale = Math.max(frameRect.width / imgW, frameRect.height / imgH);
-
-          console.log(`✅ Renderizando imagem para slot ${slot.id} com scale ${coverScale}`);
 
           img.set({
             left: frameRect.left + frameRect.width / 2,
@@ -1015,7 +995,6 @@ function LayoutPanel({
 
           canvas.add(img);
           canvas.moveObjectTo(img, canvas.getObjects().indexOf(frame) + 1);
-          console.log(`🎨 Imagem adicionada ao canvas para slot ${slot.id}`);
         } catch (err) {
           console.error("❌ Erro ao adicionar imagem ao preview:", err);
         }
@@ -1701,27 +1680,9 @@ export function ManualPrintOrder() {
       const layout = selectedLayouts[0];
       formData.append("layoutId", layout.id);
 
-      // Gerar arte composta e enviar como composedImage
+      // Gerar arte composta e enviar como composedImage (a mesma arte alimenta o resumo
+      // no backend, evitando campo base64 gigante no FormData que estoura o fieldSize do Multer)
       const artworkBlob = await generateArtwork(layout);
-      let artworkPreviewDataUrl: string | null = null;
-      if (artworkBlob) {
-        artworkPreviewDataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.readAsDataURL(artworkBlob);
-        });
-      }
-
-      // Layout info for summary generation
-      if (includeSummary) {
-        formData.append("layouts[0][id]", layout.id);
-        formData.append("layouts[0][name]", layout.name);
-        if (artworkPreviewDataUrl) {
-          formData.append("layouts[0][artworkPreview]", artworkPreviewDataUrl);
-        }
-      }
-
-      // Gerar arte composta e enviar como composedImage
       if (artworkBlob) {
         formData.append(
           "composedImage",
