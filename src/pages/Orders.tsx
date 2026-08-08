@@ -62,6 +62,7 @@ import { Separator } from "@/components/ui/separator";
 type OrderSummary = Order & {
   items_count?: number;
   items?: Order["items"];
+  delivery_slot?: "morning" | "afternoon" | "to_be_arranged" | null;
 };
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
@@ -451,7 +452,7 @@ export function Orders() {
                                 {activeOrder.status === "DELIVERED" ||
                                 activeOrder.status === "SHIPPED"
                                   ? "OK"
-                                  : `Entrega: ${formatDate(activeOrder.delivery_date)} (${formatDeliverySlot(activeOrder.delivery_date)})`}
+                                  : `Entrega: ${formatDate(activeOrder.delivery_date)} (${formatDeliverySlot(activeOrder.delivery_date, activeOrder.delivery_slot)})`}
                               </span>
                             </>
                           )}

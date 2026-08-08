@@ -23,7 +23,13 @@ export const onlyDigits = (value?: string | null) => {
   return value ? value.replace(/\D/g, "") : "";
 };
 
-export const formatDeliverySlot = (value?: string | null) => {
+export const formatDeliverySlot = (
+  value?: string | null,
+  slot?: "morning" | "afternoon" | "to_be_arranged" | null,
+) => {
+  if (slot === "to_be_arranged") return "A combinar";
+  if (slot === "morning") return "Manhã";
+  if (slot === "afternoon") return "Tarde";
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";

@@ -61,6 +61,8 @@ import { Badge } from "../components/ui/badge";
 import type { ChartConfig } from "../components/ui/chart";
 import { cn } from "../lib/utils";
 import { useAuth } from "@/contexts/useAuth";
+import { CircleMarker, MapContainer, Popup, TileLayer, useMap } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -185,6 +187,27 @@ function SectionHeader({
       )}
     </div>
   );
+}
+
+const CITY_COORDINATES: Record<string, [number, number]> = {
+  "campina grande:PB": [-7.2306, -35.8811],
+  "queimadas:PB": [-7.3508, -35.7896],
+  "galante:PB": [-7.215, -35.8618],
+  "puxinana:PB": [-7.154, -35.9602],
+};
+
+function SalesMap({ regions }: { regions: Array<{ city: string; state: string; orders: number; revenue: number }> }) {
+  const points = regions.map((region) => ({ ...region, coordinates: CITY_COORDINATES[`${region.city.toLowerCase()}:${region.state}`] })).filter((point): point is typeof point & { coordinates: [number, number] } => Boolean(point.coordinates));
+  function FitBounds() {
+    const map = useMap();
+    useEffect(() => { if (points.length) map.fitBounds(points.map((point) => point.coordinates), { padding: [20, 20], maxZoom: 11 }); }, [map, points]);
+    return null;
+  }
+  return <MapContainer center={[-7.25, -35.88]} zoom={9} className="h-40 w-full rounded-xl" scrollWheelZoom={false}>
+    <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+    <FitBounds />
+    {points.map((point) => <CircleMarker key={`${point.city}:${point.state}`} center={point.coordinates} radius={Math.min(16, 5 + point.orders * 2)} pathOptions={{ color: "#4f46e5", fillColor: "#818cf8", fillOpacity: 0.75 }}><Popup><strong>{point.city}/{point.state}</strong><br />{point.orders} venda(s)<br />R$ {point.revenue.toFixed(2)}</Popup></CircleMarker>)}
+  </MapContainer>;
 }
 
 function PrintAgentWidget({
@@ -368,6 +391,7 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [loadingAI, setLoadingAI] = useState(false);
   const [activeTab, setActiveTab] = useState<"vendas" | "visitas">("vendas");
+  const [days, setDays] = useState(30);
 
   const fetchAgentStatus = useCallback(async () => {
     setLoadingAgent(true);
@@ -398,7 +422,7 @@ export function Dashboard() {
     try {
       setLoading(true);
       const [statusRes, trendRes] = await Promise.all([
-        api.getBusinessStatus(30),
+        api.getBusinessStatus(days),
         api.getTrendSummary(),
       ]);
       const statusData = statusRes.data || statusRes;
@@ -417,7 +441,7 @@ export function Dashboard() {
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, days]);
 
   useEffect(() => {
     loadDashboardData();
@@ -453,6 +477,7 @@ export function Dashboard() {
   const trendProductsViewed = trendSummary?.top_products_viewed || [];
   const trendRegions = trendSummary?.top_regions || [];
   const trendIPs = trendSummary?.top_ips || [];
+  const salesRegions = stats?.sales_regions || [];
 
   const dailyData =
     stats?.daily_data?.map((d: any) => ({
@@ -530,6 +555,18 @@ export function Dashboard() {
               })}
             </p>
           </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={days}
+              onChange={(event) => setDays(Number(event.target.value))}
+              className="h-9 rounded-xl border border-neutral-200 bg-white px-3 text-sm text-neutral-700"
+            >
+              <option value={7}>7 dias</option>
+              <option value={30}>30 dias</option>
+              <option value={90}>3 meses</option>
+              <option value={180}>6 meses</option>
+              <option value={365}>12 meses</option>
+            </select>
           <Button
             variant="outline"
             size="sm"
@@ -539,13 +576,14 @@ export function Dashboard() {
             <RotateCw size={14} />
             Atualizar
           </Button>
+          </div>
         </div>
 
         {/* ── KPI Strip ── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             accent
-            label="Faturamento (30d)"
+            label={`Faturamento (${days}d)`}
             value={totalSales.toLocaleString("pt-BR", {
               style: "currency",
               currency: "BRL",
@@ -743,34 +781,11 @@ export function Dashboard() {
               iconColor="text-indigo-500"
             />
 
-            {trendRegions.length > 0 ? (
+            {salesRegions.length > 0 ? (
               <>
-                <ChartContainer config={revenueConfig} className="h-40 w-full">
-                  <PieChart>
-                    <Pie
-                      data={trendRegions.map((r: any) => ({
-                        name: r.region,
-                        value: r.total_access,
-                      }))}
-                      dataKey="value"
-                      nameKey="name"
-                      innerRadius={42}
-                      outerRadius={72}
-                      paddingAngle={2}
-                    >
-                      {trendRegions.map((_: any, i: number) => (
-                        <Cell
-                          key={i}
-                          fill={regionColors[i % regionColors.length]}
-                        />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(v: any, n: any) => [v, n]} />
-                  </PieChart>
-                </ChartContainer>
-
-                <div className="space-y-2 mt-2">
-                  {trendRegions.slice(0, 4).map((r: any, i: number) => (
+                <SalesMap regions={salesRegions} />
+                <div className="space-y-2 mt-3">
+                  {salesRegions.slice(0, 4).map((r: any, i: number) => (
                     <div
                       key={r.region}
                       className="flex items-center gap-2 text-xs"
@@ -782,10 +797,10 @@ export function Dashboard() {
                         }}
                       />
                       <span className="text-neutral-600 truncate flex-1">
-                        {r.region}
+                        {r.city}/{r.state}
                       </span>
                       <span className="font-semibold text-neutral-800">
-                        {r.total_access}
+                        {r.orders}
                       </span>
                     </div>
                   ))}
@@ -793,7 +808,7 @@ export function Dashboard() {
               </>
             ) : (
               <div className="h-56 flex items-center justify-center text-neutral-400 text-sm">
-                Sem dados de região
+                Sem vendas com cidade informada
               </div>
             )}
           </div>
