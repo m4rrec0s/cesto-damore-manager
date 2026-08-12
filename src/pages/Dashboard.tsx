@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   TrendingUp,
@@ -196,8 +196,13 @@ const CITY_COORDINATES: Record<string, [number, number]> = {
   "puxinana:PB": [-7.154, -35.9602],
 };
 
-function SalesMap({ regions }: { regions: Array<{ city: string; state: string; orders: number; revenue: number }> }) {
-  const points = regions.map((region) => ({ ...region, coordinates: CITY_COORDINATES[`${region.city.toLowerCase()}:${region.state}`] })).filter((point): point is typeof point & { coordinates: [number, number] } => Boolean(point.coordinates));
+function SalesMap({ regions, salesPoints }: { regions: Array<{ city: string; state: string; orders: number; revenue: number }>; salesPoints: Array<{ id: string; latitude: number; longitude: number; city?: string | null; state?: string | null; orders: number; revenue: number }> }) {
+  const points = useMemo(
+    () => salesPoints.length
+      ? salesPoints.map((point) => ({ ...point, coordinates: [point.latitude, point.longitude] as [number, number] }))
+      : regions.map((region) => ({ ...region, id: `${region.city}:${region.state}`, coordinates: CITY_COORDINATES[`${region.city.toLowerCase()}:${region.state}`] })).filter((point): point is typeof point & { coordinates: [number, number] } => Boolean(point.coordinates)),
+    [regions, salesPoints],
+  );
   function FitBounds() {
     const map = useMap();
     useEffect(() => { if (points.length) map.fitBounds(points.map((point) => point.coordinates), { padding: [20, 20], maxZoom: 11 }); }, [map, points]);
@@ -206,7 +211,7 @@ function SalesMap({ regions }: { regions: Array<{ city: string; state: string; o
   return <MapContainer center={[-7.25, -35.88]} zoom={9} className="h-40 w-full rounded-xl" scrollWheelZoom={false}>
     <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
     <FitBounds />
-    {points.map((point) => <CircleMarker key={`${point.city}:${point.state}`} center={point.coordinates} radius={Math.min(16, 5 + point.orders * 2)} pathOptions={{ color: "#4f46e5", fillColor: "#818cf8", fillOpacity: 0.75 }}><Popup><strong>{point.city}/{point.state}</strong><br />{point.orders} venda(s)<br />R$ {point.revenue.toFixed(2)}</Popup></CircleMarker>)}
+    {points.map((point) => <CircleMarker key={point.id} center={point.coordinates} radius={Math.min(16, 5 + point.orders * 2)} pathOptions={{ color: "#4f46e5", fillColor: "#818cf8", fillOpacity: 0.75 }}><Popup><strong>{point.city}/{point.state}</strong><br />{point.orders} venda(s)<br />R$ {point.revenue.toFixed(2)}</Popup></CircleMarker>)}
   </MapContainer>;
 }
 
@@ -478,6 +483,7 @@ export function Dashboard() {
   const trendRegions = trendSummary?.top_regions || [];
   const trendIPs = trendSummary?.top_ips || [];
   const salesRegions = stats?.sales_regions || [];
+  const salesPoints = stats?.sales_points || [];
 
   const dailyData =
     stats?.daily_data?.map((d: any) => ({
@@ -783,7 +789,7 @@ export function Dashboard() {
 
             {salesRegions.length > 0 ? (
               <>
-                <SalesMap regions={salesRegions} />
+                <SalesMap regions={salesRegions} salesPoints={salesPoints} />
                 <div className="space-y-2 mt-3">
                   {salesRegions.slice(0, 4).map((r: any, i: number) => (
                     <div

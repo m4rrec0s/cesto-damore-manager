@@ -903,13 +903,19 @@ function LayoutPanel({
       const { FabricImage, Rect, Circle } = await import("fabric");
       const canvas = fabricRef.current;
       const objects = canvas.getObjects() as any[];
+      const frames = objects.filter(
+        (object: any) =>
+          object.isFrame ||
+          object.customData?.isFrame ||
+          object.name?.toLowerCase().includes("frame"),
+      );
 
       // Limpar imagens antigas
       const oldImages = objects.filter((o: any) => o.name?.startsWith("preview-img-"));
       oldImages.forEach((img: any) => canvas.remove(img));
 
       // Adicionar novas imagens
-      for (const slot of layout.slots || []) {
+      for (const [slotIndex, slot] of (layout.slots || []).entries()) {
         const preview = slotPreviews[`${layout.id}:${slot.id}`];
         if (!preview) continue;
 
@@ -926,6 +932,10 @@ function LayoutPanel({
           );
         }
         
+        if (!frame) {
+          frame = frames[slotIndex];
+        }
+
         if (!frame) {
           console.warn(`⚠️ Frame não encontrado para slot ${slot.id}`);
           continue;
@@ -1289,13 +1299,18 @@ export function ManualPrintOrder() {
               fabricJsonState: l.fabricJsonState || l.fabric_json_state || null,
               width: l.width,
               height: l.height,
-              slots: (l.slots || []).map((s: any) => ({
+              slots: (l.slots || []).map((s: any, index: number, slots: any[]) => ({
                 id: s.id,
                 label: s.label || s.name || s.id,
                 position: s.position || s.placeholderPosition || {},
                 width: s.width,
                 height: s.height,
                 required: s.required ?? true,
+                // Legacy frames often share "photo-frame" as name. State keys
+                // must remain unique so each uploaded file keeps its own slot.
+                ...(slots.filter((candidate) => candidate.id === s.id).length > 1
+                  ? { id: `manual_slot_${index + 1}` }
+                  : {}),
               })),
             }));
           setLayouts(items);
@@ -1471,6 +1486,12 @@ export function ManualPrintOrder() {
       exportCanvas.set({ backgroundColor: "#ffffff" });
 
       const objects: any[] = exportCanvas.getObjects();
+      const frames = objects.filter(
+        (object: any) =>
+          object.isFrame ||
+          object.customData?.isFrame ||
+          object.name?.toLowerCase().includes("frame"),
+      );
 
       // Frames são máscaras de edição. Mantê-los visíveis cobria a foto na exportação.
       for (const object of objects) {
@@ -1481,7 +1502,7 @@ export function ManualPrintOrder() {
 
       // 1. Injetar imagens nos frames - usando múltiplas estratégias como no LayoutPanel
       let insertedSlots = 0;
-      for (const slot of layout.slots || []) {
+      for (const [slotIndex, slot] of (layout.slots || []).entries()) {
         const file = slotFiles[`${layout.id}:${slot.id}`];
         if (!file) continue;
 
@@ -1501,7 +1522,7 @@ export function ManualPrintOrder() {
 
         // API gera slots a partir dos frames na mesma ordem; cobre layouts legados sem id.
         if (!frame) {
-          frame = objects.filter((o: any) => o.isFrame || o.customData?.isFrame)[insertedSlots];
+          frame = frames[slotIndex];
         }
 
         if (!frame) {
