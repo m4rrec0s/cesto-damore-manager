@@ -249,6 +249,8 @@ interface LayoutSlot {
   width?: number;
   height?: number;
   required: boolean;
+  pageId?: string;
+  pageIndex?: number;
 }
 
 interface DynamicLayoutOption {
@@ -262,6 +264,20 @@ interface DynamicLayoutOption {
   height?: number;
   slots?: LayoutSlot[];
 }
+
+// Extrai os canvasState de cada página do layout (layouts multi-página guardam a arte
+// em pages[].canvasState; layouts legados têm os objetos na raiz).
+const getLayoutPageStates = (layout: DynamicLayoutOption): any[] => {
+  const state =
+    typeof layout.fabricJsonState === "string"
+      ? JSON.parse(layout.fabricJsonState as unknown as string)
+      : layout.fabricJsonState;
+  if (!state) return [];
+  if (Array.isArray(state.pages) && state.pages.length > 0) {
+    return state.pages.map((p: any) => p?.canvasState ?? p);
+  }
+  return [state];
+};
 
 const getSlotAspect = (slot?: LayoutSlot): number | undefined => {
   if (!slot) return undefined;
@@ -758,127 +774,150 @@ function LayoutPanel({
   setSlotFiles: (val: any) => void;
 }) {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
-  const fabricRef = useRef<any>(null);
+  // Um canvas Fabric por página do layout (multi-página empilha os previews)
+  const pageCanvasesRef = useRef<any[]>([]);
   const [previewReady, setPreviewReady] = useState(false);
 
-  // Retorna os objetos isCustomizable (texto) do fabricJsonState do layout
+  // Retorna os objetos isCustomizable (texto) do fabricJsonState do layout (todas as páginas)
   const getCustomizableTextObjects = (): Array<{ id: string; name: string; label: string; text?: string; maxChars?: number; fontFamily?: string; fontSize?: number }> => {
-    if (!layout.fabricJsonState || !Array.isArray((layout.fabricJsonState as any).objects)) {
-      return [];
-    }
-    const objects = (layout.fabricJsonState as any).objects as any[];
+    const pageStates = getLayoutPageStates(layout);
     const result: Array<{ id: string; name: string; label: string; text?: string; maxChars?: number; fontFamily?: string; fontSize?: number }> = [];
     const seen = new Set<string>();
-    for (const obj of objects) {
-      const typeNorm = (obj.type || "").toLowerCase();
-      if (
-        obj.isCustomizable === true &&
-        (typeNorm === "i-text" || typeNorm === "textbox" || typeNorm === "text")
-      ) {
-        const key = obj.id || obj.name;
-        if (key && !seen.has(key)) {
-          seen.add(key);
-          result.push({ 
-            id: key, 
-            name: obj.name || key, 
-            label: obj.name || key, 
-            text: obj.text,
-            maxChars: obj.maxChars || 50,
-            fontFamily: obj.fontFamily || "Arial",
-            fontSize: obj.fontSize || 14
-          });
+    for (const pageState of pageStates) {
+      const objects = Array.isArray((pageState as any)?.objects) ? (pageState as any).objects as any[] : [];
+      for (const obj of objects) {
+        const typeNorm = (obj.type || "").toLowerCase();
+        if (
+          obj.isCustomizable === true &&
+          (typeNorm === "i-text" || typeNorm === "textbox" || typeNorm === "text")
+        ) {
+          const key = obj.id || obj.name;
+          if (key && !seen.has(key)) {
+            seen.add(key);
+            result.push({
+              id: key,
+              name: obj.name || key,
+              label: obj.name || key,
+              text: obj.text,
+              maxChars: obj.maxChars || 50,
+              fontFamily: obj.fontFamily || "Arial",
+              fontSize: obj.fontSize || 14
+            });
+          }
         }
       }
     }
     return result;
   };
 
-  // Inicializa o canvas Fabric com o fabricJsonState
+  // Inicializa um canvas Fabric por página do fabricJsonState
   useEffect(() => {
     if (!layout.fabricJsonState || !canvasContainerRef.current) return;
 
     let isMounted = true;
 
-    const initCanvas = async () => {
+    const initCanvases = async () => {
       try {
-        const { Canvas } = await import("fabric");
+        const { Canvas, FabricImage } = await import("fabric");
 
         if (!isMounted || !canvasContainerRef.current) return;
 
-        // Limpar canvas anterior
-        if (fabricRef.current) {
-          fabricRef.current.dispose();
+        // Limpar canvases anteriores
+        for (const oldCanvas of pageCanvasesRef.current) {
+          try { oldCanvas.dispose(); } catch { /* ignore */ }
         }
+        pageCanvasesRef.current = [];
 
         canvasContainerRef.current.innerHTML = "";
-        const canvasEl = document.createElement("canvas");
-        canvasContainerRef.current.appendChild(canvasEl);
 
         const w = layout.width || 378;
         const h = layout.height || 567;
-        
+
         // Calcular zoom para preencher o container
         const containerWidth = canvasContainerRef.current.clientWidth || 400;
         const zoom = Math.min(containerWidth / w, 0.8);
 
-        const canvas = new Canvas(canvasEl, {
-          backgroundColor: "#ffffff",
-          selection: false,
-          interactive: false,
-          preserveObjectStacking: true,
-        }) as any;
+        const pageStates = getLayoutPageStates(layout);
 
-        // Dimensões do canvas - usar 2x para qualidade
-        canvas.setDimensions(
-          { width: w * 2, height: h * 2 },
-          { backstoreOnly: true }
-        );
-        
-        // Dimensões visuais - aplicar zoom
-        canvas.setDimensions(
-          { width: `${w * zoom}px`, height: `${h * zoom}px` },
-          { cssOnly: true }
-        );
-        
-        canvas.setViewportTransform([2, 0, 0, 2, 0, 0]);
+        for (const pageState of pageStates) {
+          const canvasEl = document.createElement("canvas");
+          canvasContainerRef.current.appendChild(canvasEl);
 
-        const state = typeof layout.fabricJsonState === "string" 
-          ? JSON.parse(layout.fabricJsonState as unknown as string)
-          : layout.fabricJsonState;
+          const canvas = new Canvas(canvasEl, {
+            backgroundColor: "#ffffff",
+            selection: false,
+            interactive: false,
+            preserveObjectStacking: true,
+          }) as any;
 
-        // Se tem estrutura multi-página, usar o canvasState da primeira página
-        const canvasStateToLoad = state.pages && state.pages[0]?.canvasState 
-          ? state.pages[0].canvasState 
-          : state;
+          // fabric v6: loadFromJSON retorna Promise (o 2º param é reviver por objeto,
+          // não callback de conclusão — aguardar a Promise evita processar só o 1º objeto)
+          await canvas.loadFromJSON(pageState);
 
-        // loadFromJSON precisa de um callback de sucesso
-        await new Promise<void>((resolve) => {
-          canvas.loadFromJSON(canvasStateToLoad, () => {
-            resolve();
-          });
-        });
+          // IMPORTANTE: loadFromJSON reseta as dimensões lógicas para as do JSON.
+          // Aplicar dimensões SEMPRE depois do load, ou só o quadrante superior
+          // esquerdo renderiza (slots 2+ somem no preview multi-slot).
+          // Dimensões do canvas - usar 2x para qualidade
+          canvas.setDimensions(
+            { width: w * 2, height: h * 2 },
+            { backstoreOnly: true }
+          );
 
-        // Desabilitar qualquer interação e renderizar
-        for (const obj of canvas.getObjects() as any[]) {
-          obj.set({
-            selectable: false,
-            evented: false,
-            lockMovementX: true,
-            lockMovementY: true,
-            lockScalingX: true,
-            lockScalingY: true,
-            lockRotation: true,
-            hasControls: false,
-            hoverCursor: "default",
-          });
-          
-          if (obj.isFrame) {
-            obj.set({ fill: "transparent", stroke: "transparent", opacity: 0 });
+          // Dimensões visuais - aplicar zoom
+          canvas.setDimensions(
+            { width: `${w * zoom}px`, height: `${h * zoom}px` },
+            { cssOnly: true }
+          );
+
+          canvas.setViewportTransform([2, 0, 0, 2, 0, 0]);
+
+          // Páginas multi-página guardam só os frames no canvasState; a arte vem de previewImageUrl
+          const pageHasArt = Array.isArray(pageState?.objects) &&
+            pageState.objects.some((o: any) => (o.type || "").toLowerCase() === "image");
+          if (!pageHasArt && layout.previewImageUrl) {
+            try {
+              const baseArt = await (FabricImage as any).fromURL(layout.previewImageUrl, {
+                crossOrigin: "anonymous",
+              });
+              baseArt.set({
+                left: 0,
+                top: 0,
+                originX: "left",
+                originY: "top",
+                scaleX: w / (baseArt.width || w),
+                scaleY: h / (baseArt.height || h),
+                selectable: false,
+                evented: false,
+                objectCaching: false,
+                name: "preview-base-art",
+              });
+              canvas.add(baseArt);
+              canvas.sendObjectToBack(baseArt);
+            } catch { /* ignora — preview sem arte de fundo */ }
           }
-        }
 
-        canvas.renderAll();
-        fabricRef.current = canvas;
+          // Desabilitar qualquer interação e renderizar
+          for (const obj of canvas.getObjects() as any[]) {
+            obj.set({
+              selectable: false,
+              evented: false,
+              lockMovementX: true,
+              lockMovementY: true,
+              lockScalingX: true,
+              lockScalingY: true,
+              lockRotation: true,
+              hasControls: false,
+              hoverCursor: "default",
+            });
+
+            if (obj.isFrame) {
+              obj.set({ fill: "transparent", stroke: "transparent", opacity: 0 });
+            }
+          }
+
+          canvas.renderAll();
+          pageCanvasesRef.current.push(canvas);
+        }
 
         if (isMounted) {
           setPreviewReady(true);
@@ -888,7 +927,7 @@ function LayoutPanel({
       }
     };
 
-    initCanvas();
+    initCanvases();
 
     return () => {
       isMounted = false;
@@ -897,134 +936,142 @@ function LayoutPanel({
 
   // Atualizar preview quando imagens mudam
   useEffect(() => {
-    if (!fabricRef.current || !previewReady) return;
+    if (pageCanvasesRef.current.length === 0 || !previewReady) return;
 
     const updatePreview = async () => {
       const { FabricImage, Rect, Circle } = await import("fabric");
-      const canvas = fabricRef.current;
-      const objects = canvas.getObjects() as any[];
-      const frames = objects.filter(
-        (object: any) =>
-          object.isFrame ||
-          object.customData?.isFrame ||
-          object.name?.toLowerCase().includes("frame"),
-      );
+      const allSlots = layout.slots || [];
 
-      // Limpar imagens antigas
-      const oldImages = objects.filter((o: any) => o.name?.startsWith("preview-img-"));
-      oldImages.forEach((img: any) => canvas.remove(img));
-
-      // Adicionar novas imagens
-      for (const [slotIndex, slot] of (layout.slots || []).entries()) {
-        const preview = slotPreviews[`${layout.id}:${slot.id}`];
-        if (!preview) continue;
-
-        // Encontra o frame correspondente - tenta múltiplas estratégias
-        let frame = objects.find((o: any) => 
-          o.isFrame && (o.id === slot.id || o.name === slot.label || o.name === slot.id)
+      for (const [pageIndex, canvas] of pageCanvasesRef.current.entries()) {
+        const objects = canvas.getObjects() as any[];
+        const frames = objects.filter(
+          (object: any) =>
+            object.isFrame ||
+            object.customData?.isFrame ||
+            object.name?.toLowerCase().includes("frame"),
         );
-        
-        // Se não encontrar por isFrame, procurar por tipo/nome
-        if (!frame) {
-          frame = objects.find((o: any) => 
-            (o.type === "rect" || o.type === "Rect" || o.name?.includes("frame")) &&
-            (o.id === slot.id || o.name === slot.label || o.name === slot.id)
+
+        // Limpar imagens antigas
+        const oldImages = objects.filter((o: any) => o.name?.startsWith("preview-img-"));
+        oldImages.forEach((img: any) => canvas.remove(img));
+
+        // Slots desta página (layouts legados sem pageIndex pertencem à página 0)
+        const pageSlots = allSlots
+          .map((slot, index) => ({ slot, globalIndex: index }))
+          .filter(({ slot }) => (slot.pageIndex ?? 0) === pageIndex);
+
+        // Adicionar novas imagens
+        for (const [slotIndex, { slot }] of pageSlots.entries()) {
+          const preview = slotPreviews[`${layout.id}:${slot.id}`];
+          if (!preview) continue;
+
+          // Encontra o frame correspondente - tenta múltiplas estratégias
+          let frame = objects.find((o: any) =>
+            o.isFrame && (o.id === slot.id || o.name === slot.label || o.name === slot.id)
           );
-        }
-        
-        if (!frame) {
-          frame = frames[slotIndex];
-        }
 
-        if (!frame) {
-          console.warn(`⚠️ Frame não encontrado para slot ${slot.id}`);
-          continue;
-        }
-
-        try {
-          const img = await (FabricImage as any).fromURL(preview, {
-            crossOrigin: "anonymous",
-          });
-
-          const frameRect = frame.getBoundingRect();
-          const imgW = img.width || 1;
-          const imgH = img.height || 1;
-          const coverScale = Math.max(frameRect.width / imgW, frameRect.height / imgH);
-
-          img.set({
-            left: frameRect.left + frameRect.width / 2,
-            top: frameRect.top + frameRect.height / 2,
-            originX: "center",
-            originY: "center",
-            scaleX: coverScale,
-            scaleY: coverScale,
-            angle: frame.angle || 0,
-            selectable: false,
-            evented: false,
-            objectCaching: false,
-            name: `preview-img-${slot.id}`,
-          });
-
-          // Criar clipPath
-          try {
-            let mask: any;
-            if (frame.type === "circle") {
-              const Circle_ = Circle;
-              mask = new Circle_({
-                radius: frame.radius || frame.width / 2,
-                scaleX: frame.scaleX,
-                scaleY: frame.scaleY,
-                originX: "center",
-                originY: "center",
-                left: frameRect.left + frameRect.width / 2,
-                top: frameRect.top + frameRect.height / 2,
-                angle: frame.angle || 0,
-                absolutePositioned: true,
-              });
-            } else {
-              const Rect_ = Rect;
-              mask = new Rect_({
-                width: frame.width,
-                height: frame.height,
-                rx: frame.rx,
-                ry: frame.ry,
-                scaleX: frame.scaleX,
-                scaleY: frame.scaleY,
-                originX: "center",
-                originY: "center",
-                left: frameRect.left + frameRect.width / 2,
-                top: frameRect.top + frameRect.height / 2,
-                angle: frame.angle || 0,
-                absolutePositioned: true,
-              });
-            }
-            img.set("clipPath", mask);
-          } catch (err) {
-            console.warn("⚠️ Erro ao criar clipPath:", err);
+          // Se não encontrar por isFrame, procurar por tipo/nome
+          if (!frame) {
+            frame = objects.find((o: any) =>
+              (o.type === "rect" || o.type === "Rect" || o.name?.includes("frame")) &&
+              (o.id === slot.id || o.name === slot.label || o.name === slot.id)
+            );
           }
 
-          canvas.add(img);
-          canvas.moveObjectTo(img, canvas.getObjects().indexOf(frame) + 1);
-        } catch (err) {
-          console.error("❌ Erro ao adicionar imagem ao preview:", err);
-        }
-      }
+          if (!frame) {
+            frame = frames[slotIndex];
+          }
 
-      // Atualizar textos
-      for (const obj of objects) {
-        if (!obj.isCustomizable) continue;
-        if (!["textbox", "i-text", "text"].includes(obj.type?.toLowerCase())) continue;
-        
-        const objKey = obj.id || obj.name;
-        if (!objKey) continue;
-        const textKey = `${layout.id}:${objKey}`;
-        const opts = slotTextOptions[textKey];
-        if (opts?.text !== undefined) {
-          obj.set("text", opts.text);
-        }
-      }
+          if (!frame) {
+            console.warn(`⚠️ Frame não encontrado para slot ${slot.id}`);
+            continue;
+          }
 
-      canvas.renderAll();
+          try {
+            const img = await (FabricImage as any).fromURL(preview, {
+              crossOrigin: "anonymous",
+            });
+
+            const frameRect = frame.getBoundingRect();
+            const imgW = img.width || 1;
+            const imgH = img.height || 1;
+            const coverScale = Math.max(frameRect.width / imgW, frameRect.height / imgH);
+
+            img.set({
+              left: frameRect.left + frameRect.width / 2,
+              top: frameRect.top + frameRect.height / 2,
+              originX: "center",
+              originY: "center",
+              scaleX: coverScale,
+              scaleY: coverScale,
+              angle: frame.angle || 0,
+              selectable: false,
+              evented: false,
+              objectCaching: false,
+              name: `preview-img-${slot.id}`,
+            });
+
+            // Criar clipPath
+            try {
+              let mask: any;
+              if (frame.type === "circle") {
+                const Circle_ = Circle;
+                mask = new Circle_({
+                  radius: frame.radius || frame.width / 2,
+                  scaleX: frame.scaleX,
+                  scaleY: frame.scaleY,
+                  originX: "center",
+                  originY: "center",
+                  left: frameRect.left + frameRect.width / 2,
+                  top: frameRect.top + frameRect.height / 2,
+                  angle: frame.angle || 0,
+                  absolutePositioned: true,
+                });
+              } else {
+                const Rect_ = Rect;
+                mask = new Rect_({
+                  width: frame.width,
+                  height: frame.height,
+                  rx: frame.rx,
+                  ry: frame.ry,
+                  scaleX: frame.scaleX,
+                  scaleY: frame.scaleY,
+                  originX: "center",
+                  originY: "center",
+                  left: frameRect.left + frameRect.width / 2,
+                  top: frameRect.top + frameRect.height / 2,
+                  angle: frame.angle || 0,
+                  absolutePositioned: true,
+                });
+              }
+              img.set("clipPath", mask);
+            } catch (err) {
+              console.warn("⚠️ Erro ao criar clipPath:", err);
+            }
+
+            canvas.add(img);
+            canvas.moveObjectTo(img, canvas.getObjects().indexOf(frame) + 1);
+          } catch (err) {
+            console.error("❌ Erro ao adicionar imagem ao preview:", err);
+          }
+        }
+
+        // Atualizar textos
+        for (const obj of canvas.getObjects() as any[]) {
+          if (!obj.isCustomizable) continue;
+          if (!["textbox", "i-text", "text"].includes(obj.type?.toLowerCase())) continue;
+
+          const objKey = obj.id || obj.name;
+          if (!objKey) continue;
+          const textKey = `${layout.id}:${objKey}`;
+          const opts = slotTextOptions[textKey];
+          if (opts?.text !== undefined) {
+            obj.set("text", opts.text);
+          }
+        }
+
+        canvas.renderAll();
+      }
     };
 
     updatePreview();
@@ -1066,7 +1113,7 @@ function LayoutPanel({
           <div className="rounded-lg border border-slate-200 bg-white shadow-inner p-4 flex items-center justify-center">
             <div
               ref={canvasContainerRef}
-              className="w-full h-auto pointer-events-none"
+              className="flex w-full flex-col items-center gap-3 pointer-events-none"
               style={{ touchAction: "none" }}
             />
           </div>
@@ -1306,6 +1353,8 @@ export function ManualPrintOrder() {
                 width: s.width,
                 height: s.height,
                 required: s.required ?? true,
+                pageId: s.pageId,
+                pageIndex: s.pageIndex,
                 // Legacy frames often share "photo-frame" as name. State keys
                 // must remain unique so each uploaded file keeps its own slot.
                 ...(slots.filter((candidate) => candidate.id === s.id).length > 1
@@ -1456,27 +1505,26 @@ export function ManualPrintOrder() {
     }).catch(() => setSummaryProducts([]));
   }, [api]);
 
-  // injeta as imagens nos frames e os textos nos objetos isCustomizable, depois exporta PNG
-  const generateArtwork = async (layout: DynamicLayoutOption): Promise<Blob | null> => {
-    if (!layout.fabricJsonState) return null;
+  // Injeta as imagens nos frames e os textos nos objetos isCustomizable e exporta um PNG por página
+  const generateArtworkPages = async (layout: DynamicLayoutOption): Promise<Blob[]> => {
+    if (!layout.fabricJsonState) return [];
 
-    try {
-      const { StaticCanvas, FabricImage, Rect, Circle } = await import("fabric");
+    const { StaticCanvas, FabricImage, Rect, Circle } = await import("fabric");
 
+    const w = layout.width || 378;
+    const h = layout.height || 567;
+    const allSlots = layout.slots || [];
+    const pageStates = getLayoutPageStates(layout);
+
+    let insertedSlots = 0;
+    const blobs: Blob[] = [];
+
+    for (const [pageIndex, canvasState] of pageStates.entries()) {
       const exportCanvas = new StaticCanvas(document.createElement("canvas"), {
         preserveObjectStacking: true,
         enableRetinaScaling: false,
       }) as any;
 
-      const state =
-        typeof layout.fabricJsonState === "string"
-          ? JSON.parse(layout.fabricJsonState as unknown as string)
-          : layout.fabricJsonState;
-
-      const w = layout.width || 378;
-      const h = layout.height || 567;
-      // Layouts de múltiplas páginas armazenam arte dentro de pages[0].canvasState.
-      const canvasState = state.pages?.[0]?.canvasState || state;
       await preloadFontsFromState(canvasState);
       await exportCanvas.loadFromJSON(canvasState);
       // JSON salva coordenadas no tamanho original. Qualidade vem do multiplier na exportação,
@@ -1484,6 +1532,31 @@ export function ManualPrintOrder() {
       exportCanvas.setDimensions({ width: w, height: h });
       exportCanvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
       exportCanvas.set({ backgroundColor: "#ffffff" });
+
+      // Páginas multi-página guardam só os frames no canvasState; a arte vem de previewImageUrl
+      const pageHasArt = Array.isArray(canvasState?.objects) &&
+        canvasState.objects.some((o: any) => (o.type || "").toLowerCase() === "image");
+      if (!pageHasArt && layout.previewImageUrl) {
+        try {
+          const baseArt = (await (FabricImage as any).fromURL(layout.previewImageUrl, {
+            crossOrigin: "anonymous",
+          })) as any;
+          baseArt.set({
+            left: 0,
+            top: 0,
+            originX: "left",
+            originY: "top",
+            scaleX: w / (baseArt.width || w),
+            scaleY: h / (baseArt.height || h),
+            selectable: false,
+            evented: false,
+            objectCaching: false,
+            name: "export-base-art",
+          });
+          exportCanvas.add(baseArt);
+          exportCanvas.sendObjectToBack(baseArt);
+        } catch { /* ignora — exporta sem arte de fundo */ }
+      }
 
       const objects: any[] = exportCanvas.getObjects();
       const frames = objects.filter(
@@ -1500,9 +1573,13 @@ export function ManualPrintOrder() {
         }
       }
 
+      // Slots desta página (layouts legados sem pageIndex pertencem à página 0)
+      const pageSlots = allSlots
+        .map((slot, index) => ({ slot, globalIndex: index }))
+        .filter(({ slot }) => (slot.pageIndex ?? 0) === pageIndex);
+
       // 1. Injetar imagens nos frames - usando múltiplas estratégias como no LayoutPanel
-      let insertedSlots = 0;
-      for (const [slotIndex, slot] of (layout.slots || []).entries()) {
+      for (const [slotIndex, { slot }] of pageSlots.entries()) {
         const file = slotFiles[`${layout.id}:${slot.id}`];
         if (!file) continue;
 
@@ -1601,13 +1678,6 @@ export function ManualPrintOrder() {
         insertedSlots += 1;
       }
 
-      const uploadedSlotCount = (layout.slots || []).filter(
-        (slot) => slotFiles[`${layout.id}:${slot.id}`],
-      ).length;
-      if (insertedSlots !== uploadedSlotCount) {
-        throw new Error("Nem todas as fotos foram inseridas na arte final");
-      }
-
       // 2. Aplicar textos nos objetos isCustomizable
       for (const obj of exportCanvas.getObjects() as any[]) {
         if (!obj.isCustomizable) continue;
@@ -1631,7 +1701,7 @@ export function ManualPrintOrder() {
 
       exportCanvas.renderAll();
 
-      const dataUrl: string = exportCanvas.toDataURL({
+      const dataUrlPage: string = exportCanvas.toDataURL({
         format: "png",
         multiplier: 2,
         enableRetinaScaling: false,
@@ -1639,12 +1709,18 @@ export function ManualPrintOrder() {
 
       exportCanvas.dispose?.();
 
-      const res = await fetch(dataUrl);
-      return await res.blob();
-    } catch (err) {
-      console.error("Erro ao gerar arte:", err);
-      throw err;
+      const res = await fetch(dataUrlPage);
+      blobs.push(await res.blob());
     }
+
+    const uploadedSlotCount = allSlots.filter(
+      (slot) => slotFiles[`${layout.id}:${slot.id}`],
+    ).length;
+    if (insertedSlots !== uploadedSlotCount) {
+      throw new Error("Nem todas as fotos foram inseridas na arte final");
+    }
+
+    return blobs;
   };
 
   // Submit do pedido manual
@@ -1701,18 +1777,19 @@ export function ManualPrintOrder() {
       const layout = selectedLayouts[0];
       formData.append("layoutId", layout.id);
 
-      // Gerar arte composta e enviar como composedImage (a mesma arte alimenta o resumo
-      // no backend, evitando campo base64 gigante no FormData que estoura o fieldSize do Multer)
-      const artworkBlob = await generateArtwork(layout);
-      if (artworkBlob) {
+      // Gerar artes compostas (uma PNG por página) e enviar como composedImage
+      // (as mesmas imagens alimentam o resumo no backend, evitando campo base64 gigante
+      // no FormData que estoura o fieldSize do Multer)
+      const artworkBlobs = await generateArtworkPages(layout);
+      artworkBlobs.forEach((blob, pageIndex) => {
         formData.append(
           "composedImage",
-          new File([artworkBlob], `artwork-${layout.id}.png`, { type: "image/png" }),
-          `artwork-${layout.id}.png`,
+          new File([blob], `artwork-${layout.id}-${pageIndex}.png`, { type: "image/png" }),
+          `artwork-${layout.id}-${pageIndex}.png`,
         );
-      }
+      });
 
-      if (!artworkBlob) {
+      if (!artworkBlobs.length) {
         throw new Error("Não foi possível gerar a arte final");
       }
 
