@@ -12,7 +12,8 @@ export const formatDate = (value?: string | null) => {
   if (Number.isNaN(date.getTime())) return "Data indisponível";
   const pad = (num: number) => String(num).padStart(2, "0");
 
-  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()} às ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)}/${date.getFullYear()}${time === "00:00" ? "" : ` às ${time}`}`;
 };
 
 export const shortId = (id: string) => {
