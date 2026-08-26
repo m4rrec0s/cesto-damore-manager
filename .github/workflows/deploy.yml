@@ -12,6 +12,7 @@ env:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       packages: write
@@ -46,5 +47,6 @@ jobs:
             VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}
 
       - name: Trigger deploy no Easypanel
+        continue-on-error: true
         run: |
-          curl -X GET "${{ secrets.EASYPANEL_DEPLOY_URL }}"
+          curl -fsS --max-time 60 -X GET "${{ secrets.EASYPANEL_DEPLOY_URL }}" || echo "aviso: trigger Easypanel nao respondeu a tempo"
