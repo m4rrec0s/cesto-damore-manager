@@ -587,21 +587,29 @@ export function Orders() {
                               <h5 className="text-sm font-bold text-neutral-950 flex items-center gap-2">
                                 <MapPin size={16} /> Entrega
                               </h5>
-                              <p className="text-xs text-neutral-700 leading-relaxed">
+                              <div className="text-xs text-neutral-700 leading-relaxed space-y-1">
                                 {details.delivery_address ? (
                                   <a
                                     href={`https://maps.google.com/?q=${encodeURIComponent(details.delivery_address)}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     title="Ver Endereço"
-                                    className="hover:underline"
+                                    className="hover:underline block"
                                   >
                                     {details.delivery_address}
                                   </a>
                                 ) : (
-                                  <span>Retirada na Loja</span>
+                                  <span className="block">Retirada na Loja</span>
                                 )}
-                              </p>
+                                {(details.delivery_city || details.delivery_state) && (
+                                  <span className="block">
+                                    {[details.delivery_city, details.delivery_state].filter(Boolean).join(" - ")}
+                                  </span>
+                                )}
+                                {details.delivery_zip_code && (
+                                  <span className="block">CEP: {details.delivery_zip_code}</span>
+                                )}
+                              </div>
                               <p className="text-xs text-neutral-500 inline-flex items-center gap-1">
                                 <Calendar size={12} />
                                 {details.created_at

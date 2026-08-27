@@ -455,6 +455,7 @@ export interface Order {
   send_anonymously?: boolean | null;
   delivery_city?: string | null;
   delivery_state?: string | null;
+  delivery_zip_code?: string | null;
   delivery_method?: string | null;
   delivery_date?: string | null;
   shipping_price?: number | null;
