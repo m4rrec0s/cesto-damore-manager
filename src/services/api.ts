@@ -451,6 +451,8 @@ export interface Order {
   created_at: string;
   updated_at: string;
   delivery_address?: string | null;
+  delivery_number?: string | null;
+  delivery_neighborhood?: string | null;
   complement?: string | null;
   send_anonymously?: boolean | null;
   delivery_city?: string | null;
@@ -462,6 +464,7 @@ export interface Order {
   payment_method?: string | null;
   grand_total?: number | null;
   recipient_phone?: string | null;
+  recipient_is_customer?: boolean | null;
   google_drive_folder_url?: string | null;
   payment?: {
     id: string;

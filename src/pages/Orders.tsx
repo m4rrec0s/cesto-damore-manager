@@ -152,6 +152,31 @@ const formatPhone = (raw?: string | null) => {
   return `(${ddd}) ${first}-${last}`;
 };
 
+const getFullDeliveryAddress = (order: Order) => {
+  const baseAddress = order.delivery_address?.trim() || "";
+  const contains = (value?: string | null) =>
+    Boolean(value && baseAddress.toLocaleLowerCase().includes(value.toLocaleLowerCase()));
+
+  const street = [
+    baseAddress,
+    !contains(order.delivery_number) ? order.delivery_number : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const location = [order.delivery_city, order.delivery_state]
+    .filter((value) => value && !contains(value))
+    .join(" - ");
+  const neighborhood = !contains(order.delivery_neighborhood)
+    ? order.delivery_neighborhood
+    : null;
+  const zipCode =
+    order.delivery_zip_code && !contains(order.delivery_zip_code)
+      ? `CEP: ${order.delivery_zip_code}`
+      : null;
+
+  return [street, neighborhood, location, zipCode].filter(Boolean).join(", ");
+};
+
 export function Orders() {
   const api = useApi();
   const [orders, setOrders] = useState<OrderSummary[]>([]);
@@ -590,24 +615,16 @@ export function Orders() {
                               <div className="text-xs text-neutral-700 leading-relaxed space-y-1">
                                 {details.delivery_address ? (
                                   <a
-                                    href={`https://maps.google.com/?q=${encodeURIComponent(details.delivery_address)}`}
+                                    href={`https://maps.google.com/?q=${encodeURIComponent(getFullDeliveryAddress(details))}`}
                                     target="_blank"
                                     rel="noreferrer"
                                     title="Ver Endereço"
                                     className="hover:underline block"
                                   >
-                                    {details.delivery_address}
+                                    {getFullDeliveryAddress(details)}
                                   </a>
                                 ) : (
                                   <span className="block">Retirada na Loja</span>
-                                )}
-                                {(details.delivery_city || details.delivery_state) && (
-                                  <span className="block">
-                                    {[details.delivery_city, details.delivery_state].filter(Boolean).join(" - ")}
-                                  </span>
-                                )}
-                                {details.delivery_zip_code && (
-                                  <span className="block">CEP: {details.delivery_zip_code}</span>
                                 )}
                               </div>
                               <p className="text-xs text-neutral-500 inline-flex items-center gap-1">
