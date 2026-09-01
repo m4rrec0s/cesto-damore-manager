@@ -460,6 +460,7 @@ export interface Order {
   delivery_zip_code?: string | null;
   delivery_method?: string | null;
   delivery_date?: string | null;
+  delivery_slot?: "morning" | "afternoon" | "to_be_arranged" | null;
   shipping_price?: number | null;
   payment_method?: string | null;
   grand_total?: number | null;

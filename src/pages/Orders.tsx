@@ -629,10 +629,17 @@ export function Orders() {
                               </div>
                               <p className="text-xs text-neutral-500 inline-flex items-center gap-1">
                                 <Calendar size={12} />
-                                {details.created_at
-                                  ? formatDate(details.created_at)
-                                  : "N/A"}
+                                {details.delivery_date
+                                  ? `Entrega: ${formatDate(details.delivery_date)} (${formatDeliverySlot(details.delivery_date, details.delivery_slot)})`
+                                  : details.created_at
+                                    ? `Pedido: ${formatDate(details.created_at)}`
+                                    : "N/A"}
                               </p>
+                              {details.recipient_phone && (
+                                <p className="text-xs text-neutral-500 inline-flex items-center gap-1">
+                                  <Phone size={12} /> Destinatário: {formatPhone(details.recipient_phone)}
+                                </p>
+                              )}
                             </div>
 
                             <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 space-y-3">
