@@ -152,6 +152,17 @@ const formatPhone = (raw?: string | null) => {
   return `(${ddd}) ${first}-${last}`;
 };
 
+const isSamePhone = (first?: string | null, second?: string | null) => {
+  const normalize = (value?: string | null) => {
+    const digits = onlyDigits(value || "");
+    return digits.length > 11 ? digits.slice(-11) : digits;
+  };
+
+  const firstDigits = normalize(first);
+  const secondDigits = normalize(second);
+  return Boolean(firstDigits && secondDigits && firstDigits === secondDigits);
+};
+
 const getFullDeliveryAddress = (order: Order) => {
   const baseAddress = order.delivery_address?.trim() || "";
   const contains = (value?: string | null) =>
@@ -606,6 +617,29 @@ export function Orders() {
                                   <ArrowUpRight size={12} />
                                 </a>
                               )}
+                              {details.recipient_phone &&
+                              (details.recipient_is_customer ||
+                                isSamePhone(
+                                  details.recipient_phone,
+                                  details.user?.phone,
+                                )) ? (
+                                <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                                  Vai receber o pedido
+                                </span>
+                              ) : details.recipient_phone ? (
+                                <a
+                                  href={`https://wa.me/55${onlyDigits(details.recipient_phone)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center text-blue-600 hover:underline"
+                                >
+                                  <Phone size={14} />
+                                  <span className="ml-2">
+                                    Destinatário: {formatPhone(details.recipient_phone)}
+                                  </span>
+                                  <ArrowUpRight size={12} />
+                                </a>
+                              ) : null}
                             </div>
 
                             <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 space-y-3">
